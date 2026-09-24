@@ -1,0 +1,6 @@
+{
+  "name": "SIM Salaf Al-Maliki",
+  "description": "Sistem Informasi dan Portal Santri Pondok Pesantren Salaf Al-Maliki terintegrasi Google Sheets",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

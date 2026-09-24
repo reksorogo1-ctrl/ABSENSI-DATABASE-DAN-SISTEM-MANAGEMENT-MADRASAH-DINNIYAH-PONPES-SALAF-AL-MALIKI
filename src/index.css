@@ -1,0 +1,547 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color-scheme: dark;
+  }
+  
+  body {
+    background-color: #02120a;
+    color: #f3e5ab;
+    overflow-x: hidden;
+    letter-spacing: -0.01em;
+  }
+
+  /* Custom Luxury Scrollbar */
+  ::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #020e08;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #d4af37 0%, #064e3b 100%);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #d4af37;
+  }
+}
+
+@layer utilities {
+  /* ==========================================================
+     ISLAMIC LUXURY BACKGROUND PATTERN & AMBIENT DEPTH
+     ========================================================== */
+  .bg-islamic-pattern {
+    background-color: #02120a;
+    background-image: 
+      radial-gradient(circle at 15% 15%, rgba(212, 175, 55, 0.08) 0%, transparent 45%),
+      radial-gradient(circle at 85% 85%, rgba(16, 185, 129, 0.09) 0%, transparent 50%),
+      radial-gradient(circle at 50% 50%, rgba(5, 46, 29, 0.8) 0%, #02120a 100%),
+      radial-gradient(rgba(212, 175, 55, 0.04) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 100% 100%, 32px 32px;
+  }
+
+  /* ==========================================================
+     3D LUXURY GLASS & ELEVATION CARDS
+     ========================================================== */
+  .card-3d-glass,
+  .card-luxury-glass {
+    background: 
+      radial-gradient(ellipse at 25% 0%, rgba(212, 175, 55, 0.16) 0%, transparent 55%),
+      radial-gradient(ellipse at 75% 100%, rgba(16, 185, 129, 0.12) 0%, transparent 60%),
+      linear-gradient(145deg, rgba(9, 44, 29, 0.85) 0%, rgba(5, 27, 18, 0.92) 50%, rgba(2, 16, 10, 0.98) 100%);
+    backdrop-filter: blur(24px) saturate(190%);
+    -webkit-backdrop-filter: blur(24px) saturate(190%);
+    border: 1px solid rgba(212, 175, 55, 0.42);
+    box-shadow: 
+      0 24px 50px -12px rgba(0, 0, 0, 0.9),
+      0 10px 24px -4px rgba(0, 0, 0, 0.65),
+      0 0 35px -6px rgba(212, 175, 55, 0.16),
+      inset 0 1.5px 1px 0 rgba(255, 242, 195, 0.45),
+      inset 0 -2px 6px 0 rgba(0, 0, 0, 0.8);
+    position: relative;
+    transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .card-3d-glass:hover,
+  .card-luxury-glass:hover {
+    border-color: rgba(212, 175, 55, 0.7);
+    box-shadow: 
+      0 30px 60px -10px rgba(0, 0, 0, 0.95),
+      0 14px 32px -4px rgba(0, 0, 0, 0.75),
+      0 0 45px -4px rgba(212, 175, 55, 0.28),
+      inset 0 2px 2px 0 rgba(255, 245, 205, 0.65),
+      inset 0 -2px 6px 0 rgba(0, 0, 0, 0.85);
+    transform: translateY(-3px);
+  }
+
+  .card-3d,
+  .card-luxury {
+    background: linear-gradient(145deg, rgba(8, 42, 27, 0.94) 0%, rgba(4, 25, 16, 0.98) 100%);
+    box-shadow: 
+      0 14px 32px -6px rgba(0, 0, 0, 0.75),
+      0 6px 16px -2px rgba(0, 0, 0, 0.5),
+      inset 0 1px 1.5px 0 rgba(212, 175, 55, 0.38),
+      inset 0 -2px 4px 0 rgba(0, 0, 0, 0.65);
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .card-3d:hover,
+  .card-luxury:hover {
+    border-color: rgba(212, 175, 55, 0.55);
+    transform: translateY(-2px);
+    box-shadow: 
+      0 18px 40px -6px rgba(0, 0, 0, 0.85),
+      0 8px 20px -2px rgba(0, 0, 0, 0.6),
+      0 0 25px rgba(212, 175, 55, 0.15);
+  }
+
+  .card-3d-deep,
+  .card-luxury-deep {
+    background: linear-gradient(150deg, rgba(4, 26, 17, 0.96) 0%, rgba(2, 14, 9, 0.99) 100%);
+    box-shadow: 
+      0 12px 26px -6px rgba(0, 0, 0, 0.8),
+      0 4px 12px -2px rgba(0, 0, 0, 0.6),
+      inset 0 1px 1px 0 rgba(212, 175, 55, 0.28),
+      inset 0 -2px 5px 0 rgba(0, 0, 0, 0.85);
+    border: 1px solid rgba(212, 175, 55, 0.25);
+  }
+
+  /* ==========================================================
+     STANDARDIZED LUXURY BUTTON SYSTEM (BY FUNCTION)
+     Consistent height, radius, typography, micro-interactions
+     ========================================================== */
+  .btn-base {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.75rem; /* 12px */
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-radius: 0.75rem; /* rounded-xl (12px) */
+    padding: 0.625rem 1.125rem;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    outline: none;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-base:hover {
+    transform: translateY(-2px);
+  }
+
+  .btn-base:active {
+    transform: translateY(1px) scale(0.985);
+  }
+
+  /* 1. AKSI UTAMA / SIMPAN -> EMAS / GOLD */
+  .btn-3d-gold,
+  .btn-luxury-gold {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-radius: 0.75rem;
+    padding: 0.625rem 1.25rem;
+    background: linear-gradient(180deg, #fae9a4 0%, #d4af37 45%, #a47d12 100%);
+    color: #120d02;
+    border: 1px solid #faebaa;
+    box-shadow: 
+      0 6px 18px -2px rgba(0, 0, 0, 0.7),
+      0 3px 8px rgba(212, 175, 55, 0.4),
+      inset 0 1.5px 1.5px rgba(255, 255, 255, 0.8),
+      inset 0 -2.5px 3px rgba(115, 85, 8, 0.7);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-3d-gold:hover,
+  .btn-luxury-gold:hover {
+    background: linear-gradient(180deg, #fff2be 0%, #dfbd49 45%, #b58d19 100%);
+    box-shadow: 
+      0 10px 24px -2px rgba(0, 0, 0, 0.8),
+      0 4px 14px rgba(212, 175, 55, 0.6),
+      inset 0 2px 2px rgba(255, 255, 255, 0.9);
+    transform: translateY(-2px);
+    filter: brightness(1.05);
+  }
+  .btn-3d-gold:active,
+  .btn-luxury-gold:active {
+    transform: translateY(1px) scale(0.985);
+    box-shadow: 
+      0 2px 6px rgba(0, 0, 0, 0.7),
+      inset 0 2.5px 4px rgba(80, 55, 5, 0.6);
+  }
+
+  /* 2. BERHASIL / HADIR / AKTIF -> HIJAU EMERALD */
+  .btn-3d-emerald,
+  .btn-luxury-emerald {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-radius: 0.75rem;
+    padding: 0.625rem 1.125rem;
+    background: linear-gradient(180deg, #34d399 0%, #059669 50%, #047857 100%);
+    color: #ffffff;
+    border: 1px solid rgba(167, 243, 208, 0.6);
+    box-shadow: 
+      0 6px 16px -2px rgba(0, 0, 0, 0.65),
+      0 3px 8px rgba(16, 185, 129, 0.35),
+      inset 0 1.5px 1px rgba(255, 255, 255, 0.5),
+      inset 0 -2.5px 3px rgba(2, 44, 34, 0.7);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-3d-emerald:hover,
+  .btn-luxury-emerald:hover {
+    background: linear-gradient(180deg, #6ee7b7 0%, #10b981 50%, #059669 100%);
+    box-shadow: 
+      0 10px 22px -2px rgba(0, 0, 0, 0.75),
+      0 4px 12px rgba(16, 185, 129, 0.55),
+      inset 0 2px 2px rgba(255, 255, 255, 0.65);
+    transform: translateY(-2px);
+    filter: brightness(1.06);
+  }
+  .btn-3d-emerald:active,
+  .btn-luxury-emerald:active {
+    transform: translateY(1px) scale(0.985);
+    box-shadow: 
+      0 2px 6px rgba(0, 0, 0, 0.65),
+      inset 0 2.5px 4px rgba(2, 44, 34, 0.7);
+  }
+
+  /* 3. INFORMASI -> BIRU */
+  .btn-luxury-blue {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-radius: 0.75rem;
+    padding: 0.625rem 1.125rem;
+    background: linear-gradient(180deg, #60a5fa 0%, #2563eb 50%, #1d4ed8 100%);
+    color: #ffffff;
+    border: 1px solid rgba(191, 219, 254, 0.55);
+    box-shadow: 
+      0 6px 16px -2px rgba(0, 0, 0, 0.65),
+      0 3px 8px rgba(37, 99, 235, 0.35),
+      inset 0 1.5px 1px rgba(255, 255, 255, 0.5),
+      inset 0 -2.5px 3px rgba(15, 23, 42, 0.7);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-luxury-blue:hover {
+    background: linear-gradient(180deg, #93c5fd 0%, #3b82f6 50%, #2563eb 100%);
+    box-shadow: 0 10px 22px -2px rgba(0, 0, 0, 0.75), 0 4px 12px rgba(59, 130, 246, 0.55);
+    transform: translateY(-2px);
+  }
+  .btn-luxury-blue:active {
+    transform: translateY(1px) scale(0.985);
+    box-shadow: inset 0 2.5px 4px rgba(15, 23, 42, 0.7);
+  }
+
+  /* 4. EDIT / PERUBAHAN DATA -> ORANYE */
+  .btn-luxury-orange {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-radius: 0.75rem;
+    padding: 0.625rem 1.125rem;
+    background: linear-gradient(180deg, #fb923c 0%, #ea580c 50%, #c2410c 100%);
+    color: #ffffff;
+    border: 1px solid rgba(254, 215, 170, 0.6);
+    box-shadow: 
+      0 6px 16px -2px rgba(0, 0, 0, 0.65),
+      0 3px 8px rgba(234, 88, 12, 0.35),
+      inset 0 1.5px 1px rgba(255, 255, 255, 0.5),
+      inset 0 -2.5px 3px rgba(67, 20, 7, 0.7);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-luxury-orange:hover {
+    background: linear-gradient(180deg, #fdba74 0%, #f97316 50%, #ea580c 100%);
+    box-shadow: 0 10px 22px -2px rgba(0, 0, 0, 0.75), 0 4px 12px rgba(249, 115, 22, 0.55);
+    transform: translateY(-2px);
+  }
+  .btn-luxury-orange:active {
+    transform: translateY(1px) scale(0.985);
+    box-shadow: inset 0 2.5px 4px rgba(67, 20, 7, 0.7);
+  }
+
+  /* 5. PERINGATAN -> AMBER */
+  .btn-luxury-amber {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-radius: 0.75rem;
+    padding: 0.625rem 1.125rem;
+    background: linear-gradient(180deg, #fbbf24 0%, #d97706 50%, #b45309 100%);
+    color: #1a1003;
+    border: 1px solid rgba(254, 240, 138, 0.7);
+    box-shadow: 
+      0 6px 16px -2px rgba(0, 0, 0, 0.65),
+      0 3px 8px rgba(217, 119, 6, 0.35),
+      inset 0 1.5px 1px rgba(255, 255, 255, 0.6),
+      inset 0 -2.5px 3px rgba(120, 53, 15, 0.7);
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-luxury-amber:hover {
+    background: linear-gradient(180deg, #fde68a 0%, #f59e0b 50%, #d97706 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 22px -2px rgba(0, 0, 0, 0.75), 0 4px 12px rgba(245, 158, 11, 0.5);
+  }
+  .btn-luxury-amber:active {
+    transform: translateY(1px) scale(0.985);
+    box-shadow: inset 0 2.5px 4px rgba(120, 53, 15, 0.7);
+  }
+
+  /* 6. HAPUS / RESET / DANGER -> MERAH */
+  .btn-luxury-danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-radius: 0.75rem;
+    padding: 0.625rem 1.125rem;
+    background: linear-gradient(180deg, #f87171 0%, #dc2626 50%, #b91c1c 100%);
+    color: #ffffff;
+    border: 1px solid rgba(254, 202, 202, 0.55);
+    box-shadow: 
+      0 6px 16px -2px rgba(0, 0, 0, 0.65),
+      0 3px 8px rgba(220, 38, 38, 0.35),
+      inset 0 1.5px 1px rgba(255, 255, 255, 0.5),
+      inset 0 -2.5px 3px rgba(69, 10, 10, 0.75);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-luxury-danger:hover {
+    background: linear-gradient(180deg, #fca5a5 0%, #ef4444 50%, #dc2626 100%);
+    box-shadow: 0 10px 22px -2px rgba(0, 0, 0, 0.75), 0 4px 12px rgba(239, 68, 68, 0.55);
+    transform: translateY(-2px);
+  }
+  .btn-luxury-danger:active {
+    transform: translateY(1px) scale(0.985);
+    box-shadow: inset 0 2.5px 4px rgba(69, 10, 10, 0.75);
+  }
+
+  /* 7. KEMBALI / BATAL -> ABU-ABU GELAP / DEEP DARK */
+  .btn-3d-dark,
+  .btn-luxury-dark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-radius: 0.75rem;
+    padding: 0.625rem 1.125rem;
+    background: linear-gradient(180deg, #0f4830 0%, #072619 100%);
+    color: #e2f4ea;
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    box-shadow: 
+      0 4px 12px rgba(0, 0, 0, 0.5),
+      inset 0 1px 1px rgba(212, 175, 55, 0.3),
+      inset 0 -2px 3px rgba(0, 0, 0, 0.7);
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-3d-dark:hover,
+  .btn-luxury-dark:hover {
+    border-color: #d4af37;
+    background: linear-gradient(180deg, #165e3f 0%, #0c3926 100%);
+    color: #ffffff;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.6), 0 0 12px rgba(212, 175, 55, 0.3);
+    transform: translateY(-2px);
+  }
+  .btn-3d-dark:active,
+  .btn-luxury-dark:active {
+    transform: translateY(1px) scale(0.985);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+  }
+
+  /* 8. REFRESH / SINKRONISASI -> TEAL / CYAN */
+  .btn-luxury-teal {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-radius: 0.75rem;
+    padding: 0.625rem 1.125rem;
+    background: linear-gradient(180deg, #2dd4bf 0%, #0d9488 50%, #0f766e 100%);
+    color: #ffffff;
+    border: 1px solid rgba(153, 246, 228, 0.55);
+    box-shadow: 
+      0 6px 16px -2px rgba(0, 0, 0, 0.65),
+      0 3px 8px rgba(13, 148, 136, 0.35),
+      inset 0 1.5px 1px rgba(255, 255, 255, 0.5),
+      inset 0 -2.5px 3px rgba(4, 47, 46, 0.7);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-luxury-teal:hover {
+    background: linear-gradient(180deg, #5eead4 0%, #14b8a6 50%, #0d9488 100%);
+    box-shadow: 0 10px 22px -2px rgba(0, 0, 0, 0.75), 0 4px 12px rgba(20, 184, 166, 0.55);
+    transform: translateY(-2px);
+  }
+  .btn-luxury-teal:active {
+    transform: translateY(1px) scale(0.985);
+    box-shadow: inset 0 2.5px 4px rgba(4, 47, 46, 0.7);
+  }
+
+  /* ==========================================================
+     SIDEBAR LUXURY ACTIVE / HOVER STATES
+     ========================================================== */
+  .sidebar-menu-active {
+    background: linear-gradient(90deg, rgba(212, 175, 55, 0.22) 0%, rgba(6, 44, 28, 0.95) 50%, rgba(2, 20, 13, 0.98) 100%);
+    border-left: 3.5px solid #d4af37;
+    border-top: 1px solid rgba(212, 175, 55, 0.35);
+    border-bottom: 1px solid rgba(212, 175, 55, 0.35);
+    border-right: 1px solid rgba(212, 175, 55, 0.2);
+    box-shadow: 
+      0 6px 18px -4px rgba(0, 0, 0, 0.75),
+      0 0 18px rgba(212, 175, 55, 0.22),
+      inset 0 1px 1px rgba(255, 240, 180, 0.45);
+    color: #ffffff;
+    font-weight: 800;
+    transform: translateX(3px);
+  }
+
+  .sidebar-menu-inactive {
+    color: rgba(226, 244, 234, 0.75);
+    border-left: 3.5px solid transparent;
+    border-top: 1px solid transparent;
+    border-bottom: 1px solid transparent;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .sidebar-menu-inactive:hover {
+    color: #ffffff;
+    background: rgba(10, 52, 34, 0.45);
+    border-left-color: rgba(212, 175, 55, 0.5);
+    transform: translateX(2px);
+  }
+
+  /* Header banner with beveled 3D reflection */
+  .header-3d-banner {
+    background: 
+      radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.15) 0%, transparent 60%),
+      radial-gradient(circle at 10% 50%, rgba(16, 185, 129, 0.12) 0%, transparent 50%),
+      linear-gradient(135deg, rgba(8, 42, 27, 0.92) 0%, rgba(4, 25, 16, 0.98) 100%);
+    box-shadow: 
+      0 14px 34px -6px rgba(0, 0, 0, 0.8),
+      0 0 25px rgba(212, 175, 55, 0.12),
+      inset 0 1.5px 1px 0 rgba(255, 240, 180, 0.4),
+      inset 0 -2px 4px 0 rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(212, 175, 55, 0.42);
+  }
+
+  /* Text glow */
+  .text-gold-3d {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.85), 0 0 14px rgba(212, 175, 55, 0.35);
+  }
+
+  /* Running Text Marquee */
+  @keyframes marquee {
+    0% { transform: translateX(100%); }
+    100% { transform: translateX(-100%); }
+  }
+  .animate-marquee {
+    display: inline-block;
+    white-space: nowrap;
+    animation: marquee 28s linear infinite;
+  }
+  .animate-marquee:hover {
+    animation-play-state: paused;
+  }
+
+  /* Extra 3D Pill Tabs */
+  .btn-3d-pill-active {
+    background: linear-gradient(180deg, #f6e07b 0%, #d4af37 45%, #997819 100%);
+    box-shadow: 
+      0 6px 14px -2px rgba(0, 0, 0, 0.7),
+      0 2px 4px rgba(212, 175, 55, 0.4),
+      inset 0 1.5px 1px rgba(255, 255, 255, 0.7),
+      inset 0 -2.5px 3px rgba(110, 80, 10, 0.85);
+    border: 1px solid rgba(255, 240, 180, 0.9);
+    color: #000000;
+    font-weight: 800;
+    transform: translateY(-1px);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-3d-pill-active:active {
+    transform: translateY(1.5px);
+    box-shadow: 
+      0 2px 4px rgba(0, 0, 0, 0.6),
+      inset 0 2px 4px rgba(0, 0, 0, 0.6);
+  }
+
+  .btn-3d-pill-inactive {
+    background: linear-gradient(180deg, #0f4830 0%, #072619 100%);
+    box-shadow: 
+      0 4px 10px rgba(0, 0, 0, 0.5),
+      inset 0 1px 1px rgba(212, 175, 55, 0.25),
+      inset 0 -2px 3px rgba(0, 0, 0, 0.8);
+    border: 1px solid rgba(212, 175, 55, 0.3);
+    color: #e2f4ea;
+    font-weight: 700;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-3d-pill-inactive:hover {
+    border-color: #d4af37;
+    background: linear-gradient(180deg, #165e3f 0%, #0c3926 100%);
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.6), 0 0 10px rgba(212, 175, 55, 0.3);
+  }
+  .btn-3d-pill-inactive:active {
+    transform: translateY(1px);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7);
+  }
+}
+
