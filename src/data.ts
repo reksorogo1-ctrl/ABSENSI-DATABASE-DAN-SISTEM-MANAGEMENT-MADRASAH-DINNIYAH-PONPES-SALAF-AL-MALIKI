@@ -2,7 +2,7 @@ import {
   Santri, JadwalPelajaran, GuruPengajar, WaliKelas, NadzhomRecord, 
   NilaiUjianRecord, AppSettings, AbsensiSantriRecord, AbsensiGuruRecord,
   SyahriyahRecord, UangSakuRecord, KurikulumKitabRecord,
-  Pengurus, KalenderAkademikEvent, UjianSantriRecord
+  Pengurus, KalenderAkademikEvent, UjianSantriRecord, IzinMengajarRequest
 } from './types';
 
 export const DEFAULT_SPREADSHEET_ID = '1lgVwiAb0XSctKHBxFzZOSK6xpxmbLoCsWCjoEjvNq-Q';
@@ -17,6 +17,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   background_url: '',
   password_admin: 'salaf123',
   password_option_panel: 'admin123',
+  intro_video_url: 'Camera_moving_through_Islamic_li…_20260925184519.mp4',
 
   // Pengaturan Teks Website Menyeluruh (Dapat Diatur Bebas di Option Panel)
   header_title: 'SIM Pondok Pesantren Salaf Al-Maliki',
@@ -59,11 +60,11 @@ export const INITIAL_SANTRI_LIST: Santri[] = [
   // 1 TSANAWIYAH
   { 
     id: 'S-1001', 
-    nama: 'Ahmad Fathan Mubina', 
+    nama: 'ZIDNIL AQILA', 
     kelas: '1 TSANAWIYAH', 
     kamar: 'Kamar Abu Bakar 01', 
     alamat: 'Kediri, Jawa Timur', 
-    foto: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=400&auto=format&fit=crop&q=80',
+    foto: 'https://cdn.phototourl.com/member/2026-09-21-56d172a7-db00-4892-ac41-713327347876.jpg',
     password: '1001',
     namaOrangTua: 'H. Suwandi & Hj. Aminah',
     namaWaliKelas: 'Ustazah Fina Nikmatul Kamelia',
@@ -81,13 +82,13 @@ export const INITIAL_SANTRI_LIST: Santri[] = [
   },
   { 
     id: 'S-1002', 
-    nama: 'Muhammad Zainul Arifin', 
+    nama: 'ALIMUN HANIF', 
     kelas: '1 TSANAWIYAH', 
-    kamar: 'Kamar Abu Bakar 02', 
-    alamat: 'Jombang, Jawa Timur', 
+    kamar: '-', 
+    alamat: 'KREMON JENGGOT PEKALONGAN', 
     foto: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400&auto=format&fit=crop&q=80',
     password: '1002',
-    namaOrangTua: 'Bpk. Ridwan Fauzi',
+    namaOrangTua: 'BPK FARIHIN',
     namaWaliKelas: 'Ustazah Fina Nikmatul Kamelia',
     noWaWaliKelas: '6281234567801',
     saldoUangSaku: 75000,
@@ -849,5 +850,36 @@ export const INITIAL_UJIAN_SANTRI_LIST: UjianSantriRecord[] = [
     kitabBaca: 'Fathul Qorib Bab Thoharoh',
     catatanBacaKitab: 'Penguasaan i\'rob sangat baik.',
     ustadzPenguji: 'Ust. H. Ahmad Fauzi Ridwan'
+  }
+];
+
+export const INITIAL_IZIN_MENGAJAR_LIST: IzinMengajarRequest[] = [
+  {
+    id: 'IZN-001',
+    idPengurus: 'PNG-002',
+    namaUstadz: 'Ustazah Fina Nikmatul Kamelia',
+    tanggal: '2026-09-25',
+    mapel: 'Nahwu & Shorof (Al-Imrithi)',
+    kelas: '1 TSANAWIYAH',
+    jamKe: 1,
+    alasan: 'Udzur Syar\'i / Menghadiri Harlah & Bahtsul Masail',
+    ustadzPengganti: 'Ust. M. Rizqi Fadlillah, S.Pd.',
+    status: 'Disetujui',
+    catatanAdmin: 'Disetujui oleh Kepala Madrasah, digantikan oleh Ust. M. Rizqi Fadlillah',
+    createdAt: '2026-09-25 06:30'
+  },
+  {
+    id: 'IZN-002',
+    idPengurus: 'PNG-003',
+    namaUstadz: 'Ust. Muhammad Ilyas Al-Hafidz',
+    tanggal: '2026-09-26',
+    mapel: 'Fathul Qorib',
+    kelas: '2 TSANAWIYAH',
+    jamKe: 2,
+    alasan: 'Tugas Pesantren / Mewakili Pondok Silaturahmi Masyayikh',
+    ustadzPengganti: 'Ust. H. Ahmad Fauzi Ridwan',
+    status: 'Menunggu',
+    catatanAdmin: 'Menunggu konfirmasi ketersediaan ustadz pengganti',
+    createdAt: '2026-09-25 07:15'
   }
 ];

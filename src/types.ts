@@ -21,6 +21,8 @@ export interface Santri {
   catatanUjianKitab?: string; // Catatan evaluasi ustadz penguji
   ustadzPengujiKitab?: string; // Nama ustadz penguji
   tanggalUjianKitab?: string; // Tanggal pelaksanaan ujian
+  kitabMuhafadzoh?: string;
+  kitabBaca?: string;
 }
 
 export interface Pengurus {
@@ -134,6 +136,23 @@ export interface AbsensiGuruRecord {
   hari: string;
   jamKe: number | string;
   waktu: string;
+  ustadzPengganti?: string;
+  alasanIzin?: string;
+}
+
+export interface IzinMengajarRequest {
+  id: string;
+  idPengurus?: string;
+  namaUstadz: string;
+  tanggal: string; // YYYY-MM-DD
+  mapel: string;
+  kelas: string;
+  jamKe?: number | string;
+  alasan: string;
+  ustadzPengganti?: string;
+  status: 'Menunggu' | 'Disetujui' | 'Ditolak';
+  catatanAdmin?: string;
+  createdAt: string;
 }
 
 export interface JadwalPelajaran {
@@ -192,6 +211,7 @@ export interface AppSettings {
   background_url?: string;
   password_admin?: string;
   password_option_panel?: string;
+  intro_video_url?: string; // URL video intro opening yang dapat diedit di Option Panel
 
   // Pengaturan Teks Website Menyeluruh (Bisa diatur semua di Option Panel)
   header_title?: string;

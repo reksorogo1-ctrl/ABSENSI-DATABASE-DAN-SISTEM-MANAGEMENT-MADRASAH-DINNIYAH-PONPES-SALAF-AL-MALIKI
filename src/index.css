@@ -500,6 +500,22 @@
     animation-play-state: paused;
   }
 
+  /* Cinematic Camera Glide for Islamic Library */
+  @keyframes cameraGlide {
+    0% {
+      transform: scale(1.03) translate(0%, 0%);
+    }
+    50% {
+      transform: scale(1.15) translate(-2.5%, -1.5%);
+    }
+    100% {
+      transform: scale(1.03) translate(0%, 0%);
+    }
+  }
+  .animate-cameraGlide {
+    animation: cameraGlide 20s ease-in-out infinite alternate;
+  }
+
   /* Extra 3D Pill Tabs */
   .btn-3d-pill-active {
     background: linear-gradient(180deg, #f6e07b 0%, #d4af37 45%, #997819 100%);

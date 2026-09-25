@@ -3,26 +3,39 @@ import {
   Santri, AbsensiSantriRecord, AbsensiGuruRecord, JadwalPelajaran, 
   GuruPengajar, NadzhomRecord, NilaiUjianRecord, AppSettings, DashboardStats, AuthSession,
   SyahriyahRecord, UangSakuRecord, KurikulumKitabRecord,
-  Pengurus, KalenderAkademikEvent, UjianSantriRecord
+  Pengurus, KalenderAkademikEvent, UjianSantriRecord, IzinMengajarRequest
 } from './types';
 import { 
   DEFAULT_SPREADSHEET_ID, DEFAULT_SETTINGS, INITIAL_SANTRI_LIST, 
   INITIAL_GURU_LIST, INITIAL_JADWAL_LIST, INITIAL_NADZHOM_LIST, 
   INITIAL_NILAI_LIST, INITIAL_ABSENSI_SANTRI, INITIAL_ABSENSI_GURU,
   INITIAL_SYAHRIYAH_LIST, INITIAL_UANG_SAKU_LIST, INITIAL_KURIKULUM_LIST,
-  INITIAL_PENGURUS_LIST, INITIAL_KALENDER_AKADEMIK, INITIAL_UJIAN_SANTRI_LIST
+  INITIAL_PENGURUS_LIST, INITIAL_KALENDER_AKADEMIK, INITIAL_UJIAN_SANTRI_LIST,
+  INITIAL_IZIN_MENGAJAR_LIST
 } from './data';
 import { GoogleSheetsService } from './sheetsService';
 import { googleSignIn, initAuth, getAccessToken, logoutGoogle } from './googleAuth';
 import { AdminDashboard } from './components/AdminDashboard';
 import { WaliSantriPortal } from './components/WaliSantriPortal';
 import { PengurusDashboard } from './components/PengurusDashboard';
-import { ShieldCheck, UserCheck, Key, Lock, ExternalLink, RefreshCw, User, Eye, EyeOff, Users, Award } from 'lucide-react';
+import { IntroOpening } from './components/IntroOpening';
+import { 
+  ShieldCheck, UserCheck, Key, Lock, ExternalLink, RefreshCw, User, Eye, EyeOff, 
+  Users, Award, Play, ArrowRight, Shield, Globe, MessageCircle, HelpCircle, X,
+  Check, Sparkles, LogIn, Film, BookOpen, GraduationCap, Star, Calendar, Instagram, Youtube
+} from 'lucide-react';
 
 export default function App() {
+  // Intro Video State
+  const [showIntro, setShowIntro] = useState<boolean>(true);
+
   // Session State
   const [session, setSession] = useState<AuthSession | null>(null);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+
+  // Remember Me & Forgot Password State
+  const [rememberMe, setRememberMe] = useState<boolean>(true);
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState<boolean>(false);
 
   // Google Sheets integration state
   const [spreadsheetId, setSpreadsheetId] = useState<string>(() => {
@@ -87,6 +100,23 @@ export default function App() {
     const saved = localStorage.getItem('sim_ujian_kitab');
     return saved ? JSON.parse(saved) : INITIAL_UJIAN_SANTRI_LIST;
   });
+  const [izinMengajarList, setIzinMengajarList] = useState<IzinMengajarRequest[]>(() => {
+    const saved = localStorage.getItem('sim_izin_mengajar');
+    return saved ? JSON.parse(saved) : INITIAL_IZIN_MENGAJAR_LIST;
+  });
+
+  // Otomatis restart sesi harian dari nol saat berganti hari kalender
+  useEffect(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const lastDate = localStorage.getItem('sim_last_active_date');
+    if (lastDate && lastDate !== todayStr) {
+      // Tanggal berganti: perbarui tanggal aktif
+      localStorage.setItem('sim_last_active_date', todayStr);
+      // Sesi presensi hari baru dimulai dari nol
+    } else if (!lastDate) {
+      localStorage.setItem('sim_last_active_date', todayStr);
+    }
+  }, []);
 
   // Login Form State
   const [loginMode, setLoginMode] = useState<'wali' | 'pengurus' | 'admin'>('wali');
@@ -110,6 +140,23 @@ export default function App() {
     sheetsService.setSpreadsheetId(spreadsheetId);
     localStorage.setItem('sim_spreadsheet_id', spreadsheetId);
   }, [spreadsheetId, sheetsService]);
+
+  // Otomatis restart dan mulai dari nol setelah berganti hari
+  useEffect(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const lastActiveDate = localStorage.getItem('sim_active_dashboard_date');
+
+    if (!lastActiveDate) {
+      localStorage.setItem('sim_active_dashboard_date', todayStr);
+    } else if (lastActiveDate !== todayStr) {
+      // Hari telah berganti! Otomatis restart sesi harian ke nol
+      console.log(`Pergantian hari terdeteksi (${lastActiveDate} -> ${todayStr}). Mereset sesi harian aktif ke nol.`);
+      // Sesi absensi harian di-reset ke nol untuk hari baru
+      setAbsensiSantriList([]);
+      setAbsensiGuruList([]);
+      localStorage.setItem('sim_active_dashboard_date', todayStr);
+    }
+  }, []);
 
   useEffect(() => {
     initAuth(
@@ -231,7 +278,7 @@ export default function App() {
         localStorage.setItem('sim_nilai', JSON.stringify(remoteNilai));
       }
       if (remoteSettings) {
-        setSettings(prev => ({ ...prev, ...remoteSettings }));
+        setSettings((prev: AppSettings) => ({ ...prev, ...remoteSettings }));
         localStorage.setItem('sim_settings', JSON.stringify({ ...settings, ...remoteSettings }));
       }
 
@@ -373,6 +420,19 @@ export default function App() {
         santriData: updatedSantri
       });
     }
+  };
+
+  const handleDeleteSantri = (id: string) => {
+    const target = santriList.find(s => s.id === id);
+    const updated = santriList.filter(s => s.id !== id);
+    setSantriList(updated);
+    localStorage.setItem('sim_santri', JSON.stringify(updated));
+
+    // Also remove from active session if logged in as that santri
+    if (session?.role === 'wali_santri' && session.identifier === id) {
+      setSession(null);
+    }
+    alert(`Data santri "${target?.nama || id}" telah berhasil dihapus dari database pondok pesantren.`);
   };
 
   const handleSaveNewGuru = (newGuru: GuruPengajar) => {
@@ -534,6 +594,78 @@ export default function App() {
     alert('Rekap dashboard telah diarsipkan dan sesi perhitungan aktif telah direset ke nol.');
   };
 
+  // Handlers Izin Tidak Mengajar Ustadz & Pengganti
+  const handleAddIzinMengajar = (newReq: IzinMengajarRequest) => {
+    const updated = [newReq, ...izinMengajarList];
+    setIzinMengajarList(updated);
+    localStorage.setItem('sim_izin_mengajar', JSON.stringify(updated));
+  };
+
+  const handleApproveIzinMengajar = (
+    requestId: string,
+    ustadzPengganti: string,
+    status: 'Disetujui' | 'Ditolak',
+    catatanAdmin?: string
+  ) => {
+    const target = izinMengajarList.find(i => i.id === requestId);
+    if (!target) return;
+
+    const finalPengganti = ustadzPengganti || target.ustadzPengganti || 'Ust. Pengganti';
+
+    const updatedIzinList = izinMengajarList.map(item => {
+      if (item.id === requestId) {
+        return {
+          ...item,
+          status,
+          ustadzPengganti: finalPengganti,
+          catatanAdmin: catatanAdmin || (status === 'Disetujui' ? `Disetujui Admin. Pengganti: ${finalPengganti}` : 'Permohonan ditolak oleh Admin.')
+        };
+      }
+      return item;
+    });
+
+    setIzinMengajarList(updatedIzinList);
+    localStorage.setItem('sim_izin_mengajar', JSON.stringify(updatedIzinList));
+
+    // KETIKA ADMIN MENYETUJUI STATUS KEHADIRAN PADA ABSENSI USTADZ USTADZAH LANGSUNG MENJADI IZIN DAN SEBELAHNYA ADA NAMA USTAD PENGANTINYA!
+    if (status === 'Disetujui') {
+      const existingIdx = absensiGuruList.findIndex(a => 
+        a.nama.toLowerCase().trim() === target.namaUstadz.toLowerCase().trim() &&
+        a.tanggal === target.tanggal
+      );
+
+      let updatedAbsensi: AbsensiGuruRecord[];
+      if (existingIdx >= 0) {
+        updatedAbsensi = [...absensiGuruList];
+        updatedAbsensi[existingIdx] = {
+          ...updatedAbsensi[existingIdx],
+          status: 'Izin',
+          ustadzPengganti: finalPengganti,
+          alasanIzin: target.alasan,
+          catatan: `Izin tidak mengajar disetujui: ${target.alasan}. Pengganti: ${finalPengganti}`
+        };
+      } else {
+        const newRec: AbsensiGuruRecord = {
+          tanggal: target.tanggal,
+          nama: target.namaUstadz,
+          mapel: target.mapel,
+          kelas: target.kelas,
+          status: 'Izin',
+          catatan: `Izin tidak mengajar disetujui: ${target.alasan}. Pengganti: ${finalPengganti}`,
+          hari: new Date(target.tanggal).toLocaleDateString('id-ID', { weekday: 'long' }).toUpperCase(),
+          jamKe: target.jamKe || 1,
+          waktu: '08:00 - Selesai',
+          ustadzPengganti: finalPengganti,
+          alasanIzin: target.alasan
+        };
+        updatedAbsensi = [newRec, ...absensiGuruList];
+      }
+
+      setAbsensiGuruList(updatedAbsensi);
+      localStorage.setItem('sim_absensi_guru', JSON.stringify(updatedAbsensi));
+    }
+  };
+
   // 1. If logged in as Wali Santri -> render WaliSantriPortal with Row-Level Security
   if (session?.role === 'wali_santri' && session.santriData) {
     const liveSantri = santriList.find(s => s.id === session.santriData?.id) || session.santriData;
@@ -573,10 +705,12 @@ export default function App() {
         kurikulumList={kurikulumList}
         kalenderList={kalenderList}
         ujianList={ujianList}
+        izinList={izinMengajarList}
         onLogout={handleLogout}
         onUpdatePengurusProfile={handleUpdatePengurus}
         onSaveAbsensiSantri={handleSaveAbsensiSantri}
         onSaveAbsensiGuru={handleSaveAbsensiGuru}
+        onSubmitIzinMengajar={handleAddIzinMengajar}
       />
     );
   }
@@ -600,6 +734,7 @@ export default function App() {
         pengurusList={pengurusList}
         kalenderList={kalenderList}
         ujianList={ujianList}
+        izinList={izinMengajarList}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         spreadsheetId={spreadsheetId}
@@ -626,51 +761,209 @@ export default function App() {
         onSaveKalender={handleSaveKalender}
         onDeleteKalender={handleDeleteKalender}
         onSaveUjianSantri={handleSaveUjianSantri}
+        onApproveIzinMengajar={handleApproveIzinMengajar}
+        onDeleteSantri={handleDeleteSantri}
       />
     );
   }
 
-  // 4. Login Landing View (3 Roles: Wali Santri, Pengurus Pondok, & Admin Utama)
+  // 4. Intro Opening View
+  if (showIntro) {
+    return (
+      <IntroOpening
+        onComplete={() => setShowIntro(false)}
+        appName={settings.portal_title || 'SIM SALAF AL-MALIKI'}
+        subTitle={settings.nama_pesantren || 'PONDOK PESANTREN SALAF AL-MALIKI'}
+        logoUrl={settings.logo_pondok}
+        videoSrc="Camera_moving_through_Islamic_li…_20260925184519.mp4"
+      />
+    );
+  }
+
+  // 5. Login Landing View (Dasbor Login Pertama dengan Latar Belakang Perpustakaan Klasik Tetap Utuh)
   return (
     <div 
-      className="min-h-screen flex items-center justify-center p-4 bg-[#03140c] bg-cover bg-center font-sans text-[#f3e5ab]"
-      style={settings.background_url ? { backgroundImage: `linear-gradient(rgba(3, 20, 12, 0.92), rgba(3, 20, 12, 0.97)), url(${settings.background_url})` } : undefined}
+      className="min-h-screen w-full relative flex flex-col items-center justify-center p-4 py-8 text-[#faebaa] font-sans overflow-x-hidden"
+      style={{
+        backgroundImage: `
+          linear-gradient(rgba(1, 14, 8, 0.65), rgba(1, 14, 8, 0.78)),
+          radial-gradient(circle at 50% 15%, rgba(212, 175, 55, 0.16) 0%, transparent 55%),
+          radial-gradient(circle at 10% 85%, rgba(5, 150, 105, 0.14) 0%, transparent 60%),
+          radial-gradient(circle at 90% 80%, rgba(245, 158, 11, 0.12) 0%, transparent 55%),
+          url('/assets/islamic_library_login_bg.jpg')
+        `,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed'
+      }}
     >
-      <div className="w-full max-w-md card-3d rounded-3xl p-6 sm:p-8 backdrop-blur-md relative border border-[#d4af37]/40 shadow-2xl">
-        
-        {/* Header Pondok Pesantren */}
-        <div className="text-center mb-6">
-          <div className="w-20 h-20 mx-auto rounded-full bg-[#0b422a] border-2 border-[#d4af37] flex items-center justify-center text-3xl shadow-xl overflow-hidden mb-3">
-            {settings.logo_pondok ? (
-              <img src={settings.logo_pondok} alt="Logo Pondok" className="w-full h-full object-cover" />
-            ) : (
-              <span>🕌</span>
-            )}
+      {/* Decorative Islamic Geometric Star Grid Background */}
+      <div className="absolute inset-0 opacity-10 pointer-events-none bg-[radial-gradient(#faebaa_1px,transparent_1px)] [background-size:28px_28px]" />
+
+      {/* Floating Ambient Glowing Orbs */}
+      <div className="absolute top-1/6 left-1/4 w-80 h-80 bg-[#d4af37]/15 rounded-full blur-[100px] pointer-events-none animate-pulse" />
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-emerald-600/12 rounded-full blur-[120px] pointer-events-none animate-pulse" style={{ animationDelay: '2s' }} />
+
+      {/* MODAL: LUPA KATA SANDI */}
+      {showForgotPasswordModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md card-3d rounded-3xl p-6 border-2 border-[#d4af37]/50 shadow-2xl bg-[#02180e] relative text-left">
+            <button
+              type="button"
+              onClick={() => setShowForgotPasswordModal(false)}
+              className="absolute top-4 right-4 p-2 rounded-xl bg-black/40 text-emerald-300 hover:text-white transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-[#0b3824] border border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow">
+                <HelpCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-white text-gold-3d">
+                  Bantuan Sandi Masuk Sistem
+                </h4>
+                <p className="text-[11px] text-emerald-300">
+                  Panduan pemulihan akses akun Madrasah & Pesantren
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs text-emerald-100/90 leading-relaxed">
+              <div className="p-3 rounded-xl bg-[#032214] border border-[#d4af37]/30">
+                <b className="text-[#faebaa] block mb-1">1. Untuk Wali Santri:</b>
+                <p>
+                  Kata sandi bawaan (default) adalah <b>Nomor Induk Santri (NIS)</b> yang tercantum pada kartu santri (contoh: <code>S-1001</code>). Jika belum mengetahui NIS, Anda dapat melihat nama putra/putri Anda pada daftar demo atau menghubungi pengurus.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[#032214] border border-[#d4af37]/30">
+                <b className="text-[#faebaa] block mb-1">2. Untuk Ustadz & Pengurus:</b>
+                <p>
+                  Sandi bawaan pengurus adalah <code>pengurus123</code> atau sesuai yang telah disesuaikan oleh Administrator melalui Option Panel.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[#032214] border border-[#d4af37]/30">
+                <b className="text-[#faebaa] block mb-1">3. Untuk Administrator:</b>
+                <p>
+                  Sandi bawaan admin utama adalah <code>salaf123</code> dengan username <code>admin</code>.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-[#d4af37]/20 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <a
+                href="https://wa.me/6281234567890?text=Assalamu%27alaikum%20Admin%20Pesantren%20Salaf,%20saya%20butuh%20bantuan%20sandi%20login%20SIM"
+                target="_blank"
+                rel="noreferrer"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>Hubungi Admin via WA</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => setShowForgotPasswordModal(false)}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl btn-3d-dark text-[#faebaa] font-bold text-xs"
+              >
+                Tutup Panduan
+              </button>
+            </div>
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-white text-gold-3d font-serif tracking-wide">
-            {settings.nama_pesantren || 'PONDOK PESANTREN AL-MALIKI'}
+        </div>
+      )}
+
+      {/* TOP HEADER BAR: Quick Replay Video Intro & File Chooser */}
+      <div className="w-full max-w-lg mx-auto flex items-center justify-between mb-4 px-2 gap-2 relative z-20">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowIntro(true)}
+            className="px-3.5 py-1.5 rounded-full bg-[#032214]/90 hover:bg-[#063b22] border border-[#d4af37]/50 text-[#faebaa] text-xs font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-md transition hover:scale-102"
+          >
+            <Play className="w-3.5 h-3.5 text-[#d4af37] fill-[#d4af37]" />
+            <span>Tonton Video Intro Perpustakaan</span>
+          </button>
+
+          <label className="px-3 py-1.5 rounded-full bg-[#031d11]/80 hover:bg-[#05301d] border border-[#d4af37]/35 text-emerald-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer backdrop-blur-md transition shadow hover:text-white" title="Pilih Berkas Video MP4">
+            <Film className="w-3.5 h-3.5 text-[#d4af37]" />
+            <span className="hidden sm:inline">Pilih Video MP4</span>
+            <input
+              type="file"
+              accept="video/mp4,video/webm"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const url = URL.createObjectURL(file);
+                  localStorage.setItem('sim_intro_video', url);
+                  localStorage.setItem('sim_intro_video_name', file.name);
+                  setShowIntro(true);
+                }
+              }}
+            />
+          </label>
+        </div>
+
+        <span className="text-[11px] font-mono text-emerald-300/80 hidden sm:inline">
+          TAHUN AJARAN 2026/2027
+        </span>
+      </div>
+
+      {/* MAIN LOGIN CARD (DASBOR PERTAMA YANG ELEGAN DENGAN SENTUHAN EMAS SALAF 3D) */}
+      <div className="w-full max-w-lg card-3d rounded-3xl p-6 sm:p-9 backdrop-blur-md relative border border-[#d4af37]/40 shadow-[0_25px_60px_rgba(0,0,0,0.85),0_0_35px_rgba(212,175,55,0.15)] bg-gradient-to-b from-[#02180e]/95 via-[#01130b]/98 to-[#010b06]/98 z-10">
+        
+        {/* Emblem & Islamic Header */}
+        <div className="text-center mb-6">
+          {/* Basmalah Calligraphy */}
+          <div 
+            className="font-serif text-[#faebaa] text-lg sm:text-xl tracking-widest mb-3 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+            style={{ fontFamily: "'Amiri', 'Traditional Arabic', serif" }}
+          >
+            بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+          </div>
+
+          {/* 3D Islamic Mosque Emblem Halo */}
+          <div className="relative w-20 h-20 sm:w-22 sm:h-22 mx-auto mb-3">
+            <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-[#d4af37] via-[#fff0b3] to-emerald-400 blur-xl opacity-40 animate-pulse" />
+            <div className="w-full h-full rounded-2xl bg-gradient-to-b from-[#faebaa] via-[#d4af37] to-[#785309] p-1 shadow-[0_10px_25px_rgba(0,0,0,0.8)] relative flex items-center justify-center transform hover:rotate-3 transition duration-300">
+              <div className="w-full h-full rounded-[14px] bg-gradient-to-br from-[#06331f] to-[#01140b] flex flex-col items-center justify-center border border-[#faebaa]/50 overflow-hidden">
+                {settings.logo_pondok ? (
+                  <img src={settings.logo_pondok} alt="Logo" className="w-12 h-12 object-contain" />
+                ) : (
+                  <span className="text-3xl filter drop-shadow">🕌</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <h1 className="text-xl sm:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-b from-[#ffffff] via-[#faebaa] to-[#d4af37] tracking-wider uppercase font-serif drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">
+            {settings.nama_pesantren || 'PONDOK PESANTREN SALAF AL-MALIKI'}
           </h1>
-          <p className="text-xs text-[#d4af37] font-medium tracking-wider uppercase mt-1">
-            {settings.portal_title || 'Sistem Informasi Akademik & Presensi Madrasah'}
+          <p className="text-xs text-[#d4af37] font-semibold tracking-widest uppercase mt-1">
+            {settings.portal_title || 'Sistem Informasi Akademik & Presensi Madrasah Diniyah'}
           </p>
         </div>
 
-        {/* Role Selector Tabs (3 Roles: Wali Santri, Pengurus, Admin) */}
-        <div className="grid grid-cols-3 gap-1.5 p-1.5 rounded-2xl bg-[#03140c] border border-[#d4af37]/30 mb-5 text-xs">
+        {/* 3 Role Selector Tabs (Wali Santri, Pengurus, Admin) */}
+        <div className="grid grid-cols-3 gap-1.5 p-1.5 rounded-2xl bg-[#011108] border border-[#d4af37]/35 mb-5 shadow-inner">
           <button
             type="button"
             onClick={() => {
               setLoginMode('wali');
               setLoginError('');
             }}
-            className={`py-2 rounded-xl font-bold transition flex flex-col items-center justify-center gap-1 ${
+            className={`py-2.5 px-1 rounded-xl font-bold transition flex flex-col items-center justify-center gap-1 ${
               loginMode === 'wali'
-                ? 'btn-3d-gold text-black shadow-md'
+                ? 'btn-3d-gold text-black shadow-lg scale-102 ring-1 ring-[#faebaa]'
                 : 'text-emerald-200/80 hover:text-white'
             }`}
           >
             <UserCheck className="w-4 h-4" />
-            <span className="text-[10px] leading-none">Wali Santri</span>
+            <span className="text-[11px] font-black leading-none">Wali Santri</span>
           </button>
 
           <button
@@ -679,14 +972,14 @@ export default function App() {
               setLoginMode('pengurus');
               setLoginError('');
             }}
-            className={`py-2 rounded-xl font-bold transition flex flex-col items-center justify-center gap-1 ${
+            className={`py-2.5 px-1 rounded-xl font-bold transition flex flex-col items-center justify-center gap-1 ${
               loginMode === 'pengurus'
-                ? 'btn-3d-gold text-black shadow-md'
+                ? 'btn-3d-gold text-black shadow-lg scale-102 ring-1 ring-[#faebaa]'
                 : 'text-emerald-200/80 hover:text-white'
             }`}
           >
             <Users className="w-4 h-4" />
-            <span className="text-[10px] leading-none">Pengurus</span>
+            <span className="text-[11px] font-black leading-none">Pengurus</span>
           </button>
 
           <button
@@ -695,57 +988,51 @@ export default function App() {
               setLoginMode('admin');
               setLoginError('');
             }}
-            className={`py-2 rounded-xl font-bold transition flex flex-col items-center justify-center gap-1 ${
+            className={`py-2.5 px-1 rounded-xl font-bold transition flex flex-col items-center justify-center gap-1 ${
               loginMode === 'admin'
-                ? 'btn-3d-gold text-black shadow-md'
+                ? 'btn-3d-gold text-black shadow-lg scale-102 ring-1 ring-[#faebaa]'
                 : 'text-emerald-200/80 hover:text-white'
             }`}
           >
             <Lock className="w-4 h-4" />
-            <span className="text-[10px] leading-none">Admin</span>
+            <span className="text-[11px] font-black leading-none">Admin</span>
           </button>
         </div>
 
-        {/* Role Description */}
-        {loginMode === 'wali' && (
-          <div className="bg-[#0a301f]/80 border border-[#d4af37]/30 rounded-2xl p-3.5 mb-5 flex items-start space-x-3 text-xs text-emerald-200/90 leading-relaxed shadow-inner">
-            <ShieldCheck className="w-5 h-5 text-[#d4af37] shrink-0 mt-0.5" />
-            <div>
-              <b className="text-white">Portal Wali Santri (Nama Santri & Sandi NIS):</b>
-              <p className="mt-0.5">
-                Pantau presensi, syahriyah, mutasi uang saku, nilai ujian kitab (muhafadzoh & baca kitab), serta profil anak secara aman.
-              </p>
-            </div>
+        {/* Informative Role Banner */}
+        <div className="bg-[#032214]/90 border border-[#d4af37]/35 rounded-2xl p-3.5 mb-5 flex items-start space-x-3 text-xs text-emerald-200/90 leading-relaxed shadow-inner">
+          <ShieldCheck className="w-5 h-5 text-[#d4af37] shrink-0 mt-0.5" />
+          <div>
+            {loginMode === 'wali' && (
+              <>
+                <b className="text-white">Portal Khusus Wali Santri Terproteksi:</b>
+                <p className="mt-0.5">
+                  Akses riwayat presensi santri, evaluasi muhafadzoh & baca kitab kuning, pembayaran syahriyah, dan saldo saku.
+                </p>
+              </>
+            )}
+            {loginMode === 'pengurus' && (
+              <>
+                <b className="text-white">Dasbor Khusus Dewan Asatidz & Pengurus:</b>
+                <p className="mt-0.5">
+                  Akses rekap kehadiran mengajar, permohonan izin pengganti (badal), agenda rapat mendesak, dan jadwal pelajaran.
+                </p>
+              </>
+            )}
+            {loginMode === 'admin' && (
+              <>
+                <b className="text-white">Dasbor Utama Administrator Terpusat:</b>
+                <p className="mt-0.5">
+                  Monitoring statistik 3D real-time, sinkronisasi Google Sheets, reset harian otomatis, dan Option Panel kendali sistem.
+                </p>
+              </>
+            )}
           </div>
-        )}
-
-        {loginMode === 'pengurus' && (
-          <div className="bg-[#0a301f]/80 border border-[#d4af37]/30 rounded-2xl p-3.5 mb-5 flex items-start space-x-3 text-xs text-emerald-200/90 leading-relaxed shadow-inner">
-            <Users className="w-5 h-5 text-[#d4af37] shrink-0 mt-0.5" />
-            <div>
-              <b className="text-white">Dasbor Khusus Pengurus:</b>
-              <p className="mt-0.5">
-                Akses berita, rekapan absensi pribadi, profil pengurus, notifikasi agenda/rapat kalender akademik, dan input nilai santri.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {loginMode === 'admin' && (
-          <div className="bg-[#0a301f]/80 border border-[#d4af37]/30 rounded-2xl p-3.5 mb-5 flex items-start space-x-3 text-xs text-emerald-200/90 leading-relaxed shadow-inner">
-            <Lock className="w-5 h-5 text-[#d4af37] shrink-0 mt-0.5" />
-            <div>
-              <b className="text-white">Dasbor Admin Utama:</b>
-              <p className="mt-0.5">
-                Rekapan absensi keseluruhan (line chart & diagram chart), statistik kehadiran santri/guru, dan kendali penuh Option Panel.
-              </p>
-            </div>
-          </div>
-        )}
+        </div>
 
         {/* Error message */}
         {loginError && (
-          <div className="p-3 mb-4 rounded-xl bg-red-950/80 border border-red-500/40 text-red-200 text-xs shadow">
+          <div className="p-3 mb-4 rounded-xl bg-red-950/85 border border-red-500/50 text-red-200 text-xs shadow-lg animate-shake">
             {loginError}
           </div>
         )}
@@ -755,9 +1042,9 @@ export default function App() {
           {loginMode === 'wali' && (
             <>
               <div>
-                <label className="block text-xs font-semibold text-[#d4af37] mb-1.5 flex items-center justify-between">
-                  <span>NAMA LENGKAP SANTRI</span>
-                  <span className="text-[10px] text-emerald-300 font-normal">Identitas Akun</span>
+                <label className="block text-xs font-bold text-[#faebaa] mb-1.5 flex items-center justify-between">
+                  <span>IDENTITAS / NAMA SANTRI</span>
+                  <span className="text-[10px] text-emerald-300 font-normal">Identitas Resmi</span>
                 </label>
                 <div className="relative">
                   <input
@@ -773,17 +1060,17 @@ export default function App() {
                     }}
                     placeholder="Contoh: Ahmad Fathan Mubina"
                     required
-                    className="w-full px-4 py-3 pl-10 rounded-xl bg-[#03140c] border border-[#d4af37]/40 text-white text-sm focus:outline-none focus:border-[#d4af37] shadow-inner"
+                    className="w-full px-4 py-3 pl-10 rounded-xl bg-[#01140b] border border-[#d4af37]/45 text-white text-sm focus:outline-none focus:border-[#faebaa] focus:ring-1 focus:ring-[#d4af37] shadow-inner transition"
                   />
                   <User className="w-4 h-4 text-[#d4af37] absolute left-3.5 top-3.5" />
                   <datalist id="santri-name-suggestions">
                     {santriList.map(s => (
-                      <option key={s.id} value={s.nama}>{s.kelas} - {s.id}</option>
+                      <option key={s.id} value={s.nama}>{s.kelas} — {s.id}</option>
                     ))}
                   </datalist>
                 </div>
 
-                {/* Demo quick selector */}
+                {/* Quick Selection Chips */}
                 <div className="mt-2">
                   <span className="text-[10px] text-emerald-300 block mb-1">Pilih nama santri demo:</span>
                   <div className="flex flex-wrap gap-1.5">
@@ -795,7 +1082,7 @@ export default function App() {
                           setSantriNamaInput(demo.nama);
                           setSantriPasswordInput(demo.password || demo.id);
                         }}
-                        className="text-[10px] px-2 py-0.5 rounded bg-[#0b422a] border border-[#d4af37]/30 text-[#d4af37] hover:bg-[#d4af37] hover:text-black transition"
+                        className="text-[10px] px-2.5 py-0.5 rounded-lg bg-[#072918] border border-[#d4af37]/35 text-[#faebaa] hover:bg-[#d4af37] hover:text-black transition"
                       >
                         {demo.nama.split(' ')[0]} ({demo.id})
                       </button>
@@ -805,9 +1092,9 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#d4af37] mb-1.5 flex items-center justify-between">
+                <label className="block text-xs font-bold text-[#faebaa] mb-1.5 flex items-center justify-between">
                   <span>PASSWORD (NIS SANTRI)</span>
-                  <span className="text-[10px] text-emerald-300 font-normal">Dapat diatur di Option Panel</span>
+                  <span className="text-[10px] text-emerald-300 font-normal">Default: Nomor Induk</span>
                 </label>
                 <div className="relative">
                   <input
@@ -816,19 +1103,19 @@ export default function App() {
                     onChange={(e) => setSantriPasswordInput(e.target.value)}
                     placeholder="Contoh: S-1001"
                     required
-                    className="w-full px-4 py-3 pl-10 pr-10 rounded-xl bg-[#03140c] border border-[#d4af37]/40 text-white font-mono text-sm focus:outline-none focus:border-[#d4af37] shadow-inner"
+                    className="w-full px-4 py-3 pl-10 pr-10 rounded-xl bg-[#01140b] border border-[#d4af37]/45 text-white font-mono text-sm focus:outline-none focus:border-[#faebaa] focus:ring-1 focus:ring-[#d4af37] shadow-inner transition"
                   />
                   <Key className="w-4 h-4 text-[#d4af37] absolute left-3.5 top-3.5" />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-3.5 text-emerald-300/70 hover:text-white"
+                    className="absolute right-3.5 top-3.5 text-emerald-300/80 hover:text-white"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                <p className="text-[10px] text-emerald-200/60 mt-1">
-                  Default password adalah NIS santri (contoh: S-1001). Admin dapat mengubah sandi kapan pun di Option Panel.
+                <p className="text-[10px] text-emerald-200/70 mt-1">
+                  Password bawaan adalah NIS santri (contoh: S-1001). Dapat disesuaikan di Option Panel.
                 </p>
               </div>
             </>
@@ -837,7 +1124,7 @@ export default function App() {
           {loginMode === 'pengurus' && (
             <>
               <div>
-                <label className="block text-xs font-semibold text-[#d4af37] mb-1.5 flex items-center justify-between">
+                <label className="block text-xs font-bold text-[#faebaa] mb-1.5 flex items-center justify-between">
                   <span>NAMA PENGURUS PONDOK</span>
                   <span className="text-[10px] text-emerald-300 font-normal">Akun Khidmah</span>
                 </label>
@@ -855,7 +1142,7 @@ export default function App() {
                     }}
                     placeholder="Contoh: Ust. M. Rizqi Fadlillah, S.Pd."
                     required
-                    className="w-full px-4 py-3 pl-10 rounded-xl bg-[#03140c] border border-[#d4af37]/40 text-white text-sm focus:outline-none focus:border-[#d4af37] shadow-inner"
+                    className="w-full px-4 py-3 pl-10 rounded-xl bg-[#01140b] border border-[#d4af37]/45 text-white text-sm focus:outline-none focus:border-[#faebaa] shadow-inner transition"
                   />
                   <Users className="w-4 h-4 text-[#d4af37] absolute left-3.5 top-3.5" />
                   <datalist id="pengurus-name-suggestions">
@@ -865,7 +1152,7 @@ export default function App() {
                   </datalist>
                 </div>
 
-                {/* Demo quick selector */}
+                {/* Quick Selection Chips */}
                 <div className="mt-2">
                   <span className="text-[10px] text-emerald-300 block mb-1">Pilih nama pengurus demo:</span>
                   <div className="flex flex-wrap gap-1.5">
@@ -877,7 +1164,7 @@ export default function App() {
                           setPengurusNamaInput(demo.nama);
                           setPengurusPasswordInput(demo.password || 'pengurus123');
                         }}
-                        className="text-[10px] px-2 py-0.5 rounded bg-[#0b422a] border border-[#d4af37]/30 text-[#d4af37] hover:bg-[#d4af37] hover:text-black transition"
+                        className="text-[10px] px-2.5 py-0.5 rounded-lg bg-[#072918] border border-[#d4af37]/35 text-[#faebaa] hover:bg-[#d4af37] hover:text-black transition"
                       >
                         {demo.nama.split(',')[0]} ({demo.jabatan})
                       </button>
@@ -887,7 +1174,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#d4af37] mb-1.5 flex items-center justify-between">
+                <label className="block text-xs font-bold text-[#faebaa] mb-1.5 flex items-center justify-between">
                   <span>KATA SANDI PENGURUS</span>
                   <span className="text-[10px] text-emerald-300 font-normal">Diedit via Option Panel</span>
                 </label>
@@ -898,19 +1185,19 @@ export default function App() {
                     onChange={(e) => setPengurusPasswordInput(e.target.value)}
                     placeholder="Kata sandi pengurus..."
                     required
-                    className="w-full px-4 py-3 pl-10 pr-10 rounded-xl bg-[#03140c] border border-[#d4af37]/40 text-white font-mono text-sm focus:outline-none focus:border-[#d4af37] shadow-inner"
+                    className="w-full px-4 py-3 pl-10 pr-10 rounded-xl bg-[#01140b] border border-[#d4af37]/45 text-white font-mono text-sm focus:outline-none focus:border-[#faebaa] shadow-inner transition"
                   />
                   <Key className="w-4 h-4 text-[#d4af37] absolute left-3.5 top-3.5" />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-3.5 text-emerald-300/70 hover:text-white"
+                    className="absolute right-3.5 top-3.5 text-emerald-300/80 hover:text-white"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                <p className="text-[10px] text-emerald-200/60 mt-1">
-                  Kata sandi pengurus dapat disesuaikan masing-masing melalui Option Panel di akun Admin.
+                <p className="text-[10px] text-emerald-200/70 mt-1">
+                  Kata sandi pengurus dapat disesuaikan per orang melalui Option Panel akun Admin.
                 </p>
               </div>
             </>
@@ -919,55 +1206,164 @@ export default function App() {
           {loginMode === 'admin' && (
             <>
               <div>
-                <label className="block text-xs font-semibold text-[#d4af37] mb-1.5">
-                  USERNAME ADMIN
+                <label className="block text-xs font-bold text-[#faebaa] mb-1.5">
+                  USERNAME ADMINISTRATOR
                 </label>
-                <input
-                  type="text"
-                  value={adminUsername}
-                  onChange={(e) => setAdminUsername(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 rounded-xl bg-[#03140c] border border-[#d4af37]/40 text-white text-sm focus:outline-none focus:border-[#d4af37] shadow-inner"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={adminUsername}
+                    onChange={(e) => setAdminUsername(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 pl-10 rounded-xl bg-[#01140b] border border-[#d4af37]/45 text-white text-sm focus:outline-none focus:border-[#faebaa] shadow-inner transition"
+                  />
+                  <Lock className="w-4 h-4 text-[#d4af37] absolute left-3.5 top-3.5" />
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#d4af37] mb-1.5">
-                  PASSWORD ADMIN
+                <label className="block text-xs font-bold text-[#faebaa] mb-1.5">
+                  PASSWORD ADMINISTRATOR
                 </label>
-                <input
-                  type="password"
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 rounded-xl bg-[#03140c] border border-[#d4af37]/40 text-white text-sm focus:outline-none focus:border-[#d4af37] shadow-inner"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 pl-10 pr-10 rounded-xl bg-[#01140b] border border-[#d4af37]/45 text-white font-mono text-sm focus:outline-none focus:border-[#faebaa] shadow-inner transition"
+                  />
+                  <Key className="w-4 h-4 text-[#d4af37] absolute left-3.5 top-3.5" />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-3.5 text-emerald-300/80 hover:text-white"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
             </>
           )}
 
+          {/* Remember Me & Forgot Password Row (Sesuai Gambar Login) */}
+          <div className="flex items-center justify-between pt-1 pb-1 text-xs">
+            <label className="flex items-center gap-2 cursor-pointer select-none text-emerald-200">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-4 h-4 accent-[#d4af37] rounded"
+              />
+              <span>Ingat Saya</span>
+            </label>
+
+            <button
+              type="button"
+              onClick={() => setShowForgotPasswordModal(true)}
+              className="text-[#faebaa] hover:text-white hover:underline transition font-semibold"
+            >
+              Lupa Kata Sandi?
+            </button>
+          </div>
+
+          {/* PRIMARY 3D GOLD ACTION BUTTON (SESUAI GAMBAR) */}
           <button
             type="submit"
-            className="w-full py-3.5 rounded-xl btn-3d-gold text-black font-extrabold text-sm uppercase transition tracking-wider mt-2 shadow-lg"
+            className="w-full py-3.5 rounded-2xl btn-3d-gold text-black font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_12px_30px_rgba(212,175,55,0.45)] hover:scale-[1.02] active:scale-95 transition-all mt-3"
           >
-            {loginMode === 'wali' && 'Buka Portal Wali Santri'}
-            {loginMode === 'pengurus' && 'Masuk Dasbor Pengurus'}
-            {loginMode === 'admin' && 'Masuk Dashboard Admin Utama'}
+            <LogIn className="w-4 h-4 text-black stroke-[2.5]" />
+            <span>
+              {loginMode === 'wali' && 'MASUK KE SISTEM WALI SANTRI'}
+              {loginMode === 'pengurus' && 'MASUK KE SISTEM PENGURUS'}
+              {loginMode === 'admin' && 'MASUK KE SISTEM ADMINISTRATOR'}
+            </span>
+            <ArrowRight className="w-4 h-4 text-black stroke-[3]" />
+          </button>
+
+          {/* SECONDARY GOOGLE LOGIN BUTTON (SESUAI GAMBAR) */}
+          <button
+            type="button"
+            onClick={googleSignIn}
+            className="w-full py-3 rounded-2xl bg-[#02180e] hover:bg-[#042416] border border-[#d4af37]/45 text-white font-bold text-xs flex items-center justify-center gap-2.5 shadow-md transition hover:scale-[1.01] active:scale-95"
+          >
+            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z" />
+              <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24Z" />
+              <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15Z" />
+              <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98Z" />
+            </svg>
+            <span>Masuk dengan Akun Google</span>
           </button>
         </form>
 
-        {/* Central Google Sheets connection footer */}
-        <div className="mt-6 pt-4 border-t border-[#d4af37]/20 flex items-center justify-between text-[11px] text-emerald-300/80">
-          <span>Google Sheets Master Terhubung</span>
-          <button
-            type="button"
-            onClick={syncWithGoogleSheets}
-            disabled={isSyncing}
-            className="flex items-center space-x-1 text-[#d4af37] hover:underline"
-          >
-            <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'Menghubungkan...' : 'Sinkronkan'}</span>
-          </button>
+        {/* SECURITY ENCRYPTION BADGE (SESUAI GAMBAR) */}
+        <div className="mt-6 pt-4 border-t border-[#d4af37]/25 flex flex-col items-center text-center space-y-3">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#031d11] border border-[#d4af37]/35 text-[10px] text-emerald-300 font-mono shadow-inner">
+            <Shield className="w-3.5 h-3.5 text-[#d4af37]" />
+            <span>256-Bit SSL Encrypted • Sistem Terproteksi & Terverifikasi</span>
+          </div>
+
+          {/* Social Media Link Icons (Instagram, YouTube, TikTok, WhatsApp, Web) */}
+          <div className="flex items-center justify-center gap-3 pt-1">
+            <a
+              href="https://instagram.com"
+              target="_blank"
+              rel="noreferrer"
+              className="w-8 h-8 rounded-full bg-[#02180e] border border-[#d4af37]/40 hover:border-[#faebaa] hover:bg-[#d4af37] text-emerald-300 hover:text-black flex items-center justify-center transition shadow"
+              title="Instagram Pondok"
+            >
+              <span className="text-xs font-bold">IG</span>
+            </a>
+            <a
+              href="https://youtube.com"
+              target="_blank"
+              rel="noreferrer"
+              className="w-8 h-8 rounded-full bg-[#02180e] border border-[#d4af37]/40 hover:border-[#faebaa] hover:bg-[#d4af37] text-emerald-300 hover:text-black flex items-center justify-center transition shadow"
+              title="YouTube Salaf"
+            >
+              <span className="text-xs font-bold">YT</span>
+            </a>
+            <a
+              href="https://tiktok.com"
+              target="_blank"
+              rel="noreferrer"
+              className="w-8 h-8 rounded-full bg-[#02180e] border border-[#d4af37]/40 hover:border-[#faebaa] hover:bg-[#d4af37] text-emerald-300 hover:text-black flex items-center justify-center transition shadow"
+              title="TikTok Madrasah"
+            >
+              <span className="text-xs font-bold">TT</span>
+            </a>
+            <a
+              href="https://wa.me/6281234567890"
+              target="_blank"
+              rel="noreferrer"
+              className="w-8 h-8 rounded-full bg-[#02180e] border border-[#d4af37]/40 hover:border-[#faebaa] hover:bg-[#d4af37] text-emerald-300 hover:text-black flex items-center justify-center transition shadow"
+              title="WhatsApp Center"
+            >
+              <MessageCircle className="w-4 h-4" />
+            </a>
+            <a
+              href="#"
+              onClick={(e) => { e.preventDefault(); syncWithGoogleSheets(); }}
+              className="w-8 h-8 rounded-full bg-[#02180e] border border-[#d4af37]/40 hover:border-[#faebaa] hover:bg-[#d4af37] text-emerald-300 hover:text-black flex items-center justify-center transition shadow"
+              title="Sinkronisasi Google Sheets"
+            >
+              <Globe className="w-4 h-4" />
+            </a>
+          </div>
+
+          {/* Sacred Hadith Quote */}
+          <div className="pt-2 text-center max-w-sm mx-auto">
+            <p 
+              className="font-serif text-[#faebaa] text-xs sm:text-sm tracking-wide leading-relaxed"
+              style={{ fontFamily: "'Amiri', serif" }}
+            >
+              مَنْ سَلَكَ طَرِيقًا يَلْتَمِسُ فِيهِ عِلْمًا سَهَّلَ اللَّهُ لَهُ بِهِ طَرِيقًا إِلَى الْجَنَّةِ
+            </p>
+            <p className="text-[10px] text-emerald-300/80 italic mt-1">
+              "Barangsiapa menempuh suatu jalan untuk mencari ilmu, maka Allah memudahkan jalannya menuju Surga." (HR. Muslim)
+            </p>
+          </div>
         </div>
       </div>
     </div>

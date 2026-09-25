@@ -1,159 +1,247 @@
-import React, { useEffect, useState } from 'react';
-import { Sparkles, ArrowRight } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Sparkles, ArrowRight, Volume2, VolumeX, Film, Upload } from 'lucide-react';
 
 interface IntroOpeningProps {
   onComplete: () => void;
   appName?: string;
   subTitle?: string;
   logoUrl?: string;
+  videoSrc?: string;
 }
 
 export const IntroOpening: React.FC<IntroOpeningProps> = ({
   onComplete,
   appName = 'SIM SALAF AL-MALIKI',
   subTitle = 'PONDOK PESANTREN SALAF AL-MALIKI',
-  logoUrl
+  logoUrl,
+  videoSrc = 'Camera_moving_through_Islamic_li…_20260925184519.mp4'
 }) => {
   const [stage, setStage] = useState<number>(0);
   const [fadingOut, setFadingOut] = useState<boolean>(false);
+  const [isMuted, setIsMuted] = useState<boolean>(true);
+  const [videoLoaded, setVideoLoaded] = useState<boolean>(false);
+  const [videoError, setVideoError] = useState<boolean>(false);
+  const [currentVideoUrl, setCurrentVideoUrl] = useState<string>(() => {
+    return videoSrc || 
+           localStorage.getItem('sim_intro_video') || 
+           'Camera_moving_through_Islamic_li…_20260925184519.mp4';
+  });
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  // Sync video URL whenever videoSrc prop changes (e.g. from Option Panel)
+  useEffect(() => {
+    if (videoSrc) {
+      setCurrentVideoUrl(videoSrc);
+      if (videoRef.current) {
+        videoRef.current.src = videoSrc;
+        videoRef.current.load();
+        videoRef.current.play().catch(console.warn);
+      }
+    }
+  }, [videoSrc]);
+
+  // Play ambient Islamic soundscape using Web Audio API when unmuted
+  const playAmbientIslamicAudio = () => {
+    try {
+      if (!audioCtxRef.current) {
+        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        audioCtxRef.current = new AudioCtx();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+
+      // Harmonic drone in D (Re / Bayati / Hijaz mood: D3, A3, D4, F4)
+      const freqs = [146.83, 220.00, 293.66, 349.23];
+      freqs.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = idx === 0 ? 'triangle' : 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+        // Soft volume envelope
+        gain.gain.setValueAtTime(0.001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.04 / (idx + 1), ctx.currentTime + 1.5);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 7.0);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 7.5);
+      });
+    } catch {
+      // Audio autoplay policy fallback
+    }
+  };
 
   useEffect(() => {
-    // Stage 1: Particles & ambient emerald depth glow
-    const t1 = setTimeout(() => setStage(1), 100);
-    // Stage 2: 3D Emblem rotation & scale-up with gold glow
-    const t2 = setTimeout(() => setStage(2), 600);
-    // Stage 3: Title & institution name reveal
-    const t3 = setTimeout(() => setStage(3), 1200);
-    // Stage 4: Fade-out transition to dashboard
-    const t4 = setTimeout(() => {
-      setFadingOut(true);
-      setTimeout(onComplete, 600);
-    }, 2800);
+    // Attempt to play video
+    if (videoRef.current) {
+      videoRef.current.play().catch(() => {
+        if (videoRef.current) {
+          videoRef.current.muted = true;
+          videoRef.current.play().catch(() => {
+            setVideoError(true);
+          });
+        }
+      });
+    }
+
+    // Sequence stages of the cinematic reveal
+    const t1 = setTimeout(() => setStage(1), 400);
+    const t2 = setTimeout(() => setStage(2), 1400);
+    const t3 = setTimeout(() => setStage(3), 2600);
+    const t4 = setTimeout(() => setStage(4), 3800);
+
+    // Auto complete after 8.5 seconds if user doesn't skip
+    const tEnd = setTimeout(() => {
+      handleComplete();
+    }, 8500);
 
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
       clearTimeout(t4);
+      clearTimeout(tEnd);
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        audioCtxRef.current.close().catch(() => {});
+      }
     };
-  }, [onComplete]);
+  }, []);
 
-  const handleSkip = () => {
+  const handleComplete = () => {
     setFadingOut(true);
-    setTimeout(onComplete, 300);
+    setTimeout(onComplete, 600);
+  };
+
+  const handleCustomVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setCurrentVideoUrl(url);
+      setVideoLoaded(true);
+      setVideoError(false);
+      localStorage.setItem('sim_intro_video_name', file.name);
+      if (videoRef.current) {
+        videoRef.current.src = url;
+        videoRef.current.play().catch(console.warn);
+      }
+    }
+  };
+
+  const handleToggleSound = () => {
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+    if (videoRef.current) {
+      videoRef.current.muted = nextMuted;
+    }
+    if (!nextMuted) {
+      playAmbientIslamicAudio();
+    }
   };
 
   return (
     <div
-      className={`fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-[#02110a] text-white select-none transition-opacity duration-700 ease-out ${
+      className={`fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-[#010905] text-white select-none transition-opacity duration-700 ease-out overflow-hidden ${
         fadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
-      style={{
-        backgroundImage: `
-          radial-gradient(circle at 50% 45%, rgba(212, 175, 55, 0.18) 0%, transparent 55%),
-          radial-gradient(circle at 20% 80%, rgba(16, 185, 129, 0.15) 0%, transparent 60%),
-          linear-gradient(180deg, #010c07 0%, #03190f 50%, #010a05 100%)
-        `
-      }}
     >
-      {/* Decorative Islamic Geometric Star Grid Background */}
-      <div className="absolute inset-0 opacity-15 pointer-events-none bg-[radial-gradient(#d4af37_1px,transparent_1px)] [background-size:28px_28px]" />
-
-      {/* Ambient Floating Light Particles */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/3 w-72 h-72 bg-[#d4af37]/15 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/3 w-80 h-80 bg-emerald-500/15 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+      {/* TOP LEFT: Active Video Filename Indicator */}
+      <div className="absolute top-5 left-5 sm:top-6 sm:left-8 z-30 hidden sm:flex items-center gap-2">
+        <div className="px-3.5 py-1.5 rounded-full bg-black/60 border border-[#d4af37]/40 backdrop-blur-md flex items-center gap-2 text-xs text-[#faebaa] shadow-lg">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <Film className="w-3.5 h-3.5 text-[#d4af37]" />
+          <span className="font-mono text-[11px] truncate max-w-[280px]">
+            {localStorage.getItem('sim_intro_video_name') || 'Camera_moving_through_Islamic_li…_20260925184519.mp4'}
+          </span>
+        </div>
       </div>
 
-      {/* Skip Button (Top Right) */}
-      <button
-        onClick={handleSkip}
-        className="absolute top-6 right-6 z-20 btn-luxury-dark text-[11px] font-extrabold uppercase tracking-widest px-4 py-2 rounded-xl flex items-center gap-1.5 opacity-80 hover:opacity-100 transition shadow-lg"
-      >
-        <span>LEWATI</span>
-        <ArrowRight className="w-3.5 h-3.5 text-[#d4af37]" />
-      </button>
-
-      {/* Central Content */}
-      <div className="relative z-10 flex flex-col items-center text-center px-4 max-w-lg mx-auto">
-        {/* Basmalah Calligraphy in Islamic Script */}
-        <div
-          className={`font-serif text-[#f4df96] text-lg sm:text-xl tracking-widest transition-all duration-700 ${
-            stage >= 1 ? 'opacity-90 translate-y-0' : 'opacity-0 -translate-y-4'
-          }`}
-          style={{ fontFamily: "'Amiri', serif" }}
-        >
-          بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
-        </div>
-
-        {/* 3D Islamic Emblem / Logo with Gold Glow */}
-        <div
-          className={`my-6 relative transition-all duration-1000 ease-out transform ${
-            stage >= 2
-              ? 'opacity-100 scale-100 rotate-0'
-              : 'opacity-0 scale-75 -rotate-6'
-          }`}
-        >
-          {/* Radial soft gold halo */}
-          <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-[#d4af37] via-[#faebaa] to-emerald-400 blur-2xl opacity-40 animate-pulse" />
-
-          <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl p-1 bg-gradient-to-b from-[#faebaa] via-[#d4af37] to-[#805f0d] shadow-[0_20px_50px_rgba(0,0,0,0.9),0_0_35px_rgba(212,175,55,0.4)] relative flex items-center justify-center transform transition hover:scale-105">
-            <div className="w-full h-full rounded-[22px] bg-gradient-to-br from-[#06301d] to-[#01140b] p-3 flex flex-col items-center justify-center border border-[#faebaa]/40">
-              {logoUrl ? (
-                <img
-                  src={logoUrl}
-                  alt="Logo Ponpes"
-                  className="w-16 h-16 object-contain filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#124d31] to-[#062416] border border-[#d4af37]/60 flex items-center justify-center shadow-inner">
-                    <span className="font-serif font-black text-2xl text-[#f4df96] text-gold-3d">
-                      م
-                    </span>
-                  </div>
-                  <span className="text-[9px] font-extrabold uppercase tracking-widest text-[#d4af37] mt-1.5 font-mono">
-                    SALAF AL-MALIKI
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Institution & App Title with Shimmer */}
-        <div
-          className={`space-y-2 transition-all duration-800 ease-out ${
-            stage >= 3 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-          }`}
-        >
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#082d1c]/90 border border-[#d4af37]/40 shadow">
-            <Sparkles className="w-3.5 h-3.5 text-[#d4af37]" />
-            <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-[#faebaa]">
-              {subTitle}
-            </span>
-          </div>
-
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-b from-[#ffffff] via-[#f7e49f] to-[#d4af37] drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]">
-            {appName}
-          </h1>
-
-          <p className="text-xs sm:text-sm text-emerald-200/90 font-medium tracking-wide max-w-sm mx-auto">
-            SISTEM INFORMASI & ADMINISTRASI MADRASAH DINIYAH SALAFIYAH TERPADU
-          </p>
-        </div>
-
-        {/* Subtle Loading / Progress Bar */}
-        <div className="mt-8 w-48 h-1 bg-[#052617] rounded-full overflow-hidden border border-[#d4af37]/30 shadow-inner">
-          <div
-            className="h-full bg-gradient-to-r from-[#d4af37] via-[#faebaa] to-emerald-400 rounded-full transition-all duration-[2600ms] ease-out"
-            style={{ width: stage >= 1 ? '100%' : '5%' }}
+      {/* 1. CINEMATIC VIDEO BACKGROUND (CAMERA MOVING THROUGH ISLAMIC LIBRARY - JERNIH & BEBAS BAYANGAN HIJAU) */}
+      <div className="absolute inset-0 z-0 overflow-hidden bg-black">
+        {/* High-res 8K Ancient Islamic Library Camera Gliding Visualizer (Active as fallback when video is loading) */}
+        {(!videoLoaded || videoError) && (
+          <img
+            src="/assets/islamic_library_cinematic.jpg"
+            alt="Islamic Library Grand Hall"
+            className="absolute inset-0 w-full h-full object-cover animate-cameraGlide"
           />
-        </div>
-        <span className="text-[10px] text-emerald-300/70 font-mono tracking-widest mt-2 uppercase">
-          MEMUAT SISTEM TERPADU...
-        </span>
+        )}
+
+        {/* Real MP4 Video Player - Jernih, Tajam, 100% Asli Tanpa Bayangan Hijau atau Filter Redup */}
+        <video
+          ref={videoRef}
+          src={currentVideoUrl}
+          autoPlay
+          muted={isMuted}
+          playsInline
+          loop
+          onLoadedData={() => {
+            setVideoLoaded(true);
+            setVideoError(false);
+          }}
+          onError={() => setVideoError(true)}
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 z-10 ${
+            videoLoaded && !videoError ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+        >
+          <source src={currentVideoUrl} type="video/mp4" />
+          <source src="Camera_moving_through_Islamic_li…_20260925184519.mp4" type="video/mp4" />
+          <source src="Camera_moving_through_Islamic_library_20260925184519.mp4" type="video/mp4" />
+          <source src="Camera_moving_through_Islamic_li…_20260925182907.mp4" type="video/mp4" />
+          <source src="/assets/Camera_moving_through_Islamic_li…_20260925184519.mp4" type="video/mp4" />
+          <source src="/assets/intro.mp4" type="video/mp4" />
+        </video>
       </div>
+
+      {/* 2. TOP ACTION BUTTONS: Sound Toggle, Custom Video, Skip */}
+      <div className="absolute top-5 right-5 sm:top-6 sm:right-8 z-30 flex items-center gap-2.5">
+        {/* Toggle Audio */}
+        <button
+          type="button"
+          onClick={handleToggleSound}
+          className="px-3 py-2 rounded-xl bg-black/60 hover:bg-black/80 border border-[#d4af37]/40 text-[#f7e59f] text-xs font-bold flex items-center gap-1.5 backdrop-blur-md transition shadow-lg"
+          title={isMuted ? 'Nyalakan Suara (Harmoni Ney & Kitab Salaf)' : 'Bisukan Suara'}
+        >
+          {isMuted ? <VolumeX className="w-4 h-4 text-emerald-400" /> : <Volume2 className="w-4 h-4 text-[#d4af37]" />}
+          <span className="hidden sm:inline text-[11px] font-mono">{isMuted ? 'Muted' : 'Sound On'}</span>
+        </button>
+
+        {/* Custom Video Picker (Optional File Uploader for Intro) */}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="px-3 py-2 rounded-xl bg-black/60 hover:bg-black/80 border border-[#d4af37]/40 text-[#f7e59f] text-xs font-bold flex items-center gap-1.5 backdrop-blur-md transition shadow-lg"
+          title="Pilih Berkas Video Camera_moving_through_Islamic_li…_20260925184519.mp4"
+        >
+          <Film className="w-4 h-4 text-[#d4af37]" />
+          <span className="hidden md:inline text-[11px]">Pilih Video</span>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="video/mp4,video/webm"
+          className="hidden"
+          onChange={handleCustomVideoUpload}
+        />
+
+        {/* Skip Button */}
+        <button
+          type="button"
+          onClick={handleComplete}
+          className="btn-3d-gold text-black text-xs font-black uppercase tracking-wider px-4 py-2 rounded-xl flex items-center gap-1.5 shadow-xl hover:scale-105 active:scale-95 transition"
+        >
+          <span>LEWATI</span>
+          <ArrowRight className="w-4 h-4 text-black stroke-[3]" />
+        </button>
+      </div>
+
+      {/* Pure Cinematic Video Experience - No Logos, No Overlay Texts */}
     </div>
   );
 };
