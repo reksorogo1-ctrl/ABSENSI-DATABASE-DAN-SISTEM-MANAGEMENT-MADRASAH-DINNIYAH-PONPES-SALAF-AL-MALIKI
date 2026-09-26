@@ -9,6 +9,7 @@ import {
   AlertTriangle, MessageCircle, Phone, ArrowDownLeft, ArrowUpRight, 
   CheckCircle2, Clock, Sparkles, GraduationCap, Check, FileText
 } from 'lucide-react';
+import { BrandLogos } from './BrandLogos';
 
 interface WaliSantriPortalProps {
   santri: Santri;
@@ -93,13 +94,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
       <header className="build-header bg-[#052216]/95 border-b border-[#d4af37]/30 backdrop-blur sticky top-0 z-30 px-4 py-3 sm:px-6 shadow-xl">
         <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-[#0b422a] border border-[#d4af37] flex items-center justify-center text-lg overflow-hidden shadow-md">
-              {settings?.logo_pondok ? (
-                <img src={settings.logo_pondok} alt="Logo" className="w-full h-full object-contain bg-white" />
-              ) : (
-                <span>🕌</span>
-              )}
-            </div>
+            <BrandLogos settings={settings} size="xs" gap="gap-1.5" idPrefix="wali-header" />
             <div>
               <h1 className="font-bold text-sm sm:text-base text-[#d4af37] tracking-wide font-serif">
                 {settings?.portal_title || 'PORTAL WALI SANTRI AL-MALIKI'}

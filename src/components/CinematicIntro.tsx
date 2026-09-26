@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { ArrowRight, ChevronDown, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { createAmbient, type AmbientHandle } from '../lib/ambientAudio';
+import { isSoundMuted, setSoundMuted } from '../lib/doorSound';
 
 interface CinematicIntroProps {
   onComplete: () => void;
@@ -25,7 +26,7 @@ export const CinematicIntro: React.FC<CinematicIntroProps> = ({
   const [webglFailed, setWebglFailed] = useState<boolean>(false);
   const [progressUI, setProgressUI] = useState<number>(0);
   const [leaving, setLeaving] = useState<boolean>(false);
-  const [muted, setMuted] = useState<boolean>(false);
+  const [muted, setMuted] = useState<boolean>(() => isSoundMuted());
   const ambientRef = useRef<AmbientHandle | null>(null);
 
   const handleEnter = () => {
@@ -39,6 +40,7 @@ export const CinematicIntro: React.FC<CinematicIntroProps> = ({
       const next = !m;
       ambientRef.current?.ensureStarted();
       ambientRef.current?.setMuted(next);
+      setSoundMuted(next);
       return next;
     });
   };
@@ -48,6 +50,7 @@ export const CinematicIntro: React.FC<CinematicIntroProps> = ({
   useEffect(() => {
     const amb = createAmbient(0.055);
     ambientRef.current = amb;
+    amb.setMuted(isSoundMuted());
     amb.ensureStarted();
     const kick = () => amb.ensureStarted();
     const opts: AddEventListenerOptions = { once: true };

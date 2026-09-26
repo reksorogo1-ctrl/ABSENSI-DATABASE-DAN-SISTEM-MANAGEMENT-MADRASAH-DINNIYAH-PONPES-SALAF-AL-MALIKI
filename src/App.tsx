@@ -689,7 +689,7 @@ export default function App() {
             settings={settings}
           />
         </div>
-        {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} logoUrl={settings.logo_pondok} />}
+        {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} settings={settings} />}
       </>
     );
   }
@@ -724,7 +724,7 @@ export default function App() {
             onSubmitIzinMengajar={handleAddIzinMengajar}
           />
         </div>
-        {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} logoUrl={settings.logo_pondok} />}
+        {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} settings={settings} />}
       </>
     );
   }
@@ -781,7 +781,7 @@ export default function App() {
             onDeleteSantri={handleDeleteSantri}
           />
         </div>
-        {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} logoUrl={settings.logo_pondok} />}
+        {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} settings={settings} />}
       </>
     );
   }

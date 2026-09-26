@@ -12,6 +12,7 @@ import {
   Send, FileText, UserX, ChevronRight, Check, X, Shield, PlusCircle,
   BookmarkCheck, CheckSquare, RefreshCw, GraduationCap
 } from 'lucide-react';
+import { BrandLogos } from './BrandLogos';
 
 interface PengurusDashboardProps {
   pengurus: Pengurus;
@@ -256,9 +257,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       <header className="build-header sticky top-0 z-50 bg-[#052216]/95 backdrop-blur border-b border-[#d4af37]/30 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-[#0b3824] border border-[#d4af37]/50 flex items-center justify-center text-[#d4af37] shadow">
-              <BookOpen className="w-5 h-5" />
-            </div>
+            <BrandLogos settings={settings} size="xs" gap="gap-1.5" idPrefix="pengurus-header" />
             <div>
               <h1 className="text-sm sm:text-base font-extrabold text-white text-gold-3d leading-tight">
                 {settings.portal_title || settings.nama_pesantren || 'MADRASAH DINIYAH SALAFIYAH'}

@@ -4,7 +4,8 @@ import {
   BookOpen, HeartHandshake, Star, ShieldCheck, Calendar, Instagram, Youtube, Music2, Globe
 } from 'lucide-react';
 import { Santri, Pengurus, AppSettings } from '../types';
-import { LOGO_MADRASAH, LOGO_PONDOK } from '../brand';
+import { resolveLogos } from '../brand';
+import { LogoFrame } from './BrandLogos';
 
 type LoginMode = 'wali' | 'pengurus' | 'admin';
 
@@ -34,17 +35,6 @@ interface LoginScreenProps {
 const inputCls =
   'w-full pl-12 pr-12 py-3.5 rounded-2xl bg-[#03140c]/80 border border-[#d4af37]/45 text-white text-sm placeholder:text-emerald-200/40 focus:outline-none focus:border-[#faebaa] focus:ring-1 focus:ring-[#d4af37] shadow-inner transition uppercase tracking-wide';
 
-const LogoSlot: React.FC<{ src: string; alt: string; round?: boolean; testId: string }> = ({ src, alt, round, testId }) => (
-  <div
-    data-testid={testId}
-    className={`login-logo-slot relative p-[3px] ${round ? 'rounded-full' : 'rounded-2xl'} bg-gradient-to-b from-[#fff2be] via-[#d4af37] to-[#7a5410] shadow-[0_18px_40px_rgba(0,0,0,0.75),0_0_30px_rgba(212,175,55,0.35)]`}
-  >
-    <div className={`${round ? 'rounded-full w-32 h-32 sm:w-40 sm:h-40' : 'rounded-[13px] w-44 h-32 sm:w-56 sm:h-40'} bg-white overflow-hidden flex items-center justify-center`}>
-      <img src={src} alt={alt} className="w-full h-full object-contain p-1" />
-    </div>
-  </div>
-);
-
 export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
   const {
     settings, santriList, pengurusList, loginMode, setLoginMode, loginError, setLoginError,
@@ -55,6 +45,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
     showForgotPasswordModal, setShowForgotPasswordModal, onSubmit, onGoogleSignIn, onSyncSheets, onReplayIntro,
   } = p;
 
+  const logos = resolveLogos(settings);
   const pickMode = (m: LoginMode) => { setLoginMode(m); setLoginError(''); };
 
   const roleBtn = (m: LoginMode, label: string, Icon: React.ElementType) => (
@@ -144,8 +135,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
           {/* center brand */}
           <div className="flex flex-col items-center text-center gap-6 lg:gap-7 py-4">
             <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-8 login-reveal" style={{ animationDelay: '0.25s' }}>
-              <LogoSlot src={LOGO_MADRASAH} alt="Logo Madrasah Diniyah Almaliki" round testId="login-logo-madrasah" />
-              <LogoSlot src={LOGO_PONDOK} alt="Logo Pondok Pesantren Almaliki" testId="login-logo-pondok" />
+              <LogoFrame src={logos.madrasah} alt="Logo Madrasah Diniyah Almaliki" shape="round" size="lg" testId="login-logo-madrasah" className="login-logo-slot" />
+              <LogoFrame src={logos.pondok} alt="Logo Pondok Pesantren Almaliki" shape="wide" size="lg" testId="login-logo-pondok" className="login-logo-slot" />
             </div>
 
             <div className="login-reveal" style={{ animationDelay: '0.4s' }}>

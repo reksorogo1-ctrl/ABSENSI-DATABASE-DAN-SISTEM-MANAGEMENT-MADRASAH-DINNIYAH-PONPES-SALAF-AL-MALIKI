@@ -13,6 +13,8 @@ import {
   BarChart, Bar, CartesianGrid, PieChart, Pie, Cell 
 } from 'recharts';
 import { Donut3D } from './Chart3D';
+import { BrandLogos, LogoFrame } from './BrandLogos';
+import { resolveLogos } from '../brand';
 import { 
   Santri, AbsensiSantriRecord, AbsensiGuruRecord, JadwalPelajaran, 
   GuruPengajar, NadzhomRecord, NilaiUjianRecord, AppSettings, DashboardStats,
@@ -609,6 +611,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     ...settings,
     background_url: settings.background_url || '',
     logo_pondok: settings.logo_pondok || '',
+    logo_madrasah: settings.logo_madrasah || '',
     intro_video_url: settings.intro_video_url || localStorage.getItem('sim_intro_video') || 'Camera_moving_through_Islamic_li…_20260925184519.mp4',
     password_admin: settings.password_admin || 'salaf123',
     password_option_panel: settings.password_option_panel || 'admin123',
@@ -652,6 +655,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       ...settings,
       background_url: settings.background_url || '',
       logo_pondok: settings.logo_pondok || '',
+      logo_madrasah: settings.logo_madrasah || '',
       intro_video_url: settings.intro_video_url || localStorage.getItem('sim_intro_video') || 'Camera_moving_through_Islamic_li…_20260925184519.mp4',
       password_admin: settings.password_admin || 'salaf123',
       password_option_panel: settings.password_option_panel || 'admin123',
@@ -809,18 +813,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="space-y-6">
           {/* Logo & Header */}
           <div className="flex items-center space-x-3 pb-4 border-b border-[#d4af37]/20">
-            <div className="w-12 h-12 rounded-full bg-[#0b422a] border border-[#d4af37] flex items-center justify-center text-xl shrink-0 overflow-hidden shadow-inner">
-              {settings.logo_pondok ? (
-                <img 
-                  src={settings.logo_pondok} 
-                  alt="Logo" 
-                  className="w-full h-full object-cover" 
-                  onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                />
-              ) : (
-                <span>🕌</span>
-              )}
-            </div>
+            <BrandLogos settings={settings} size="xs" gap="gap-1.5" idPrefix="admin-header" />
             <div className="overflow-hidden">
               <h2 className="font-bold text-sm text-[#d4af37] truncate uppercase tracking-wider font-serif">
                 {settings.nama_pondok}
@@ -5758,17 +5751,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                       <div className="space-y-3">
                         <label className="block text-xs font-semibold text-[#d4af37]">
-                          Link URL Logo Pondok Pesantren
+                          Link URL Logo Madrasah Diniyah (Bingkai Bulat)
                         </label>
                         <input
                           type="text"
+                          data-testid="logo-madrasah-input"
+                          value={visualForm.logo_madrasah || ''}
+                          onChange={(e) => setVisualForm({ ...visualForm, logo_madrasah: e.target.value })}
+                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                          placeholder="https://... URL logo bulat madrasah (kosongkan = logo bawaan)"
+                        />
+                        <label className="block text-xs font-semibold text-[#d4af37] pt-1">
+                          Link URL Logo Pondok Pesantren (Bingkai Persegi Panjang)
+                        </label>
+                        <input
+                          type="text"
+                          data-testid="logo-pondok-input"
                           value={visualForm.logo_pondok || ''}
                           onChange={(e) => setVisualForm({ ...visualForm, logo_pondok: e.target.value })}
                           className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
-                          placeholder="https://... URL logo lingkaran pondok"
+                          placeholder="https://... URL logo persegi pondok (kosongkan = logo bawaan)"
                         />
                         <p className="text-[10px] text-emerald-300/80">
-                          Logo pondok akan tampil pada header aplikasi, sidebar, dan halaman login wali santri.
+                          Kedua logo tampil berbingkai emas pada halaman login, animasi pintu, serta header dashboard Admin, Pengurus, dan Wali Santri.
                         </p>
                       </div>
 
@@ -5795,12 +5800,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     {/* Preview Kotak Logo & Background */}
                     <div className="p-4 bg-[#03140c] rounded-xl border border-[#d4af37]/20 flex items-center gap-4">
-                      <div className="w-14 h-14 rounded-full bg-[#0b422a] border border-[#d4af37] flex items-center justify-center overflow-hidden shrink-0">
-                        {visualForm.logo_pondok ? (
-                          <img src={visualForm.logo_pondok} alt="Preview Logo" className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-2xl">🕌</span>
-                        )}
+                      <div className="flex items-center gap-3 shrink-0" data-testid="logo-preview">
+                        <LogoFrame src={resolveLogos(visualForm).madrasah} alt="Preview Logo Madrasah" shape="round" size="md" testId="preview-logo-madrasah" />
+                        <LogoFrame src={resolveLogos(visualForm).pondok} alt="Preview Logo Pondok" shape="wide" size="md" testId="preview-logo-pondok" />
                       </div>
                       <div className="overflow-hidden">
                         <span className="text-xs font-bold text-white block">Preview Visual Logo & Header</span>

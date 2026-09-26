@@ -1,30 +1,25 @@
 import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { LOGO_MADRASAH, LOGO_PONDOK } from '../brand';
+import { AppSettings } from '../types';
+import { resolveLogos } from '../brand';
+import { LogoFrame } from './BrandLogos';
+import { playDoorSound } from '../lib/doorSound';
 
 interface DoorTransitionProps {
   onComplete: () => void;
-  logoUrl?: string;
+  settings?: Partial<AppSettings> | null;
 }
 
 const panelBg =
   'radial-gradient(ellipse at 50% 30%, rgba(212,175,55,0.14) 0%, transparent 60%), linear-gradient(160deg,#063a24 0%,#031d12 55%,#010b06 100%)';
 
-const LogoFrame: React.FC<{ src: string; round?: boolean; testId: string }> = ({ src, round, testId }) => (
-  <div
-    data-testid={testId}
-    className={`door-logo-frame p-[4px] ${round ? 'rounded-full' : 'rounded-3xl'} bg-gradient-to-b from-[#fff2be] via-[#d4af37] to-[#7a5410] shadow-[0_25px_60px_rgba(0,0,0,0.85),0_0_40px_rgba(212,175,55,0.45)]`}
-  >
-    <div className={`${round ? 'rounded-full w-40 h-40 sm:w-52 sm:h-52' : 'rounded-[20px] w-56 h-40 sm:w-72 sm:h-52'} bg-white overflow-hidden flex items-center justify-center border-2 border-[#06331f]`}>
-      <img src={src} alt="" className="w-full h-full object-contain p-1.5" />
-    </div>
-  </div>
-);
-
 // Luxurious 3D sliding-door reveal played right after a successful login.
 // Two vertical panels slide apart (left <- , -> right) unveiling the dashboard behind.
-export const DoorTransition: React.FC<DoorTransitionProps> = ({ onComplete }) => {
+export const DoorTransition: React.FC<DoorTransitionProps> = ({ onComplete, settings }) => {
+  const logos = resolveLogos(settings);
+
   useEffect(() => {
+    playDoorSound(450);
     const t = window.setTimeout(onComplete, 2100);
     return () => window.clearTimeout(t);
   }, [onComplete]);
@@ -48,7 +43,7 @@ export const DoorTransition: React.FC<DoorTransitionProps> = ({ onComplete }) =>
           transition={{ duration: 0.5, ease: 'easeOut' }}
           className="absolute top-1/2 right-8 sm:right-14 -translate-y-1/2"
         >
-          <LogoFrame src={LOGO_MADRASAH} round testId="door-logo-madrasah" />
+          <LogoFrame src={logos.madrasah} alt="Logo Madrasah Diniyah" shape="round" size="xl" testId="door-logo-madrasah" />
         </motion.div>
       </motion.div>
 
@@ -67,7 +62,7 @@ export const DoorTransition: React.FC<DoorTransitionProps> = ({ onComplete }) =>
           transition={{ duration: 0.5, ease: 'easeOut', delay: 0.08 }}
           className="absolute top-1/2 left-8 sm:left-14 -translate-y-1/2"
         >
-          <LogoFrame src={LOGO_PONDOK} testId="door-logo-pondok" />
+          <LogoFrame src={logos.pondok} alt="Logo Pondok Pesantren" shape="wide" size="xl" testId="door-logo-pondok" />
         </motion.div>
       </motion.div>
 
