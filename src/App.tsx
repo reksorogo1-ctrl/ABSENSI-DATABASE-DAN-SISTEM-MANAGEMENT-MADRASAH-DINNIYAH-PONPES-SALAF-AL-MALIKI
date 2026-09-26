@@ -779,6 +779,7 @@ export default function App() {
             onSaveUjianSantri={handleSaveUjianSantri}
             onApproveIzinMengajar={handleApproveIzinMengajar}
             onDeleteSantri={handleDeleteSantri}
+            onTestIntro={() => setShowIntro(true)}
           />
         </div>
         {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} settings={settings} />}
@@ -786,15 +787,36 @@ export default function App() {
     );
   }
 
-  // 4. Cinematic 3D Opening (scroll-scrubbed WebGL experience)
+  // 4. Video Sinematik Intro Opening (The Journey of Knowledge - Salaf Al-Maliki)
   if (showIntro) {
     return (
-      <CinematicIntro
+      <IntroOpening
         onComplete={() => setShowIntro(false)}
         appName={settings.portal_title || 'SIM SALAF AL-MALIKI'}
         subTitle={settings.nama_pesantren || 'PONDOK PESANTREN SALAF AL-MALIKI'}
         logoUrl={settings.logo_pondok}
-        bgImage="/assets/islamic_library_cinematic.jpg"
+        videoSrc={settings.intro_video_url || '/assets/intro_salaf_almaliki.mp4'}
+        optionPassword={settings.password_option_panel || 'admin123'}
+        onVideoChange={(newUrl, newName) => {
+          const updated = {
+            ...settings,
+            intro_video_url: newUrl,
+            intro_video_name: newName || 'Video Intro Kustom'
+          };
+          setSettings(updated);
+          localStorage.setItem('sim_settings', JSON.stringify(updated));
+        }}
+        onOpenOptionPanelVideo={() => {
+          setShowIntro(false);
+          setSession({
+            role: 'admin',
+            identifier: 'admin'
+          });
+          setActiveTab('pengaturan');
+          localStorage.setItem('sim_option_unlocked', 'true');
+          localStorage.setItem('sim_target_control_section', 'video_intro');
+          setShowDoors(true);
+        }}
       />
     );
   }

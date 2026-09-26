@@ -212,6 +212,10 @@ export interface AppSettings {
   password_admin?: string;
   password_option_panel?: string;
   intro_video_url?: string; // URL video intro opening yang dapat diedit di Option Panel
+  intro_video_name?: string; // Nama judul berkas video intro
+  intro_video_type?: 'file' | 'url' | 'default' | 'indexeddb'; // Tipe sumber video intro
+  intro_duration_seconds?: number; // Durasi putar otomatis intro (detik, 0 = loop tak terbatas)
+  intro_ambient_audio?: boolean; // Aktifkan audio ambient islami syahdu
 
   // Pengaturan Teks Website Menyeluruh (Bisa diatur semua di Option Panel)
   header_title?: string;

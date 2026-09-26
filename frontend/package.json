@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "cd /app && exec yarn dev"
+    "start": "cd /app && exec npm run dev"
   }
 }

@@ -3,23 +3,21 @@ import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'url';
 import { defineConfig } from 'vite';
 
-export default defineConfig(() => {
-  return {
-    plugins: [react(), tailwindcss()],
-    resolve: {
-      alias: {
-        '@': fileURLToPath(new URL('.', import.meta.url)),
-      },
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('.', import.meta.url)),
     },
-    server: {
-      host: '0.0.0.0',
-      port: 3000,
-      strictPort: true,
-      allowedHosts: true,
-      hmr: {
-        clientPort: 443,
-        protocol: 'wss',
-      },
+  },
+  server: {
+    host: '0.0.0.0',
+    port: 3000,
+    strictPort: true,
+    allowedHosts: true,
+    hmr: {
+      clientPort: 443,
+      protocol: 'wss',
     },
-  };
+  },
 });

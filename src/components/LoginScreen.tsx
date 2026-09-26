@@ -6,6 +6,7 @@ import {
 import { Santri, Pengurus, AppSettings } from '../types';
 import { resolveLogos } from '../brand';
 import { LogoFrame } from './BrandLogos';
+import { saveVideoFile } from '../lib/videoStorage';
 
 type LoginMode = 'wali' | 'pengurus' | 'admin';
 
@@ -124,9 +125,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
               <button type="button" data-testid="replay-intro-btn" onClick={onReplayIntro} title="Tonton Intro" className="w-10 h-10 rounded-full border border-[#d4af37]/60 bg-[#031d12]/70 backdrop-blur-md text-[#d4af37] hover:bg-[#d4af37] hover:text-black transition flex items-center justify-center"><Play className="w-4 h-4 fill-current" /></button>
               <label title="Pilih Video Intro MP4" className="w-10 h-10 rounded-full border border-[#d4af37]/60 bg-[#031d12]/70 backdrop-blur-md text-[#d4af37] hover:bg-[#d4af37] hover:text-black transition flex items-center justify-center cursor-pointer">
                 <Film className="w-4 h-4" />
-                <input type="file" accept="video/mp4,video/webm" className="hidden" onChange={(e) => {
+                <input type="file" accept="video/mp4,video/webm" className="hidden" onChange={async (e) => {
                   const file = e.target.files?.[0];
-                  if (file) { const url = URL.createObjectURL(file); localStorage.setItem('sim_intro_video', url); localStorage.setItem('sim_intro_video_name', file.name); onReplayIntro(); }
+                  if (file) { 
+                    try {
+                      await saveVideoFile(file, file.name);
+                    } catch (err) {
+                      console.warn('Could not save to IndexedDB:', err);
+                    }
+                    onReplayIntro(); 
+                  }
                 }} />
               </label>
             </div>

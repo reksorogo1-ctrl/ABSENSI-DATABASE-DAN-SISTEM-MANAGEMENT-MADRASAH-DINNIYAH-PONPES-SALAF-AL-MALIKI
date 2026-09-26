@@ -6,7 +6,7 @@ import {
   Settings2, ToggleLeft, ToggleRight, Sparkles, Check, PieChart as PieChartIcon,
   Type, Megaphone, Copy, FileSpreadsheet, Newspaper, CheckCheck, RotateCcw,
   CreditCard, Wallet, AlertTriangle, Phone, MessageCircle, ArrowDownLeft, ArrowUpRight, Trash2, GraduationCap,
-  Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload
+  Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload, Play
 } from 'lucide-react';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Legend, 
@@ -21,6 +21,9 @@ import {
   SyahriyahRecord, UangSakuRecord, KurikulumKitabRecord,
   Pengurus, KalenderAkademikEvent, UjianSantriRecord, IzinMengajarRequest
 } from '../types';
+import { 
+  saveVideoFile, saveVideoUrl, resetVideoToDefault, resolveActiveVideo, type VideoInfo 
+} from '../lib/videoStorage';
 
 interface AdminDashboardProps {
   settings: AppSettings;
@@ -46,6 +49,7 @@ interface AdminDashboardProps {
   isSyncing: boolean;
   onSyncWithSheets: () => void;
   onLogout: () => void;
+  onTestIntro?: () => void;
   // Mutations
   onSaveAbsensiSantri: (records: AbsensiSantriRecord[]) => void;
   onSaveAbsensiGuru: (records: AbsensiGuruRecord[]) => void;
@@ -114,7 +118,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteKalender,
   onSaveUjianSantri,
   onApproveIzinMengajar,
-  onDeleteSantri
+  onDeleteSantri,
+  onTestIntro
 }) => {
   const classList = ['1 TSANAWIYAH', '2 TSANAWIYAH', '3 TSANAWIYAH', '1 ALIYAH', '2 ALIYAH', '3 ALIYAH'];
 
@@ -407,14 +412,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // ==========================================
   // FITUR OPTION PANEL: PUSAT KONTROL & KEAMANAN
   // ==========================================
-  const [optionPanelUnlocked, setOptionPanelUnlocked] = useState<boolean>(false);
+  const [optionPanelUnlocked, setOptionPanelUnlocked] = useState<boolean>(() => {
+    return localStorage.getItem('sim_option_unlocked') === 'true';
+  });
   const [optionPasswordInput, setOptionPasswordInput] = useState<string>('');
   const [optionPasswordError, setOptionPasswordError] = useState<string>('');
   const [activeControlSection, setActiveControlSection] = useState<
     'input_santri' | 'input_guru' | 'input_jadwal' | 'simpan_absensi' | 'kontrol_tombol' | 
     'visual_branding' | 'keamanan' | 'profil_santri' | 'kelola_syahriyah' | 'kelola_uang_saku' | 'kelola_kurikulum' |
-    'kelola_pengurus' | 'kelola_kalender' | 'kelola_ujian_kitab' | 'kelola_berita'
-  >('simpan_absensi');
+    'kelola_pengurus' | 'kelola_kalender' | 'kelola_ujian_kitab' | 'kelola_berita' | 'video_intro'
+  >(() => {
+    const target = localStorage.getItem('sim_target_control_section');
+    if (target === 'video_intro') {
+      localStorage.removeItem('sim_target_control_section');
+      return 'video_intro';
+    }
+    return 'simpan_absensi';
+  });
+
+  // Video Intro Management States in Option Panel
+  const [adminVideoInfo, setAdminVideoInfo] = useState<VideoInfo>({
+    src: settings.intro_video_url || '/assets/intro_salaf_almaliki.mp4',
+    name: settings.intro_video_name || 'The Journey of Knowledge — Salaf Al-Maliki (Bawaan)',
+    isCustom: false,
+    sourceType: 'default',
+  });
+  const [videoUrlInput, setVideoUrlInput] = useState<string>('');
+  const [videoStatusMessage, setVideoStatusMessage] = useState<string>('');
+  const videoFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    resolveActiveVideo(settings.intro_video_url || '/assets/intro_salaf_almaliki.mp4').then(res => {
+      if (isMounted) {
+        setAdminVideoInfo(res);
+        if (res.sourceType === 'url') {
+          setVideoUrlInput(res.src);
+        }
+      }
+    });
+    return () => { isMounted = false; };
+  }, [settings.intro_video_url]);
 
   // State Pengurus di Option Panel (Nama & Kata Sandi Login Pengurus)
   const [selectedPengurusId, setSelectedPengurusId] = useState<string>(
@@ -612,7 +650,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     background_url: settings.background_url || '',
     logo_pondok: settings.logo_pondok || '',
     logo_madrasah: settings.logo_madrasah || '',
-    intro_video_url: settings.intro_video_url || localStorage.getItem('sim_intro_video') || 'Camera_moving_through_Islamic_li…_20260925184519.mp4',
+    intro_video_url: settings.intro_video_url || '/assets/intro_salaf_almaliki.mp4',
+    intro_video_name: settings.intro_video_name || 'The Journey of Knowledge — Salaf Al-Maliki (Bawaan)',
     password_admin: settings.password_admin || 'salaf123',
     password_option_panel: settings.password_option_panel || 'admin123',
 
@@ -699,6 +738,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (optionPasswordInput === correctPass) {
       setOptionPanelUnlocked(true);
       setOptionPasswordError('');
+      localStorage.setItem('sim_option_unlocked', 'true');
     } else {
       setOptionPasswordError(`Password salah! Silakan coba lagi.`);
     }
@@ -3692,7 +3732,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span>Akses Terbuka</span>
                   </span>
                   <button
-                    onClick={() => setOptionPanelUnlocked(false)}
+                    onClick={() => {
+                      setOptionPanelUnlocked(false);
+                      localStorage.removeItem('sim_option_unlocked');
+                    }}
                     className="text-xs px-3.5 py-1.5 bg-red-950/80 border border-red-500/50 text-red-200 rounded-xl hover:bg-red-900 transition shadow font-bold"
                   >
                     Kunci Kembali
@@ -3766,6 +3809,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     { id: 'input_guru', label: 'Input Guru', icon: Award },
                     { id: 'input_jadwal', label: 'Input Jadwal', icon: Calendar },
                     { id: 'kontrol_tombol', label: 'Tombol & Teks', icon: Settings2 },
+                    { id: 'video_intro', label: 'Video Intro', icon: Film },
                     { id: 'visual_branding', label: 'Logo & Visual', icon: Palette },
                     { id: 'keamanan', label: 'Kata Sandi Admin', icon: Lock }
                   ].map(sec => {
@@ -5719,6 +5763,327 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </button>
                     </div>
                   </form>
+                )}
+
+                {/* SECTION: PUSAT MANAJEMEN VIDEO INTRO OPENING (EDITABLE & DAPAT DIGONTA-GANTI) */}
+                {activeControlSection === 'video_intro' && (
+                  <div className="card-3d rounded-2xl p-5 sm:p-6 space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#d4af37]/20 pb-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-2xl bg-[#093d25] border border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow">
+                          <Film className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm sm:text-base font-bold text-white text-gold-3d">
+                            Pusat Manajemen Video Intro Opening (Bisa Diganti Kapan Saja)
+                          </h4>
+                          <p className="text-[11px] text-emerald-300">
+                            Gonta-ganti video pembuka layar intro sesuka Anda. Video tersimpan permanen di memori browser.
+                          </p>
+                        </div>
+                      </div>
+
+                      {onTestIntro && (
+                        <button
+                          type="button"
+                          onClick={onTestIntro}
+                          className="btn-3d-gold px-4 py-2 rounded-xl text-black font-black text-xs flex items-center gap-1.5 self-start sm:self-auto shadow-lg"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>Uji Putar Layar Intro</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Status Alert Message */}
+                    {videoStatusMessage && (
+                      <div className="p-3 rounded-xl bg-emerald-950/90 border border-emerald-400 text-emerald-200 text-xs font-bold flex items-center gap-2 animate-fadeIn">
+                        <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>{videoStatusMessage}</span>
+                      </div>
+                    )}
+
+                    {/* Active Video Status Banner */}
+                    <div className="bg-[#03140c] p-4 rounded-2xl border border-[#d4af37]/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3.5 overflow-hidden">
+                        <div className="w-14 h-12 rounded-xl bg-black border border-[#d4af37]/50 flex items-center justify-center text-[#d4af37] shrink-0">
+                          <Film className="w-6 h-6" />
+                        </div>
+                        <div className="overflow-hidden">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
+                              Status: AKTIF DIGUNAKAN
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                              adminVideoInfo.sourceType === 'indexeddb'
+                                ? 'bg-blue-950 text-blue-300 border border-blue-500/40'
+                                : adminVideoInfo.sourceType === 'url'
+                                ? 'bg-amber-950 text-amber-300 border border-amber-500/40'
+                                : 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                            }`}>
+                              {adminVideoInfo.sourceType === 'indexeddb' ? 'Berkas Lokal' : adminVideoInfo.sourceType === 'url' ? 'Tautan Web' : 'Bawaan Salaf'}
+                            </span>
+                          </div>
+                          <h5 className="text-sm font-extrabold text-white truncate max-w-[340px] sm:max-w-[480px]">
+                            {adminVideoInfo.name}
+                          </h5>
+                          <span className="text-[11px] text-[#d4af37] font-mono">
+                            {adminVideoInfo.size ? `${(adminVideoInfo.size / (1024 * 1024)).toFixed(1)} MB • ` : ''}
+                            {adminVideoInfo.uploadedAt ? `Diperbarui: ${new Date(adminVideoInfo.uploadedAt).toLocaleDateString('id-ID')}` : 'Video Resmi Pesantren'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await resetVideoToDefault();
+                            const defUrl = '/assets/intro_salaf_almaliki.mp4';
+                            const defName = 'The Journey of Knowledge — Salaf Al-Maliki (Bawaan)';
+                            setAdminVideoInfo({
+                              src: defUrl,
+                              name: defName,
+                              isCustom: false,
+                              sourceType: 'default',
+                            });
+                            setVideoUrlInput('');
+                            const updated = {
+                              ...visualForm,
+                              intro_video_url: defUrl,
+                              intro_video_name: defName,
+                              intro_video_type: 'default' as const,
+                            };
+                            setVisualForm(updated);
+                            onSaveSettings(updated);
+                            setVideoStatusMessage('Video intro berhasil dikembalikan ke video bawaan resmi!');
+                            setTimeout(() => setVideoStatusMessage(''), 4000);
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-[#092b1a] hover:bg-[#0d4228] border border-[#d4af37]/40 text-[#f7e59f] text-xs font-bold flex items-center gap-1.5 transition"
+                          title="Kembalikan ke video bawaan"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 text-[#d4af37]" />
+                          <span>Reset ke Bawaan</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Live Preview Box */}
+                    <div className="card-3d-deep p-4 rounded-2xl border border-[#d4af37]/30 space-y-2">
+                      <span className="text-xs font-bold text-[#d4af37] block uppercase tracking-wider">
+                        Pratinjau Video (Live Video Preview):
+                      </span>
+                      <div className="relative aspect-video max-h-72 w-full rounded-xl overflow-hidden bg-black border border-[#d4af37]/40 shadow-inner">
+                        <video
+                          key={adminVideoInfo.src}
+                          src={adminVideoInfo.src}
+                          controls
+                          playsInline
+                          className="w-full h-full object-cover"
+                        >
+                          <source src={adminVideoInfo.src} type="video/mp4" />
+                        </video>
+                      </div>
+                    </div>
+
+                    {/* Two Input Methods Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Method 1: Unggah Berkas Video */}
+                      <div className="bg-[#03140c] p-4 rounded-2xl border border-[#d4af37]/30 space-y-3 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center gap-2 text-xs font-bold text-white mb-1">
+                            <Upload className="w-4 h-4 text-[#d4af37]" />
+                            <span>Metode 1: Unggah Berkas Video (MP4 / WebM)</span>
+                          </div>
+                          <p className="text-[11px] text-emerald-300 mb-3">
+                            Pilih video dari HP atau komputer Anda. Tersimpan di IndexedDB browser Anda tanpa batas kuota.
+                          </p>
+                          <div
+                            onClick={() => videoFileInputRef.current?.click()}
+                            className="border-2 border-dashed border-[#d4af37]/45 hover:border-[#faebaa] bg-[#052216]/60 hover:bg-[#07301c] rounded-xl p-5 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2 group"
+                          >
+                            <Upload className="w-8 h-8 text-[#d4af37] group-hover:scale-110 transition-transform" />
+                            <span className="text-xs font-bold text-white">
+                              Klik untuk Memilih File Video
+                            </span>
+                            <span className="text-[10px] text-emerald-300">
+                              Format: .MP4 atau .WebM
+                            </span>
+                          </div>
+                          <input
+                            ref={videoFileInputRef}
+                            type="file"
+                            accept="video/mp4,video/webm"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                try {
+                                  const blobUrl = await saveVideoFile(file, file.name);
+                                  const newInfo: VideoInfo = {
+                                    src: blobUrl,
+                                    name: file.name,
+                                    size: file.size,
+                                    isCustom: true,
+                                    sourceType: 'indexeddb',
+                                    uploadedAt: new Date().toISOString()
+                                  };
+                                  setAdminVideoInfo(newInfo);
+                                  const updated = {
+                                    ...visualForm,
+                                    intro_video_url: blobUrl,
+                                    intro_video_name: file.name,
+                                    intro_video_type: 'file' as const
+                                  };
+                                  setVisualForm(updated);
+                                  onSaveSettings(updated);
+                                  setVideoStatusMessage(`Video "${file.name}" berhasil diunggah dan langsung aktif!`);
+                                  setTimeout(() => setVideoStatusMessage(''), 4000);
+                                } catch (err) {
+                                  alert('Gagal mengunggah video: ' + String(err));
+                                }
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Method 2: Tautan URL Video Online */}
+                      <div className="bg-[#03140c] p-4 rounded-2xl border border-[#d4af37]/30 space-y-3 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center gap-2 text-xs font-bold text-white mb-1">
+                            <Film className="w-4 h-4 text-[#d4af37]" />
+                            <span>Metode 2: Masukkan Link / URL Video Online</span>
+                          </div>
+                          <p className="text-[11px] text-emerald-300 mb-3">
+                            Gunakan link video streaming dari Google Drive, Cloudinary, AWS S3, atau CDN hosting Anda.
+                          </p>
+                          <div className="space-y-2">
+                            <input
+                              type="url"
+                              value={videoUrlInput}
+                              onChange={(e) => setVideoUrlInput(e.target.value)}
+                              placeholder="https://domain.com/video_intro.mp4"
+                              className="w-full px-3.5 py-2.5 rounded-xl bg-[#02180e] border border-[#d4af37]/45 text-white text-xs focus:outline-none focus:border-[#faebaa]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!videoUrlInput.trim()) {
+                                  alert('Masukkan link URL video yang valid.');
+                                  return;
+                                }
+                                const cleanUrl = videoUrlInput.trim();
+                                const urlName = cleanUrl.split('/').pop() || 'Video Online Salaf';
+                                saveVideoUrl(cleanUrl, urlName);
+                                const newInfo: VideoInfo = {
+                                  src: cleanUrl,
+                                  name: urlName,
+                                  isCustom: true,
+                                  sourceType: 'url',
+                                  uploadedAt: new Date().toISOString()
+                                };
+                                setAdminVideoInfo(newInfo);
+                                const updated = {
+                                  ...visualForm,
+                                  intro_video_url: cleanUrl,
+                                  intro_video_name: urlName,
+                                  intro_video_type: 'url' as const
+                                };
+                                setVisualForm(updated);
+                                onSaveSettings(updated);
+                                setVideoStatusMessage('Link URL video berhasil disimpan dan diterapkan!');
+                                setTimeout(() => setVideoStatusMessage(''), 4000);
+                              }}
+                              className="w-full btn-3d-gold py-2 rounded-xl text-black font-black text-xs shadow flex items-center justify-center gap-1.5"
+                            >
+                              <Save className="w-3.5 h-3.5 text-black" />
+                              <span>Terapkan Link URL Video</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Presets Koleksi Bawaan */}
+                    <div className="bg-[#03140c] p-4 rounded-2xl border border-[#d4af37]/30 space-y-3">
+                      <span className="text-xs font-bold text-[#d4af37] block">
+                        Koleksi Video Bawaan Resmi Madrasah:
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div
+                          onClick={async () => {
+                            await resetVideoToDefault();
+                            const defUrl = '/assets/intro_salaf_almaliki.mp4';
+                            const defName = 'The Journey of Knowledge — Salaf Al-Maliki (Bawaan)';
+                            setAdminVideoInfo({
+                              src: defUrl,
+                              name: defName,
+                              isCustom: false,
+                              sourceType: 'default',
+                            });
+                            setVideoUrlInput('');
+                            const updated = {
+                              ...visualForm,
+                              intro_video_url: defUrl,
+                              intro_video_name: defName,
+                              intro_video_type: 'default' as const,
+                            };
+                            setVisualForm(updated);
+                            onSaveSettings(updated);
+                            setVideoStatusMessage('Video bawaan utama berhasil dipilih!');
+                            setTimeout(() => setVideoStatusMessage(''), 4000);
+                          }}
+                          className="p-3 rounded-xl bg-[#052216] hover:bg-[#083623] border border-[#d4af37]/40 flex items-center justify-between cursor-pointer transition"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-black border border-[#d4af37]/40 flex items-center justify-center text-[#d4af37]">
+                              <Film className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <span className="text-xs font-bold text-white block">
+                                The Journey of Knowledge (Salaf Al-Maliki)
+                              </span>
+                              <span className="text-[10px] text-emerald-300">
+                                Video Sinematik Pustaka Klasik & Ulama
+                              </span>
+                            </div>
+                          </div>
+                          <span className="px-2.5 py-1 rounded-lg btn-3d-gold text-black font-extrabold text-[10px]">
+                            Pilih
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tombol Simpan Video Resmi & Info Akses Khusus */}
+                    <div className="pt-4 border-t border-[#d4af37]/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-xs text-emerald-300">
+                        <ShieldCheck className="w-4 h-4 text-[#d4af37] shrink-0" />
+                        <span>Area Akses Khusus Aktif: Seluruh perubahan video intro disimpan langsung ke database lokal dan server.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = {
+                            ...visualForm,
+                            intro_video_url: adminVideoInfo.src,
+                            intro_video_name: adminVideoInfo.name,
+                            intro_video_type: adminVideoInfo.sourceType
+                          };
+                          setVisualForm(updated);
+                          onSaveSettings(updated);
+                          setVideoStatusMessage(`Video "${adminVideoInfo.name}" berhasil disimpan secara resmi ke database Option Panel!`);
+                          setTimeout(() => setVideoStatusMessage(''), 5000);
+                        }}
+                        className="btn-3d-gold px-6 py-2.5 text-black font-black text-xs rounded-xl shadow-xl flex items-center gap-2 self-stretch sm:self-auto justify-center"
+                        data-testid="admin-save-video-btn"
+                      >
+                        <Save className="w-4 h-4 text-black" />
+                        <span>SIMPAN VIDEO KE OPTION PANEL</span>
+                      </button>
+                    </div>
+                  </div>
                 )}
 
                 {/* SECTION 5: PUSAT KONTROL VISUAL (BACKGROUND & LOGO PONDOK) */}
