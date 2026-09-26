@@ -20,7 +20,10 @@ The user requested a **premium cinematic 3D visual upgrade** WITHOUT breaking an
 - 3-role login, Admin/Pengurus/Wali dashboards, Option Panel control center, absensi santri/guru, nadzhom, nilai, syahriyah, uang saku, kurikulum, jadwal, kalender, izin mengajar, Google Sheets sync, daily auto-reset.
 
 ## Backlog / Next
-- Per-element staggered dashboard build (sidebar→header→cards→tables→charts) inside each dashboard component.
-- 3D charts (line/pie) styling upgrade on Admin dashboard.
 - QR-code attendance, fingerprint simulation (deferred by user).
 - Deploy to Vercel/Netlify (deferred).
+
+## Iteration 2 (2026-06) — 3 enhancements (all tested 100%, 0 console errors)
+- **Ambient intro audio** (`src/lib/ambientAudio.ts`): soft synthesized Web Audio harmony that fades in on the cinematic intro (starts on first user gesture per autoplay policy), gentle breathing swell, fades out on GET STARTED. Mute toggle button in intro (`data-testid='intro-mute-btn'`).
+- **3D charts (Admin dashboard)** (`src/components/Chart3D.tsx` -> `Donut3D`): the two attendance pie charts replaced with perspective-tilted, extruded (box-shadow depth), light-sweep-animated 3D donuts with floating center % + legend. Area/trend chart got a `.chart-3d-grid` animated perspective floor grid.
+- **Staggered dashboard build**: after the login doors open, sidebar slides in (`.build-sidebar`), header drops in (`.build-header`), then main sections rise one-by-one (`.build-sequence` nth-child delays). Admin wrapper switched to `.anim-dashboard-fade` so the internal build is visible; Pengurus/Wali keep `.anim-dashboard-enter`. Respects prefers-reduced-motion.
