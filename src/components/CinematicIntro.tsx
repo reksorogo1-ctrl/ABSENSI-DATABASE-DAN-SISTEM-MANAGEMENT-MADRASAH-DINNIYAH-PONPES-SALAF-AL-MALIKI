@@ -16,9 +16,6 @@ interface CinematicIntroProps {
 // Scroll down -> scene progresses forward; scroll up -> reverses; stop -> holds position.
 export const CinematicIntro: React.FC<CinematicIntroProps> = ({
   onComplete,
-  appName = 'SIM SALAF AL-MALIKI',
-  subTitle = 'PONDOK PESANTREN SALAF AL-MALIKI',
-  logoUrl,
   bgImage = '/assets/islamic_library_cinematic.jpg',
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -312,45 +309,12 @@ export const CinematicIntro: React.FC<CinematicIntroProps> = ({
         {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
       </button>
 
-      {/* TOP: brand lockup (fades as you scroll in) */}
+      {/* BOTTOM: scroll hint icon only (hides after progress) */}
       <div
-        className="absolute top-0 inset-x-0 z-10 pt-8 sm:pt-10 flex flex-col items-center text-center px-6 transition-opacity duration-500"
-        style={{ opacity: Math.max(0, 1 - progressUI / 55) }}
-      >
-        <div className="font-serif text-[#faebaa] text-base sm:text-xl tracking-[0.2em] drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]" style={{ fontFamily: "'Amiri', serif" }}>
-          بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
-        </div>
-        <div className="mt-3 flex items-center gap-3">
-          {logoUrl ? (
-            <img src={logoUrl} alt="logo" className="w-10 h-10 rounded-lg object-contain ring-1 ring-[#d4af37]/50" />
-          ) : null}
-          <div className="w-16 h-px bg-gradient-to-r from-transparent via-[#d4af37] to-transparent" />
-        </div>
-        <h1 className="mt-4 text-2xl sm:text-4xl md:text-5xl font-black uppercase tracking-[0.14em] text-transparent bg-clip-text bg-gradient-to-b from-white via-[#faebaa] to-[#d4af37] drop-shadow-[0_4px_20px_rgba(0,0,0,0.9)]">
-          {subTitle}
-        </h1>
-        <p className="mt-2 text-[11px] sm:text-sm text-[#d4af37]/90 font-semibold uppercase tracking-[0.28em]">
-          {appName}
-        </p>
-      </div>
-
-      {/* CENTER: cinematic tagline reveal driven by scroll */}
-      <div
-        className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none px-6"
-        style={{ opacity: Math.min(1, Math.max(0, (progressUI - 30) / 40)) }}
-      >
-        <p className="max-w-2xl text-center font-serif text-lg sm:text-2xl md:text-3xl text-[#faebaa] leading-relaxed drop-shadow-[0_3px_16px_rgba(0,0,0,0.95)]" style={{ fontFamily: "'Amiri', serif" }}>
-          «طَلَبُ الْعِلْمِ فَرِيضَةٌ عَلَىٰ كُلِّ مُسْلِمٍ»
-        </p>
-      </div>
-
-      {/* BOTTOM: scroll hint (hides after progress) */}
-      <div
-        className="absolute bottom-28 sm:bottom-32 inset-x-0 z-10 flex flex-col items-center gap-1.5 transition-opacity duration-500 pointer-events-none"
+        className="absolute bottom-28 sm:bottom-32 inset-x-0 z-10 flex flex-col items-center transition-opacity duration-500 pointer-events-none"
         style={{ opacity: Math.max(0, 1 - progressUI / 18) }}
       >
-        <span className="text-[10px] sm:text-xs text-emerald-200/80 font-semibold uppercase tracking-[0.3em]">Gulir untuk menjelajah</span>
-        <ChevronDown className="w-5 h-5 text-[#d4af37] animate-bounce" />
+        <ChevronDown className="w-6 h-6 text-[#d4af37] animate-bounce" />
       </div>
 
       {/* GET STARTED — premium glass/metallic button, always visible */}

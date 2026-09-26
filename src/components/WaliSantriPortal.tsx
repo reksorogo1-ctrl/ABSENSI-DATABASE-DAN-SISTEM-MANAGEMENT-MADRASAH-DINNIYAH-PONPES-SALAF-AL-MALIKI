@@ -90,12 +90,12 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
       style={settings?.background_url ? { backgroundImage: `linear-gradient(rgba(3, 20, 12, 0.94), rgba(3, 20, 12, 0.98)), url(${settings.background_url})` } : undefined}
     >
       {/* Top Banner / Navigation for Guardian */}
-      <header className="bg-[#052216]/95 border-b border-[#d4af37]/30 backdrop-blur sticky top-0 z-30 px-4 py-3 sm:px-6 shadow-xl">
+      <header className="build-header bg-[#052216]/95 border-b border-[#d4af37]/30 backdrop-blur sticky top-0 z-30 px-4 py-3 sm:px-6 shadow-xl">
         <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-full bg-[#0b422a] border border-[#d4af37] flex items-center justify-center text-lg overflow-hidden shadow-md">
               {settings?.logo_pondok ? (
-                <img src={settings.logo_pondok} alt="Logo" className="w-full h-full object-cover" />
+                <img src={settings.logo_pondok} alt="Logo" className="w-full h-full object-contain bg-white" />
               ) : (
                 <span>🕌</span>
               )}
@@ -126,7 +126,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
+      <main className="build-sequence max-w-6xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
 
         {/* NOTIFIKASI KETERLAMBATAN SYAHRIYAH (JIKA ADA TUNGGAKAN) */}
         {hasTunggakan && (

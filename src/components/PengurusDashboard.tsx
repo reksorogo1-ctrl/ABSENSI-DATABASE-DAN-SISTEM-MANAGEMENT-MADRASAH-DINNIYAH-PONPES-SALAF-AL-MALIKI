@@ -246,7 +246,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   return (
     <div className="min-h-screen bg-[#020e08] text-slate-100 flex flex-col font-sans selection:bg-[#d4af37] selection:text-black">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-50 bg-[#052216]/95 backdrop-blur border-b border-[#d4af37]/30 shadow-lg">
+      <header className="build-header sticky top-0 z-50 bg-[#052216]/95 backdrop-blur border-b border-[#d4af37]/30 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-xl bg-[#0b3824] border border-[#d4af37]/50 flex items-center justify-center text-[#d4af37] shadow">
@@ -420,10 +420,10 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="build-sequence flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* ===================== TAB 1: DASBOR UTAMA PENGURUS ===================== */}
         {activeTab === 'dashboard' && (
-          <div className="space-y-6">
+          <div className="build-sequence space-y-6">
             {/* 1. NOTIFIKASI KALENDER AKADEMIK & RAPAT MENDESAK */}
             {urgentEvents.length > 0 && (
               <div className="card-3d-glass rounded-2xl p-5 border-2 border-red-500/70 bg-gradient-to-r from-red-950/60 via-[#1c0808]/80 to-red-950/60 shadow-xl relative overflow-hidden">

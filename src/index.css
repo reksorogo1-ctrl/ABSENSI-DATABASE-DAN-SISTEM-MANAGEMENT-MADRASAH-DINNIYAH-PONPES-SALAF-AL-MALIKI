@@ -701,3 +701,52 @@
 
 
 
+
+/* ==========================================================
+   LOGIN SCREEN (reference design): reveal, mihrab arch, gold button, logo frames
+   ========================================================== */
+@keyframes loginReveal {
+  0%   { opacity: 0; transform: translateY(26px) scale(0.98); filter: blur(6px); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+.login-reveal { animation: loginReveal 0.9s cubic-bezier(0.16,1,0.3,1) both; }
+
+.mihrab-frame {
+  position: relative;
+  padding: 3px;
+  background: linear-gradient(180deg, #fff2be 0%, #d4af37 35%, #8a6512 70%, #d4af37 100%);
+  clip-path: polygon(
+    50% 0%, 53% 1.2%, 56% 3%, 59% 3.6%, 63% 3.6%, 66% 5.2%, 69% 6.6%, 74% 6.6%, 77% 8.2%, 80% 9.6%, 100% 9.6%,
+    100% 100%, 0% 100%, 0% 9.6%, 20% 9.6%, 23% 8.2%, 26% 6.6%, 31% 6.6%, 34% 5.2%, 37% 3.6%, 41% 3.6%, 44% 3%, 47% 1.2%
+  );
+  filter: drop-shadow(0 30px 60px rgba(0,0,0,0.8)) drop-shadow(0 0 30px rgba(212,175,55,0.25));
+}
+.mihrab-inner {
+  position: relative;
+  clip-path: polygon(
+    50% 0.45%, 53% 1.65%, 56% 3.45%, 59% 4.05%, 63% 4.05%, 66% 5.65%, 69% 7.05%, 74% 7.05%, 77% 8.65%, 80% 10.05%, 99.6% 10.05%,
+    99.6% 99.6%, 0.4% 99.6%, 0.4% 10.05%, 20% 10.05%, 23% 8.65%, 26% 7.05%, 31% 7.05%, 34% 5.65%, 37% 4.05%, 41% 4.05%, 44% 3.45%, 47% 1.65%
+  );
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(212,175,55,0.22) 0%, transparent 45%),
+    linear-gradient(180deg, #06331f 0%, #031d12 40%, #02120b 100%);
+}
+.mihrab-inner::before {
+  content: '';
+  position: absolute; inset: 0; pointer-events: none;
+  background-image: radial-gradient(rgba(250,235,170,0.35) 0.8px, transparent 0.8px);
+  background-size: 22px 22px; opacity: 0.18;
+}
+
+.login-gold-btn {
+  background: linear-gradient(180deg, #fff2be 0%, #e7c65a 40%, #c79a24 100%);
+  border: 1px solid rgba(255,244,205,0.9);
+  box-shadow: 0 16px 40px -10px rgba(0,0,0,0.85), 0 0 30px rgba(212,175,55,0.35),
+              inset 0 2px 2px rgba(255,255,255,0.85), inset 0 -4px 6px rgba(120,85,10,0.6);
+}
+.login-gold-btn:hover { box-shadow: 0 18px 45px -10px rgba(0,0,0,0.85), 0 0 46px rgba(212,175,55,0.55), inset 0 2px 2px rgba(255,255,255,0.9), inset 0 -4px 6px rgba(120,85,10,0.6); }
+
+.login-logo-slot, .door-logo-frame { transition: transform 0.4s cubic-bezier(0.16,1,0.3,1); }
+.login-logo-slot:hover { transform: translateY(-4px) scale(1.03); }
+
+@media (prefers-reduced-motion: reduce) { .login-reveal { animation: none !important; } }
