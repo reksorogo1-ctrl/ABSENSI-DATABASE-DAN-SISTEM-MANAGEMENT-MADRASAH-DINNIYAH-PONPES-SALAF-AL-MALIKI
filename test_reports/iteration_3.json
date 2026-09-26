@@ -1,0 +1,24 @@
+{
+  "summary": "Frontend-only iteration 3 testing focused on new login redesign, intro text removal, door transition dual logo slots, and Pengurus/Wali staggered build sequences. All requested checks pass on desktop 1920x1000 and mobile 390x844.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PengurusDashboard tab switch", "issues": ["When clicking Kalender & Agenda tab immediately after login, the content pane briefly rendered empty in a screenshot (likely animation/mount timing). Non-blocking; header + tabs remain interactive and no console error emitted."]}
+    ]
+  },
+  "test_report_links": [".screenshots/01_intro.png", ".screenshots/02_login.png", ".screenshots/03_door.png", ".screenshots/04_admin.png", ".screenshots/05_pengurus.png", ".screenshots/06_wali.png", ".screenshots/07_mobile_login.png"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "data-testid=\"login-logo-madrasah/pondok\" and door-logo-* are placed on the outer frame <div>, and the actual <img> is a child. Test spec asked for naturalWidth>0 on the testid element itself; test passes because we probed the nested <img>, but consider moving data-testid onto the <img> for stricter test contracts.",
+    "Pengurus dashboard content area momentarily blank on first tab switch — verify Kalender tab's initial render / animation delay does not hide content longer than needed."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "test_credentials": "Admin admin/salaf123; Pengurus 'Ust. H. Ahmad Fauzi Ridwan'/pengurus123; Wali via demo chip (ZIDNIL AQILA / 1001).",
+  "seed_data_creation": "None — used built-in seeded localStorage data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Verified end-to-end: (1) Intro shows only get-started-btn + intro-mute-btn (no brand text/logo/basmalah/h1 in cinematic-intro overlay; body text = 'GET STARTED'). (2) LoginScreen: login-screen/login-card/login-heading visible; both login-logo-madrasah and login-logo-pondok are frame DIVs wrapping <img> loaded from /assets/logo_madrasah_diniyah.jpg (naturalWidth=1080) and /assets/logo_pondok_almaliki.jpg (naturalWidth=717), both HTTP 200; sizes 166x166 and 230x166 on desktop, 134/182 on mobile. (3) login-role-wali/pengurus/admin switch and login-username-input placeholder updates ('Nama Lengkap / NISN Santri', 'Nama Pengurus / Ustadz', 'Username Administrator'). Demo chips (4 each on wali & pengurus) fill inputs; wali chip pw len=4. (4) forgot-password-btn opens forgot-password-modal; forgot-close-btn closes it. (5) Wrong admin pw triggers login-error. (6) google-login-btn, sync-sheets-btn, replay-intro-btn present. (7) Admin admin/salaf123 -> door-transition rendered with door-logo-madrasah + door-logo-pondok (both inner imgs naturalWidth>0), disappeared within ~3s; AdminDashboard shows .build-header and .build-sequence. (8) Pengurus demo-chip login -> PengurusDashboard with .build-header + .build-sequence, 5 sequenced children reach opacity 1, tabs Kalender & Agenda + Izin Mengajar present and clickable; KELUAR logs out. (9) Wali demo-chip (ZIDNIL AQILA) -> WaliSantriPortal with build classes; Keluar Portal returns to login-screen. (10) Mobile 390x844: no horizontal overflow (scrollW=clientW=390), login-card visible, both logos visible. Zero console errors and zero page errors across all flows."
+}

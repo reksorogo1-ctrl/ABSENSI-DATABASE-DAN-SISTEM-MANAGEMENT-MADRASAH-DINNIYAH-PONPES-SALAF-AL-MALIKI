@@ -26,4 +26,11 @@ The user requested a **premium cinematic 3D visual upgrade** WITHOUT breaking an
 ## Iteration 2 (2026-06) — 3 enhancements (all tested 100%, 0 console errors)
 - **Ambient intro audio** (`src/lib/ambientAudio.ts`): soft synthesized Web Audio harmony that fades in on the cinematic intro (starts on first user gesture per autoplay policy), gentle breathing swell, fades out on GET STARTED. Mute toggle button in intro (`data-testid='intro-mute-btn'`).
 - **3D charts (Admin dashboard)** (`src/components/Chart3D.tsx` -> `Donut3D`): the two attendance pie charts replaced with perspective-tilted, extruded (box-shadow depth), light-sweep-animated 3D donuts with floating center % + legend. Area/trend chart got a `.chart-3d-grid` animated perspective floor grid.
+## Iteration 3 (2026-06) — login redesign + logos (tested 100%, 0 console errors)
+- **Intro**: all brand text/logo/basmalah/tagline removed; only GET STARTED, mute button and scroll chevron remain.
+- **LoginScreen.tsx** (new, App.tsx login JSX extracted): reference-design layout — left brand showcase (pills, two framed logo slots, Arabic calligraphy, values bar Ilmu/Akhlak/Ukhuwah), right mihrab-arch gold login card (role selector, inputs, remember me, Lupa Sandi, gold Masuk ke Sistem, Google, social icons, quote). All login logic/props unchanged (handleLoginSubmit, datalists, demo chips, forgot modal, sheets sync, replay intro, video picker).
+- **Logos**: `/public/assets/logo_madrasah_diniyah.jpg` (round) and `/public/assets/logo_pondok_almaliki.jpg` (green rect, timestamp cropped); constants in `src/brand.ts`. DEFAULT_SETTINGS.logo_pondok/logo_madrasah now point to these.
+- **DoorTransition**: two large gold-framed logo slots (left door round madrasah, right door rect pondok), pop-in before doors part; total 2.1s.
+- **Pengurus/Wali build sequence**: `build-header` + `build-sequence` on header/main (Pengurus only on first mount via `building` state so tab switches are instant). App wrappers use `.anim-dashboard-fade`.
+
 - **Staggered dashboard build**: after the login doors open, sidebar slides in (`.build-sidebar`), header drops in (`.build-header`), then main sections rise one-by-one (`.build-sequence` nth-child delays). Admin wrapper switched to `.anim-dashboard-fade` so the internal build is visible; Pengurus/Wali keep `.anim-dashboard-enter`. Respects prefers-reduced-motion.

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Pengurus, KalenderAkademikEvent, AppSettings, Santri, GuruPengajar, JadwalPelajaran, 
   NadzhomRecord, NilaiUjianRecord, AbsensiSantriRecord, AbsensiGuruRecord, 
@@ -64,6 +64,13 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [showIzinModal, setShowIzinModal] = useState<boolean>(false);
   const [editedPengurus, setEditedPengurus] = useState<Pengurus>({ ...pengurus });
+
+  // Staggered build only on first mount (not on every tab switch)
+  const [building, setBuilding] = useState<boolean>(true);
+  useEffect(() => {
+    const t = window.setTimeout(() => setBuilding(false), 3200);
+    return () => window.clearTimeout(t);
+  }, []);
 
   // Deteksi apakah Pengurus bertindak sebagai Wali Kelas
   // Cari kecocokan di kelasBimbingan atau santri yang memiliki namaWaliKelas sesuai nama pengurus
@@ -420,10 +427,10 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       </header>
 
       {/* Main Content Area */}
-      <main className="build-sequence flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className={`${building ? 'build-sequence' : ''} flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6`}>
         {/* ===================== TAB 1: DASBOR UTAMA PENGURUS ===================== */}
         {activeTab === 'dashboard' && (
-          <div className="build-sequence space-y-6">
+          <div className={`${building ? 'build-sequence' : ''} space-y-6`}>
             {/* 1. NOTIFIKASI KALENDER AKADEMIK & RAPAT MENDESAK */}
             {urgentEvents.length > 0 && (
               <div className="card-3d-glass rounded-2xl p-5 border-2 border-red-500/70 bg-gradient-to-r from-red-950/60 via-[#1c0808]/80 to-red-950/60 shadow-xl relative overflow-hidden">
