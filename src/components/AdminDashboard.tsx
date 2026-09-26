@@ -12,6 +12,7 @@ import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Legend, 
   BarChart, Bar, CartesianGrid, PieChart, Pie, Cell 
 } from 'recharts';
+import { Donut3D } from './Chart3D';
 import { 
   Santri, AbsensiSantriRecord, AbsensiGuruRecord, JadwalPelajaran, 
   GuruPengajar, NadzhomRecord, NilaiUjianRecord, AppSettings, DashboardStats,
@@ -804,7 +805,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       style={settings.background_url ? { backgroundImage: `linear-gradient(rgba(3, 20, 12, 0.94), rgba(3, 20, 12, 0.97)), url(${settings.background_url})` } : undefined}
     >
       {/* SIDEBAR */}
-      <aside className="w-full md:w-72 bg-[#052216]/95 border-r border-[#d4af37]/30 p-5 flex flex-col justify-between shrink-0 shadow-2xl backdrop-blur-md">
+      <aside className="build-sidebar w-full md:w-72 bg-[#052216]/95 border-r border-[#d4af37]/30 p-5 flex flex-col justify-between shrink-0 shadow-2xl backdrop-blur-md">
         <div className="space-y-6">
           {/* Logo & Header */}
           <div className="flex items-center space-x-3 pb-4 border-b border-[#d4af37]/20">
@@ -899,7 +900,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
         {/* Top Header - 3D Luxury Beveled Banner (Semua Teks Bisa Diatur via Option Panel) */}
-        <header className="header-3d-banner rounded-2xl p-5 backdrop-blur flex flex-col md:flex-row justify-between items-center gap-4">
+        <header className="build-header header-3d-banner rounded-2xl p-5 backdrop-blur flex flex-col md:flex-row justify-between items-center gap-4">
           <div>
             <h1 className="text-xl md:text-2xl font-bold font-serif text-[#d4af37] text-gold-3d tracking-wide">
               {settings.header_title || settings.judul_aplikasi || 'SIM Pondok Pesantren Salaf Al-Maliki'}
@@ -923,7 +924,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* TAB 1: DASHBOARD UTAMA DENGAN RECHARTS & BERITA TERKINI */}
         {activeTab === 'dashboard' && (
-          <div className="space-y-6">
+          <div className="build-sequence space-y-6">
             {/* SLOT LAYAR BERITA TERKINI & CAPTION BERGERAK SENDIRI (MARQUEE) */}
             <div className="card-3d-glass rounded-3xl overflow-hidden border border-[#d4af37]/40 shadow-2xl relative">
               <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#f5e298]/80 to-transparent pointer-events-none z-10" />
@@ -1088,6 +1089,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 <div className="h-72 w-full relative z-10">
+                  <div className="chart-3d-grid" />
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={trendData} margin={{ top: 12, right: 12, left: -20, bottom: 0 }}>
                       <defs>
@@ -1250,47 +1252,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
-                <div className="h-60 w-full relative">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Hadir', value: stats.hadirSantri || 38, fill: '#10b981' },
-                          { name: 'Izin', value: stats.izinSantri || 1, fill: '#f59e0b' },
-                          { name: 'Sakit', value: stats.sakitSantri || 1, fill: '#3b82f6' },
-                          { name: 'Alpha', value: stats.alphaSantri || 0, fill: '#ef4444' }
-                        ].filter(item => item.value > 0)}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={45}
-                        outerRadius={75}
-                        paddingAngle={4}
-                        dataKey="value"
-                        label={({ name, percent }: { name?: string; percent?: number }) => `${name || ''} ${(((percent || 0) * 100)).toFixed(0)}%`}
-                        labelLine={true}
-                      >
-                        {[
-                          { name: 'Hadir', fill: '#10b981' },
-                          { name: 'Izin', fill: '#f59e0b' },
-                          { name: 'Sakit', fill: '#3b82f6' },
-                          { name: 'Alpha', fill: '#ef4444' }
-                        ].map((entry, index) => (
-                          <Cell key={`cell-santri-${index}`} fill={entry.fill} stroke="#052216" strokeWidth={2} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'rgba(5, 30, 20, 0.94)',
-                          borderRadius: '12px',
-                          border: '1px solid rgba(212, 175, 55, 0.5)',
-                          color: '#ffffff',
-                          fontSize: '11px'
-                        }}
-                        formatter={(val: any, name: any) => [`${val} Santri`, name]}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '11px', fontWeight: 600, paddingTop: '8px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                <div className="w-full relative flex justify-center py-2">
+                  <Donut3D
+                    unitLabel="Santri"
+                    data={[
+                      { name: 'Hadir', value: stats.hadirSantri || 38, fill: '#10b981' },
+                      { name: 'Izin', value: stats.izinSantri || 1, fill: '#f59e0b' },
+                      { name: 'Sakit', value: stats.sakitSantri || 1, fill: '#3b82f6' },
+                      { name: 'Alpha', value: stats.alphaSantri || 0, fill: '#ef4444' }
+                    ]}
+                  />
                 </div>
               </div>
 
@@ -1307,47 +1278,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
-                <div className="h-60 w-full relative">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Hadir', value: stats.hadirGuru || 18, fill: '#10b981' },
-                          { name: 'Terlambat', value: stats.terlambatGuru || 1, fill: '#f97316' },
-                          { name: 'Izin', value: stats.izinGuru || 1, fill: '#f59e0b' },
-                          { name: 'Alpha', value: stats.alphaGuru || 0, fill: '#ef4444' }
-                        ].filter(item => item.value > 0)}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={45}
-                        outerRadius={75}
-                        paddingAngle={4}
-                        dataKey="value"
-                        label={({ name, percent }: { name?: string; percent?: number }) => `${name || ''} ${(((percent || 0) * 100)).toFixed(0)}%`}
-                        labelLine={true}
-                      >
-                        {[
-                          { name: 'Hadir', fill: '#10b981' },
-                          { name: 'Terlambat', fill: '#f97316' },
-                          { name: 'Izin', fill: '#f59e0b' },
-                          { name: 'Alpha', fill: '#ef4444' }
-                        ].map((entry, index) => (
-                          <Cell key={`cell-guru-${index}`} fill={entry.fill} stroke="#052216" strokeWidth={2} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'rgba(5, 30, 20, 0.94)',
-                          borderRadius: '12px',
-                          border: '1px solid rgba(212, 175, 55, 0.5)',
-                          color: '#ffffff',
-                          fontSize: '11px'
-                        }}
-                        formatter={(val: any, name: any) => [`${val} Pengajar`, name]}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '11px', fontWeight: 600, paddingTop: '8px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                <div className="w-full relative flex justify-center py-2">
+                  <Donut3D
+                    unitLabel="Pengajar"
+                    data={[
+                      { name: 'Hadir', value: stats.hadirGuru || 18, fill: '#10b981' },
+                      { name: 'Terlambat', value: stats.terlambatGuru || 1, fill: '#f97316' },
+                      { name: 'Izin', value: stats.izinGuru || 1, fill: '#f59e0b' },
+                      { name: 'Alpha', value: stats.alphaGuru || 0, fill: '#ef4444' }
+                    ]}
+                  />
                 </div>
               </div>
             </div>

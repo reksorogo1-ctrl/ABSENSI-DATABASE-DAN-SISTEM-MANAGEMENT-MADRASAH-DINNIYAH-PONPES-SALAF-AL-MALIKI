@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { ArrowRight, ChevronDown, Sparkles } from 'lucide-react';
+import { ArrowRight, ChevronDown, Sparkles, Volume2, VolumeX } from 'lucide-react';
+import { createAmbient, type AmbientHandle } from '../lib/ambientAudio';
 
 interface CinematicIntroProps {
   onComplete: () => void;
@@ -27,11 +28,44 @@ export const CinematicIntro: React.FC<CinematicIntroProps> = ({
   const [webglFailed, setWebglFailed] = useState<boolean>(false);
   const [progressUI, setProgressUI] = useState<number>(0);
   const [leaving, setLeaving] = useState<boolean>(false);
+  const [muted, setMuted] = useState<boolean>(false);
+  const ambientRef = useRef<AmbientHandle | null>(null);
 
   const handleEnter = () => {
+    ambientRef.current?.fadeOut(0.6);
     setLeaving(true);
     window.setTimeout(onComplete, 750);
   };
+
+  const toggleMute = () => {
+    setMuted((m) => {
+      const next = !m;
+      ambientRef.current?.ensureStarted();
+      ambientRef.current?.setMuted(next);
+      return next;
+    });
+  };
+
+  // Soft ambient harmony that fades in as the intro begins (starts on first gesture
+  // to satisfy browser autoplay policies) and fades out on the way to login.
+  useEffect(() => {
+    const amb = createAmbient(0.055);
+    ambientRef.current = amb;
+    amb.ensureStarted();
+    const kick = () => amb.ensureStarted();
+    const opts: AddEventListenerOptions = { once: true };
+    window.addEventListener('pointerdown', kick, opts);
+    window.addEventListener('wheel', kick, opts);
+    window.addEventListener('touchstart', kick, opts);
+    window.addEventListener('keydown', kick, opts);
+    return () => {
+      window.removeEventListener('pointerdown', kick);
+      window.removeEventListener('wheel', kick);
+      window.removeEventListener('touchstart', kick);
+      window.removeEventListener('keydown', kick);
+      amb.dispose();
+    };
+  }, []);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -266,6 +300,17 @@ export const CinematicIntro: React.FC<CinematicIntroProps> = ({
       <div className="absolute inset-0 z-[1] pointer-events-none opacity-[0.06] mix-blend-overlay" style={{
         backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22%3E%3Cfilter id=%22n%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22 numOctaves=%222%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23n)%22/%3E%3C/svg%3E")',
       }} />
+
+      {/* MUTE / UNMUTE ambient harmony */}
+      <button
+        type="button"
+        onClick={toggleMute}
+        data-testid="intro-mute-btn"
+        aria-label={muted ? 'Nyalakan suara' : 'Bisukan suara'}
+        className="absolute top-5 right-5 z-20 w-11 h-11 rounded-full flex items-center justify-center text-[#faebaa] backdrop-blur-md border border-[#d4af37]/45 bg-black/30 hover:bg-black/50 transition-colors shadow-[0_6px_20px_rgba(0,0,0,0.6)]"
+      >
+        {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+      </button>
 
       {/* TOP: brand lockup (fades as you scroll in) */}
       <div

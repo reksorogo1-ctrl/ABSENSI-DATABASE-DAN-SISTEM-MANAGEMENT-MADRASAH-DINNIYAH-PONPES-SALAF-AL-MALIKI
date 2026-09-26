@@ -737,7 +737,7 @@ export default function App() {
   if (session?.role === 'admin') {
     return (
       <>
-        <div className="anim-dashboard-enter" key="admin">
+        <div className="anim-dashboard-fade" key="admin">
           <AdminDashboard
             settings={settings}
             stats={stats}
