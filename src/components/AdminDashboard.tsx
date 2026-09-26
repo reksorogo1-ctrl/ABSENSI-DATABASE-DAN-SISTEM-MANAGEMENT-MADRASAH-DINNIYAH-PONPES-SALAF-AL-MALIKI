@@ -812,8 +812,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <aside className="build-sidebar w-full md:w-72 bg-[#052216]/95 border-r border-[#d4af37]/30 p-5 flex flex-col justify-between shrink-0 shadow-2xl backdrop-blur-md">
         <div className="space-y-6">
           {/* Logo & Header */}
-          <div className="flex items-center space-x-3 pb-4 border-b border-[#d4af37]/20">
-            <BrandLogos settings={settings} size="xs" gap="gap-1.5" idPrefix="admin-header" />
+          <div className="flex flex-col gap-3 pb-4 border-b border-[#d4af37]/20">
+            <BrandLogos settings={settings} size="sm" gap="gap-2.5" idPrefix="admin-header" />
             <div className="overflow-hidden">
               <h2 className="font-bold text-sm text-[#d4af37] truncate uppercase tracking-wider font-serif">
                 {settings.nama_pondok}

@@ -1,0 +1,35 @@
+{
+  "summary": "Frontend-only test for new BrandLogos headers, Option Panel logo editing, and mute persistence. All 7 requested behaviors verified successfully on https://santri-portal-30.preview.emergentagent.com.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_behaviors": [
+    "Login screen: login-logo-madrasah img naturalWidth=1080 (logo_madrasah_diniyah.jpg), login-logo-pondok naturalWidth=688 (logo_pondok_almaliki.jpg) — both loaded",
+    "Admin login (admin/salaf123) succeeds; door transition completes; admin dashboard sidebar shows admin-header-logo-madrasah (nw=1080) and admin-header-logo-pondok (nw=688) both loaded",
+    "Option Panel: reached via sidebar 'Option Panel', unlocked with admin123, then 'Logo & Visual' sub-tab. Both logo-madrasah-input and logo-pondok-input found",
+    "Typing test URL (Wikipedia PNG) into logo-pondok-input live-updates preview-logo-pondok (naturalWidth=800)",
+    "'Simpan Perubahan Visual & Logo' saves; admin-header-logo-pondok src updates to new URL (nw=800)",
+    "Clearing logo-pondok-input and saving falls back to /assets/logo_pondok_almaliki.jpg (nw=688) — fallback works",
+    "Pengurus login ('Ust. H. Ahmad Fauzi Ridwan'/pengurus123) succeeds; pengurus-header-logo-madrasah (nw=1080) and pengurus-header-logo-pondok (nw=688) both loaded",
+    "Wali login via ZIDNIL chip + password 1001 succeeds; wali-header-logo-madrasah (nw=1080) and wali-header-logo-pondok (nw=688) both loaded",
+    "intro-mute-btn toggles localStorage sim_sound_muted from '1' -> '0' correctly",
+    "Zero console errors (page/errors === 0). Only AudioContext autoplay warnings (expected — cannot start without user gesture) and benign WebGL perf notices"
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AdminDashboard.tsx is ~5800+ lines — recommend splitting into per-tab modules for maintainability",
+    "AudioContext warnings show doorSound tries to play before user gesture in some paths; consider gating creation until first user interaction (not blocking)"
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "test_credentials": "Admin admin/salaf123, Option Panel admin123, Pengurus 'Ust. H. Ahmad Fauzi Ridwan'/pengurus123, Wali ZIDNIL AQILA/1001",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All logo header + option panel + mute persistence flows confirmed working. To login: click get-started-btn (force), then role tab ('ADMIN'/'PENGURUS'/'WALI SANTRI'), fill login-username-input and login-password-input, click 'Masuk ke Sistem'. Option Panel: sidebar 'Option Panel (Pusat Kontrol)' -> 'Buka Option Panel' -> password admin123 -> 'Logo & Visual' sub-tab. Save button label: 'Simpan Perubahan Visual & Logo'.",
+  "rca of the issue": "N/A — no issues found"
+}
