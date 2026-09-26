@@ -19,6 +19,8 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { WaliSantriPortal } from './components/WaliSantriPortal';
 import { PengurusDashboard } from './components/PengurusDashboard';
 import { IntroOpening } from './components/IntroOpening';
+import { CinematicIntro } from './components/CinematicIntro';
+import { DoorTransition } from './components/DoorTransition';
 import { 
   ShieldCheck, UserCheck, Key, Lock, ExternalLink, RefreshCw, User, Eye, EyeOff, 
   Users, Award, Play, ArrowRight, Shield, Globe, MessageCircle, HelpCircle, X,
@@ -28,6 +30,9 @@ import {
 export default function App() {
   // Intro Video State
   const [showIntro, setShowIntro] = useState<boolean>(true);
+
+  // Cinematic sliding-door transition played right after a successful login
+  const [showDoors, setShowDoors] = useState<boolean>(false);
 
   // Session State
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -330,6 +335,7 @@ export default function App() {
       }
 
       // Logged in as Wali Santri with strict Row-Level Security
+      setShowDoors(true);
       setSession({
         role: 'wali_santri',
         identifier: found.id,
@@ -358,6 +364,7 @@ export default function App() {
       }
 
       // Logged in as Pengurus
+      setShowDoors(true);
       setSession({
         role: 'pengurus',
         identifier: found.id,
@@ -367,6 +374,7 @@ export default function App() {
       // Admin Login
       const validAdminPass = settings.password_admin || 'salaf123';
       if (adminUsername.trim() === 'admin' && adminPassword === validAdminPass) {
+        setShowDoors(true);
         setSession({
           role: 'admin',
           identifier: 'admin'
@@ -670,18 +678,23 @@ export default function App() {
   if (session?.role === 'wali_santri' && session.santriData) {
     const liveSantri = santriList.find(s => s.id === session.santriData?.id) || session.santriData;
     return (
-      <WaliSantriPortal
-        santri={liveSantri}
-        nadzhomList={nadzhomList}
-        nilaiList={nilaiList}
-        absensiList={absensiSantriList}
-        syahriyahList={syahriyahList}
-        uangSakuList={uangSakuList}
-        ujianList={ujianList}
-        onLogout={handleLogout}
-        spreadsheetId={spreadsheetId}
-        settings={settings}
-      />
+      <>
+        <div className="anim-dashboard-enter" key="wali">
+          <WaliSantriPortal
+            santri={liveSantri}
+            nadzhomList={nadzhomList}
+            nilaiList={nilaiList}
+            absensiList={absensiSantriList}
+            syahriyahList={syahriyahList}
+            uangSakuList={uangSakuList}
+            ujianList={ujianList}
+            onLogout={handleLogout}
+            spreadsheetId={spreadsheetId}
+            settings={settings}
+          />
+        </div>
+        {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} logoUrl={settings.logo_pondok} />}
+      </>
     );
   }
 
@@ -689,93 +702,103 @@ export default function App() {
   if (session?.role === 'pengurus' && session.pengurusData) {
     const livePengurus = pengurusList.find(p => p.id === session.pengurusData?.id) || session.pengurusData;
     return (
-      <PengurusDashboard
-        pengurus={livePengurus}
-        settings={settings}
-        stats={stats}
-        santriList={santriList}
-        guruList={guruList}
-        jadwalList={jadwalList}
-        nadzhomList={nadzhomList}
-        nilaiList={nilaiList}
-        absensiSantriList={absensiSantriList}
-        absensiGuruList={absensiGuruList}
-        syahriyahList={syahriyahList}
-        uangSakuList={uangSakuList}
-        kurikulumList={kurikulumList}
-        kalenderList={kalenderList}
-        ujianList={ujianList}
-        izinList={izinMengajarList}
-        onLogout={handleLogout}
-        onUpdatePengurusProfile={handleUpdatePengurus}
-        onSaveAbsensiSantri={handleSaveAbsensiSantri}
-        onSaveAbsensiGuru={handleSaveAbsensiGuru}
-        onSubmitIzinMengajar={handleAddIzinMengajar}
-      />
+      <>
+        <div className="anim-dashboard-enter" key="pengurus">
+          <PengurusDashboard
+            pengurus={livePengurus}
+            settings={settings}
+            stats={stats}
+            santriList={santriList}
+            guruList={guruList}
+            jadwalList={jadwalList}
+            nadzhomList={nadzhomList}
+            nilaiList={nilaiList}
+            absensiSantriList={absensiSantriList}
+            absensiGuruList={absensiGuruList}
+            syahriyahList={syahriyahList}
+            uangSakuList={uangSakuList}
+            kurikulumList={kurikulumList}
+            kalenderList={kalenderList}
+            ujianList={ujianList}
+            izinList={izinMengajarList}
+            onLogout={handleLogout}
+            onUpdatePengurusProfile={handleUpdatePengurus}
+            onSaveAbsensiSantri={handleSaveAbsensiSantri}
+            onSaveAbsensiGuru={handleSaveAbsensiGuru}
+            onSubmitIzinMengajar={handleAddIzinMengajar}
+          />
+        </div>
+        {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} logoUrl={settings.logo_pondok} />}
+      </>
     );
   }
 
   // 3. If logged in as Admin -> render AdminDashboard
   if (session?.role === 'admin') {
     return (
-      <AdminDashboard
-        settings={settings}
-        stats={stats}
-        santriList={santriList}
-        guruList={guruList}
-        jadwalList={jadwalList}
-        nadzhomList={nadzhomList}
-        nilaiList={nilaiList}
-        absensiSantriList={absensiSantriList}
-        absensiGuruList={absensiGuruList}
-        syahriyahList={syahriyahList}
-        uangSakuList={uangSakuList}
-        kurikulumList={kurikulumList}
-        pengurusList={pengurusList}
-        kalenderList={kalenderList}
-        ujianList={ujianList}
-        izinList={izinMengajarList}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        spreadsheetId={spreadsheetId}
-        setSpreadsheetId={setSpreadsheetId}
-        isSyncing={isSyncing}
-        onSyncWithSheets={syncWithGoogleSheets}
-        onLogout={handleLogout}
-        onSaveAbsensiSantri={handleSaveAbsensiSantri}
-        onSaveAbsensiGuru={handleSaveAbsensiGuru}
-        onSaveNewSantri={handleSaveNewSantri}
-        onSaveNewGuru={handleSaveNewGuru}
-        onSaveNewJadwal={handleSaveNewJadwal}
-        onSaveNadzhom={handleSaveNadzhom}
-        onSaveNilai={handleSaveNilai}
-        onSaveSettings={handleSaveSettings}
-        onSaveDashboardAndReset={handleSaveDashboardAndReset}
-        onUpdateSantriProfile={handleUpdateSantriProfile}
-        onSaveSyahriyah={handleSaveSyahriyah}
-        onSaveUangSaku={handleSaveUangSaku}
-        onSaveKurikulum={handleSaveKurikulum}
-        onDeleteKurikulum={handleDeleteKurikulum}
-        onSavePengurus={handleSavePengurus}
-        onUpdatePengurus={handleUpdatePengurus}
-        onSaveKalender={handleSaveKalender}
-        onDeleteKalender={handleDeleteKalender}
-        onSaveUjianSantri={handleSaveUjianSantri}
-        onApproveIzinMengajar={handleApproveIzinMengajar}
-        onDeleteSantri={handleDeleteSantri}
-      />
+      <>
+        <div className="anim-dashboard-enter" key="admin">
+          <AdminDashboard
+            settings={settings}
+            stats={stats}
+            santriList={santriList}
+            guruList={guruList}
+            jadwalList={jadwalList}
+            nadzhomList={nadzhomList}
+            nilaiList={nilaiList}
+            absensiSantriList={absensiSantriList}
+            absensiGuruList={absensiGuruList}
+            syahriyahList={syahriyahList}
+            uangSakuList={uangSakuList}
+            kurikulumList={kurikulumList}
+            pengurusList={pengurusList}
+            kalenderList={kalenderList}
+            ujianList={ujianList}
+            izinList={izinMengajarList}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            spreadsheetId={spreadsheetId}
+            setSpreadsheetId={setSpreadsheetId}
+            isSyncing={isSyncing}
+            onSyncWithSheets={syncWithGoogleSheets}
+            onLogout={handleLogout}
+            onSaveAbsensiSantri={handleSaveAbsensiSantri}
+            onSaveAbsensiGuru={handleSaveAbsensiGuru}
+            onSaveNewSantri={handleSaveNewSantri}
+            onSaveNewGuru={handleSaveNewGuru}
+            onSaveNewJadwal={handleSaveNewJadwal}
+            onSaveNadzhom={handleSaveNadzhom}
+            onSaveNilai={handleSaveNilai}
+            onSaveSettings={handleSaveSettings}
+            onSaveDashboardAndReset={handleSaveDashboardAndReset}
+            onUpdateSantriProfile={handleUpdateSantriProfile}
+            onSaveSyahriyah={handleSaveSyahriyah}
+            onSaveUangSaku={handleSaveUangSaku}
+            onSaveKurikulum={handleSaveKurikulum}
+            onDeleteKurikulum={handleDeleteKurikulum}
+            onSavePengurus={handleSavePengurus}
+            onUpdatePengurus={handleUpdatePengurus}
+            onSaveKalender={handleSaveKalender}
+            onDeleteKalender={handleDeleteKalender}
+            onSaveUjianSantri={handleSaveUjianSantri}
+            onApproveIzinMengajar={handleApproveIzinMengajar}
+            onDeleteSantri={handleDeleteSantri}
+          />
+        </div>
+        {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} logoUrl={settings.logo_pondok} />}
+      </>
     );
   }
 
-  // 4. Intro Opening View
+  // 4. Cinematic 3D Opening (scroll-scrubbed WebGL experience)
   if (showIntro) {
     return (
-      <IntroOpening
+      <CinematicIntro
         onComplete={() => setShowIntro(false)}
         appName={settings.portal_title || 'SIM SALAF AL-MALIKI'}
         subTitle={settings.nama_pesantren || 'PONDOK PESANTREN SALAF AL-MALIKI'}
         logoUrl={settings.logo_pondok}
-        videoSrc="Camera_moving_through_Islamic_li…_20260925184519.mp4"
+        bgImage="/assets/islamic_library_cinematic.jpg"
       />
     );
   }
