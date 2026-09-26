@@ -742,30 +742,6 @@ export const INITIAL_PENGURUS_LIST: Pengurus[] = [
 
 export const INITIAL_KALENDER_AKADEMIK: KalenderAkademikEvent[] = [
   {
-    id: 'EVT-001',
-    judul: 'Rapat Pleno Dewan Pengurus & Evaluasi Absensi',
-    tanggalMulai: '2026-09-28',
-    tanggalSelesai: '2026-09-28',
-    waktu: '20.00 WIB - Selesai',
-    kategori: 'Rapat',
-    lokasi: 'Ruang Rapat Utama & Kantor Pengurus Pesantren',
-    deskripsi: 'Musyawarah koordinasi evaluasi absensi santri, administrasi syahriyah, dan persiapan pekan ujian semester madrasah.',
-    isUrgentNotif: true,
-    sasaran: 'Seluruh Jajaran Pengurus & Asatidz'
-  },
-  {
-    id: 'EVT-002',
-    judul: 'Pekan Ujian Muhafadzoh & Sorogan Kitab Salaf',
-    tanggalMulai: '2026-10-05',
-    tanggalSelesai: '2026-10-10',
-    waktu: '08.00 - 12.00 WIB',
-    kategori: 'Ujian',
-    lokasi: 'Masjid Jami\' & Gedung Madrasah Diniyah',
-    deskripsi: 'Pelaksanaan ujian serentak hafalan nadzhom Imrithi, Alfiyyah, koreksian kitab maknani, dan ujian baca kitab.',
-    isUrgentNotif: true,
-    sasaran: 'Seluruh Santri & Dewan Penguji'
-  },
-  {
     id: 'EVT-003',
     judul: 'Kajian Rutin Selapanan & Doa Bersama Wali Santri',
     tanggalMulai: '2026-10-16',

@@ -441,6 +441,121 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [videoStatusMessage, setVideoStatusMessage] = useState<string>('');
   const videoFileInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Fitur Rapat Pleno Dewan Pengurus & Evaluasi Absensi di Option Panel (Fitur Absensi Ustadz/Ustadzah)
+  const [showRapatPlenoModal, setShowRapatPlenoModal] = useState<boolean>(false);
+  const [rapatPlenoAlert, setRapatPlenoAlert] = useState<string>('');
+  const [rapatPlenoData, setRapatPlenoData] = useState({
+    id: 'EVT-RAPAT-PLENO-01',
+    judul: 'Rapat Pleno Dewan Pengurus & Evaluasi Absensi',
+    kategori: 'Rapat' as const,
+    tanggal: '2026-09-28',
+    waktu: '20.00 WIB - Selesai',
+    lokasi: 'Ruang Rapat Utama & Kantor Pengurus Pesantren',
+    deskripsi: 'Musyawarah koordinasi evaluasi absensi santri, administrasi syahriyah, dan persiapan pekan ujian semester madrasah.',
+    sasaran: 'Seluruh Jajaran Pengurus & Asatidz',
+    isUrgentNotif: true
+  });
+
+  const handleBroadcastRapatPleno = () => {
+    const eventObj: KalenderAkademikEvent = {
+      id: rapatPlenoData.id,
+      judul: rapatPlenoData.judul,
+      tanggalMulai: rapatPlenoData.tanggal,
+      tanggalSelesai: rapatPlenoData.tanggal,
+      waktu: rapatPlenoData.waktu,
+      kategori: 'Rapat',
+      lokasi: rapatPlenoData.lokasi,
+      deskripsi: rapatPlenoData.deskripsi,
+      sasaran: rapatPlenoData.sasaran,
+      isUrgentNotif: true
+    };
+
+    if (onSaveKalender) {
+      onSaveKalender(eventObj);
+    }
+
+    try {
+      const dismissed = localStorage.getItem('sim_dismissed_kalender');
+      if (dismissed) {
+        const parsed = JSON.parse(dismissed) as string[];
+        const filtered = parsed.filter(id => id !== rapatPlenoData.id);
+        localStorage.setItem('sim_dismissed_kalender', JSON.stringify(filtered));
+      }
+    } catch {}
+
+    setRapatPlenoAlert('✅ Agenda Rapat Pleno Dewan Pengurus & Evaluasi Absensi berhasil disiarkan! Notifikasi "Wajib Hadir" telah aktif di seluruh Dasbor Pengurus.');
+    setTimeout(() => setRapatPlenoAlert(''), 6000);
+  };
+
+  const handleExportEvaluasiRapat = () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const headers = ['NO', 'KATEGORI', 'NAMA / IDENTITAS', 'MAPEL / KELAS', 'STATUS', 'CATATAN EVALUASI'];
+    const santriRows = (absensiSantriList && absensiSantriList.length > 0 ? absensiSantriList : santriList.slice(0, 15)).map((s, idx) => [
+      idx + 1, 'SANTRI', (s as any).nama, (s as any).kelas, (s as any).status || 'Hadir', (s as any).keterangan || 'Presensi Harian Terdata'
+    ]);
+    const guruRows = (absensiGuruList && absensiGuruList.length > 0 ? absensiGuruList : guruList.slice(0, 8)).map((g, idx) => [
+      santriRows.length + idx + 1, 'USTADZ', g.nama, g.mapel || (g as any).kelas || '-', (g as any).status || 'Hadir', (g as any).catatan || 'Jadwal Mengajar Terpantau'
+    ]);
+
+    downloadWord(
+      `Evaluasi_Rapat_Pleno_${todayStr}`,
+      `DOKUMEN EVALUASI ABSENSI - RAPAT PLENO DEWAN PENGURUS (${rapatPlenoData.tanggal})`,
+      headers,
+      [...santriRows, ...guruRows]
+    );
+  };
+
+  // State Pengaturan Manual Jam Presensi Ustadz/Ustadzah (Tsanawiyah & Aliyah)
+  const [jamPresensiForm, setJamPresensiForm] = useState({
+    jam_tsanawiyah_1_mulai: settings.jam_tsanawiyah_1_mulai || '08:00',
+    jam_tsanawiyah_1_batas_hadir: settings.jam_tsanawiyah_1_batas_hadir || '08:30',
+    jam_tsanawiyah_1_selesai: settings.jam_tsanawiyah_1_selesai || '09:30',
+    jam_tsanawiyah_2_mulai: settings.jam_tsanawiyah_2_mulai || '09:45',
+    jam_tsanawiyah_2_batas_hadir: settings.jam_tsanawiyah_2_batas_hadir || '10:15',
+    jam_tsanawiyah_2_selesai: settings.jam_tsanawiyah_2_selesai || '11:45',
+
+    jam_aliyah_1_mulai: settings.jam_aliyah_1_mulai || '19:00',
+    jam_aliyah_1_batas_hadir: settings.jam_aliyah_1_batas_hadir || '19:30',
+    jam_aliyah_1_selesai: settings.jam_aliyah_1_selesai || '20:45',
+    jam_aliyah_2_mulai: settings.jam_aliyah_2_mulai || '21:00',
+    jam_aliyah_2_batas_hadir: settings.jam_aliyah_2_batas_hadir || '21:30',
+    jam_aliyah_2_selesai: settings.jam_aliyah_2_selesai || '22:30',
+
+    bypass_jam_presensi_testing: settings.bypass_jam_presensi_testing || false
+  });
+  const [jamPresensiMsg, setJamPresensiMsg] = useState<string>('');
+
+  useEffect(() => {
+    setJamPresensiForm({
+      jam_tsanawiyah_1_mulai: settings.jam_tsanawiyah_1_mulai || '08:00',
+      jam_tsanawiyah_1_batas_hadir: settings.jam_tsanawiyah_1_batas_hadir || '08:30',
+      jam_tsanawiyah_1_selesai: settings.jam_tsanawiyah_1_selesai || '09:30',
+      jam_tsanawiyah_2_mulai: settings.jam_tsanawiyah_2_mulai || '09:45',
+      jam_tsanawiyah_2_batas_hadir: settings.jam_tsanawiyah_2_batas_hadir || '10:15',
+      jam_tsanawiyah_2_selesai: settings.jam_tsanawiyah_2_selesai || '11:45',
+
+      jam_aliyah_1_mulai: settings.jam_aliyah_1_mulai || '19:00',
+      jam_aliyah_1_batas_hadir: settings.jam_aliyah_1_batas_hadir || '19:30',
+      jam_aliyah_1_selesai: settings.jam_aliyah_1_selesai || '20:45',
+      jam_aliyah_2_mulai: settings.jam_aliyah_2_mulai || '21:00',
+      jam_aliyah_2_batas_hadir: settings.jam_aliyah_2_batas_hadir || '21:30',
+      jam_aliyah_2_selesai: settings.jam_aliyah_2_selesai || '22:30',
+
+      bypass_jam_presensi_testing: settings.bypass_jam_presensi_testing || false
+    });
+  }, [settings]);
+
+  const handleSaveJamPresensi = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated = {
+      ...settings,
+      ...jamPresensiForm
+    };
+    onSaveSettings(updated);
+    setJamPresensiMsg('Pengaturan jam presensi Tsanawiyah & Aliyah berhasil disimpan!');
+    setTimeout(() => setJamPresensiMsg(''), 4500);
+  };
+
   useEffect(() => {
     let isMounted = true;
     resolveActiveVideo(settings.intro_video_url || '/assets/intro_salaf_almaliki.mp4').then(res => {
@@ -3977,6 +4092,340 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
+                    {/* ALERT BROADCAST RAPAT PLENO */}
+                    {rapatPlenoAlert && (
+                      <div className="p-3.5 rounded-xl bg-emerald-950/90 border border-emerald-400 text-emerald-200 text-xs font-bold flex items-center gap-2 shadow-lg animate-fadeIn mt-4">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-300 shrink-0" />
+                        <span>{rapatPlenoAlert}</span>
+                      </div>
+                    )}
+
+                    {/* FITUR: RAPAT PLENO DEWAN PENGURUS & EVALUASI ABSENSI (DIPINDAHKAN KE OPTION PANEL PADA FITUR ABSENSI USTADZ/USTADZAH) */}
+                    <div className="card-3d-deep p-5 rounded-2xl border-2 border-red-500/60 bg-gradient-to-r from-red-950/50 via-[#180808]/80 to-red-950/50 space-y-4 mt-6 relative overflow-hidden shadow-xl">
+                      {/* Top Specular Rim */}
+                      <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-red-400/70 to-transparent pointer-events-none" />
+
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-red-500/30">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center font-bold shadow-lg shadow-red-950/60 shrink-0">
+                            <ShieldAlert className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/40 text-[10px] font-bold uppercase tracking-wider">
+                                {rapatPlenoData.kategori}
+                              </span>
+                              <span className="text-[11px] text-amber-300 font-mono font-bold">
+                                {rapatPlenoData.tanggal} • {rapatPlenoData.waktu}
+                              </span>
+                            </div>
+                            <h4 className="text-sm sm:text-base font-extrabold text-white text-gold-3d mt-1">
+                              {rapatPlenoData.judul}
+                            </h4>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
+                          <span className="px-2.5 py-1 rounded-full bg-red-600 text-white text-[10px] font-mono uppercase font-bold shadow">
+                            Wajib Hadir
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-red-100/90 leading-relaxed">
+                        {rapatPlenoData.deskripsi}
+                      </p>
+
+                      <div className="flex flex-wrap items-center gap-4 text-xs">
+                        <span className="text-emerald-300 flex items-center gap-1.5 font-medium">
+                          📍 <b>Lokasi:</b> {rapatPlenoData.lokasi}
+                        </span>
+                        <span className="text-slate-300 flex items-center gap-1.5 font-medium">
+                          👥 <b>Sasaran:</b> {rapatPlenoData.sasaran}
+                        </span>
+                      </div>
+
+                      {/* Tombol Aksi Lengkap Rapat Pleno */}
+                      <div className="pt-3 border-t border-red-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <span className="text-[11px] text-emerald-300/90">
+                          ⚡ Tombol ini mengontrol jadwal rapat pleno dewan pengurus, evaluasi absensi ustadz & santri, serta menyiarkan ke seluruh portal pengurus.
+                        </span>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowRapatPlenoModal(true)}
+                            className="px-3.5 py-2 rounded-xl bg-[#092b1a] hover:bg-[#0c3f26] border border-[#d4af37]/60 text-[#faebaa] font-bold text-xs flex items-center gap-1.5 transition shadow"
+                            title="Atur jadwal dan materi evaluasi rapat pleno"
+                          >
+                            <Sliders className="w-3.5 h-3.5 text-[#d4af37]" />
+                            <span>Atur Jadwal & Evaluasi</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleBroadcastRapatPleno}
+                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-black text-xs flex items-center gap-1.5 shadow-lg active:scale-95 transition"
+                            title="Siarkan langsung ke seluruh Dasbor Pengurus (Wajib Hadir)"
+                          >
+                            <Megaphone className="w-3.5 h-3.5" />
+                            <span>Siarkan ke Pengurus (Wajib Hadir)</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleExportEvaluasiRapat}
+                            className="px-3.5 py-2 rounded-xl btn-3d-gold text-black font-extrabold text-xs flex items-center gap-1.5 shadow"
+                            title="Cetak lembar evaluasi absensi ustadz & santri untuk rapat pleno"
+                          >
+                            <Printer className="w-3.5 h-3.5 text-black" />
+                            <span>Cetak Lembar Evaluasi</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SUB-BLOK: PENGATURAN MANUAL JAM PRESENSI USTADZ/USTADZAH (TSANAWIYAH & ALIYAH) */}
+                    <form onSubmit={handleSaveJamPresensi} className="card-3d-deep p-5 rounded-2xl border border-[#d4af37]/40 space-y-5 mt-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#d4af37]/20">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 rounded-xl bg-[#093d25] border border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow">
+                            <Clock className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-extrabold text-white text-gold-3d">
+                              Pengaturan Manual Jam Presensi Ustadz / Ustadzah
+                            </h4>
+                            <p className="text-[11px] text-emerald-300">
+                              Atur rentang jam presensi Tsanawiyah & Aliyah secara manual. Tombol presensi otomatis menghitung status Hadir atau Terlambat, dan tidak berfungsi di luar jam yang ditentukan.
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="btn-3d-gold px-5 py-2 text-black font-black text-xs rounded-xl shadow self-start sm:self-auto flex items-center gap-1.5"
+                        >
+                          <Save className="w-4 h-4 text-black" />
+                          <span>Simpan Jam Presensi</span>
+                        </button>
+                      </div>
+
+                      {jamPresensiMsg && (
+                        <div className="p-3 rounded-xl bg-emerald-950/90 border border-emerald-400 text-emerald-200 text-xs font-bold flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                          <span>{jamPresensiMsg}</span>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        {/* 1. TINGKAT TSANAWIYAH */}
+                        <div className="bg-[#03150d] p-4 rounded-xl border border-[#d4af37]/30 space-y-4">
+                          <div className="flex items-center justify-between border-b border-[#d4af37]/20 pb-2">
+                            <span className="text-xs font-black text-[#faebaa] uppercase tracking-wider flex items-center gap-1.5">
+                              <GraduationCap className="w-4 h-4 text-[#d4af37]" />
+                              <span>Tingkat Tsanawiyah</span>
+                            </span>
+                            <span className="text-[10px] text-emerald-300 font-mono">Pagi / Siang</span>
+                          </div>
+
+                          {/* Tsanawiyah Jam Ke-1 */}
+                          <div className="space-y-2 bg-[#052216] p-3 rounded-lg border border-emerald-500/25">
+                            <span className="text-xs font-bold text-white block">
+                              Jam Ke-1 (Default: 08.00 - 09.30 WIB)
+                            </span>
+                            <div className="grid grid-cols-3 gap-2 text-xs">
+                              <div>
+                                <label className="text-[10px] text-emerald-300 block mb-1">Mulai Buka:</label>
+                                <input
+                                  type="time"
+                                  value={jamPresensiForm.jam_tsanawiyah_1_mulai}
+                                  onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_tsanawiyah_1_mulai: e.target.value })}
+                                  className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-lg p-1.5 text-xs text-white font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-amber-300 block mb-1">Batas Hadir:</label>
+                                <input
+                                  type="time"
+                                  value={jamPresensiForm.jam_tsanawiyah_1_batas_hadir}
+                                  onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_tsanawiyah_1_batas_hadir: e.target.value })}
+                                  className="w-full bg-[#020e08] border border-amber-500/50 rounded-lg p-1.5 text-xs text-amber-300 font-bold font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-red-300 block mb-1">Selesai/Tutup:</label>
+                                <input
+                                  type="time"
+                                  value={jamPresensiForm.jam_tsanawiyah_1_selesai}
+                                  onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_tsanawiyah_1_selesai: e.target.value })}
+                                  className="w-full bg-[#020e08] border border-red-500/40 rounded-lg p-1.5 text-xs text-white font-mono"
+                                />
+                              </div>
+                            </div>
+                            <span className="text-[9px] text-emerald-400/80 block">
+                              * Lewat pukul {jamPresensiForm.jam_tsanawiyah_1_batas_hadir} otomatis dihitung TERLAMBAT.
+                            </span>
+                          </div>
+
+                          {/* Tsanawiyah Jam Ke-2 */}
+                          <div className="space-y-2 bg-[#052216] p-3 rounded-lg border border-emerald-500/25">
+                            <span className="text-xs font-bold text-white block">
+                              Jam Ke-2 (Default: 09.45 - 11.45 WIB)
+                            </span>
+                            <div className="grid grid-cols-3 gap-2 text-xs">
+                              <div>
+                                <label className="text-[10px] text-emerald-300 block mb-1">Mulai Buka:</label>
+                                <input
+                                  type="time"
+                                  value={jamPresensiForm.jam_tsanawiyah_2_mulai}
+                                  onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_tsanawiyah_2_mulai: e.target.value })}
+                                  className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-lg p-1.5 text-xs text-white font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-amber-300 block mb-1">Batas Hadir:</label>
+                                <input
+                                  type="time"
+                                  value={jamPresensiForm.jam_tsanawiyah_2_batas_hadir}
+                                  onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_tsanawiyah_2_batas_hadir: e.target.value })}
+                                  className="w-full bg-[#020e08] border border-amber-500/50 rounded-lg p-1.5 text-xs text-amber-300 font-bold font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-red-300 block mb-1">Selesai/Tutup:</label>
+                                <input
+                                  type="time"
+                                  value={jamPresensiForm.jam_tsanawiyah_2_selesai}
+                                  onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_tsanawiyah_2_selesai: e.target.value })}
+                                  className="w-full bg-[#020e08] border border-red-500/40 rounded-lg p-1.5 text-xs text-white font-mono"
+                                />
+                              </div>
+                            </div>
+                            <span className="text-[9px] text-emerald-400/80 block">
+                              * Lewat pukul {jamPresensiForm.jam_tsanawiyah_2_batas_hadir} otomatis dihitung TERLAMBAT.
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 2. TINGKAT ALIYAH */}
+                        <div className="bg-[#03150d] p-4 rounded-xl border border-[#d4af37]/30 space-y-4">
+                          <div className="flex items-center justify-between border-b border-[#d4af37]/20 pb-2">
+                            <span className="text-xs font-black text-[#faebaa] uppercase tracking-wider flex items-center gap-1.5">
+                              <BookOpen className="w-4 h-4 text-[#d4af37]" />
+                              <span>Tingkat Aliyah</span>
+                            </span>
+                            <span className="text-[10px] text-amber-300 font-mono">Malam Hari</span>
+                          </div>
+
+                          {/* Aliyah Jam Ke-1 */}
+                          <div className="space-y-2 bg-[#052216] p-3 rounded-lg border border-emerald-500/25">
+                            <span className="text-xs font-bold text-white block">
+                              Jam Ke-1 (Default: 19.00 - 20.45 WIB)
+                            </span>
+                            <div className="grid grid-cols-3 gap-2 text-xs">
+                              <div>
+                                <label className="text-[10px] text-emerald-300 block mb-1">Mulai Buka:</label>
+                                <input
+                                  type="time"
+                                  value={jamPresensiForm.jam_aliyah_1_mulai}
+                                  onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_aliyah_1_mulai: e.target.value })}
+                                  className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-lg p-1.5 text-xs text-white font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-amber-300 block mb-1">Batas Hadir:</label>
+                                <input
+                                  type="time"
+                                  value={jamPresensiForm.jam_aliyah_1_batas_hadir}
+                                  onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_aliyah_1_batas_hadir: e.target.value })}
+                                  className="w-full bg-[#020e08] border border-amber-500/50 rounded-lg p-1.5 text-xs text-amber-300 font-bold font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-red-300 block mb-1">Selesai/Tutup:</label>
+                                <input
+                                  type="time"
+                                  value={jamPresensiForm.jam_aliyah_1_selesai}
+                                  onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_aliyah_1_selesai: e.target.value })}
+                                  className="w-full bg-[#020e08] border border-red-500/40 rounded-lg p-1.5 text-xs text-white font-mono"
+                                />
+                              </div>
+                            </div>
+                            <span className="text-[9px] text-emerald-400/80 block">
+                              * Lewat pukul {jamPresensiForm.jam_aliyah_1_batas_hadir} otomatis dihitung TERLAMBAT.
+                            </span>
+                          </div>
+
+                          {/* Aliyah Jam Ke-2 */}
+                          <div className="space-y-2 bg-[#052216] p-3 rounded-lg border border-emerald-500/25">
+                            <span className="text-xs font-bold text-white block">
+                              Jam Ke-2 (Default: 21.00 - 22.30 WIB)
+                            </span>
+                            <div className="grid grid-cols-3 gap-2 text-xs">
+                              <div>
+                                <label className="text-[10px] text-emerald-300 block mb-1">Mulai Buka:</label>
+                                <input
+                                  type="time"
+                                  value={jamPresensiForm.jam_aliyah_2_mulai}
+                                  onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_aliyah_2_mulai: e.target.value })}
+                                  className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-lg p-1.5 text-xs text-white font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-amber-300 block mb-1">Batas Hadir:</label>
+                                <input
+                                  type="time"
+                                  value={jamPresensiForm.jam_aliyah_2_batas_hadir}
+                                  onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_aliyah_2_batas_hadir: e.target.value })}
+                                  className="w-full bg-[#020e08] border border-amber-500/50 rounded-lg p-1.5 text-xs text-amber-300 font-bold font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-red-300 block mb-1">Selesai/Tutup:</label>
+                                <input
+                                  type="time"
+                                  value={jamPresensiForm.jam_aliyah_2_selesai}
+                                  onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_aliyah_2_selesai: e.target.value })}
+                                  className="w-full bg-[#020e08] border border-red-500/40 rounded-lg p-1.5 text-xs text-white font-mono"
+                                />
+                              </div>
+                            </div>
+                            <span className="text-[9px] text-emerald-400/80 block">
+                              * Lewat pukul {jamPresensiForm.jam_aliyah_2_batas_hadir} otomatis dihitung TERLAMBAT.
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Mode Bypass Jam untuk Testing */}
+                      <div className="pt-3 border-t border-[#d4af37]/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-[#03180f] p-3 rounded-xl border border-[#d4af37]/25">
+                        <div>
+                          <span className="text-xs font-bold text-white block">
+                            Mode Pengujian / Simulasi Jam Presensi Bebas (Testing Mode)
+                          </span>
+                          <span className="text-[11px] text-emerald-300">
+                            Aktifkan opsi ini jika Admin ingin menguji tombol HADIR SAJA kapan saja tanpa harus menunggu jam 08.00 / 19.00.
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextState = !jamPresensiForm.bypass_jam_presensi_testing;
+                            setJamPresensiForm({ ...jamPresensiForm, bypass_jam_presensi_testing: nextState });
+                            onSaveSettings({ ...settings, bypass_jam_presensi_testing: nextState });
+                          }}
+                          className={`px-4 py-2 rounded-xl text-xs font-black transition ${
+                            jamPresensiForm.bypass_jam_presensi_testing
+                              ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-950/80 ring-2 ring-emerald-300'
+                              : 'bg-slate-800 text-slate-300 border border-slate-700'
+                          }`}
+                        >
+                          {jamPresensiForm.bypass_jam_presensi_testing ? '✓ Mode Testing Aktif' : 'Mode Ketat Real-Time'}
+                        </button>
+                      </div>
+                    </form>
+
                     {/* SUB-BLOK: SIMPAN REKAP & RESET HARIAN (DIPINDAHKAN DARI DASHBOARD UTAMA) */}
                     <div className="card-3d-deep p-5 rounded-2xl border border-[#d4af37]/40 space-y-4 mt-6">
                       <div className="flex items-center space-x-3 pb-3 border-b border-[#d4af37]/20">
@@ -7028,6 +7477,174 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
       </main>
+
+      {/* =========================================================================
+          MODAL: ATUR JADWAL & MATERI EVALUASI RAPAT PLENO DEWAN PENGURUS
+          ========================================================================= */}
+      {showRapatPlenoModal && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-2xl card-3d rounded-3xl p-6 sm:p-7 border-2 border-red-500/60 shadow-[0_25px_60px_rgba(0,0,0,0.95)] bg-[#02180e] relative text-left max-h-[90vh] overflow-y-auto space-y-5">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-red-500/30 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-red-600/90 border border-red-400 flex items-center justify-center text-white shadow">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-white text-gold-3d uppercase tracking-wider">
+                    Atur Rapat Pleno Dewan Pengurus & Evaluasi Absensi
+                  </h3>
+                  <p className="text-[11px] text-emerald-300">
+                    Musyawarah koordinasi evaluasi presensi ustadz, santri, dan administrasi madrasah.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRapatPlenoModal(false)}
+                className="p-2 rounded-xl bg-black/50 hover:bg-red-950 text-emerald-200 hover:text-red-300 border border-[#d4af37]/30 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick Live Attendance Snapshot */}
+            <div className="card-3d-deep p-4 rounded-2xl border border-[#d4af37]/30 space-y-2">
+              <span className="text-[10px] font-bold text-[#d4af37] uppercase tracking-wider block">
+                Ringkasan Data Presensi untuk Bahan Evaluasi Rapat:
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                <div className="bg-[#052216] p-2 rounded-xl border border-emerald-500/30">
+                  <span className="text-[10px] text-emerald-300 block">Santri Hadir</span>
+                  <span className="font-extrabold text-white text-sm">{stats.hadirSantri || 38}</span>
+                </div>
+                <div className="bg-[#052216] p-2 rounded-xl border border-amber-500/30">
+                  <span className="text-[10px] text-amber-300 block">Santri Izin/Sakit</span>
+                  <span className="font-extrabold text-white text-sm">{(stats.izinSantri || 1) + (stats.sakitSantri || 1)}</span>
+                </div>
+                <div className="bg-[#052216] p-2 rounded-xl border border-red-500/30">
+                  <span className="text-[10px] text-red-300 block">Santri Alpha</span>
+                  <span className="font-extrabold text-white text-sm">{stats.alphaSantri || 0}</span>
+                </div>
+                <div className="bg-[#052216] p-2 rounded-xl border border-[#d4af37]/30">
+                  <span className="text-[10px] text-[#d4af37] block">Ustadz Hadir</span>
+                  <span className="font-extrabold text-white text-sm">{stats.hadirGuru || 18}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Form Edit Rapat Pleno */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleBroadcastRapatPleno();
+                setShowRapatPlenoModal(false);
+              }}
+              className="space-y-4 text-xs"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-[#d4af37] mb-1">
+                    Tanggal Rapat:
+                  </label>
+                  <input
+                    type="date"
+                    value={rapatPlenoData.tanggal}
+                    onChange={(e) => setRapatPlenoData({ ...rapatPlenoData, tanggal: e.target.value })}
+                    required
+                    className="w-full px-3 py-2 rounded-xl bg-[#03140c] border border-[#d4af37]/40 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#d4af37] mb-1">
+                    Waktu / Jam:
+                  </label>
+                  <input
+                    type="text"
+                    value={rapatPlenoData.waktu}
+                    onChange={(e) => setRapatPlenoData({ ...rapatPlenoData, waktu: e.target.value })}
+                    required
+                    placeholder="Contoh: 20.00 WIB - Selesai"
+                    className="w-full px-3 py-2 rounded-xl bg-[#03140c] border border-[#d4af37]/40 text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-[#d4af37] mb-1">
+                  Lokasi Pertemuan:
+                </label>
+                <input
+                  type="text"
+                  value={rapatPlenoData.lokasi}
+                  onChange={(e) => setRapatPlenoData({ ...rapatPlenoData, lokasi: e.target.value })}
+                  required
+                  placeholder="Contoh: Ruang Rapat Utama & Kantor Pengurus Pesantren"
+                  className="w-full px-3 py-2 rounded-xl bg-[#03140c] border border-[#d4af37]/40 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-[#d4af37] mb-1">
+                  Sasaran Undangan:
+                </label>
+                <input
+                  type="text"
+                  value={rapatPlenoData.sasaran}
+                  onChange={(e) => setRapatPlenoData({ ...rapatPlenoData, sasaran: e.target.value })}
+                  required
+                  placeholder="Contoh: Seluruh Jajaran Pengurus & Asatidz"
+                  className="w-full px-3 py-2 rounded-xl bg-[#03140c] border border-[#d4af37]/40 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-[#d4af37] mb-1">
+                  Materi Agenda / Deskripsi Musyawarah:
+                </label>
+                <textarea
+                  rows={3}
+                  value={rapatPlenoData.deskripsi}
+                  onChange={(e) => setRapatPlenoData({ ...rapatPlenoData, deskripsi: e.target.value })}
+                  required
+                  placeholder="Musyawarah koordinasi evaluasi absensi santri, administrasi syahriyah, dan persiapan pekan ujian semester madrasah."
+                  className="w-full px-3 py-2 rounded-xl bg-[#03140c] border border-[#d4af37]/40 text-white leading-relaxed"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-[#d4af37]/20 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={handleExportEvaluasiRapat}
+                  className="px-4 py-2.5 rounded-xl bg-blue-950/90 border border-blue-500/50 text-blue-200 font-bold flex items-center justify-center gap-1.5 transition"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Unduh Bahan Rapat (.doc)</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowRapatPlenoModal(false)}
+                    className="px-4 py-2.5 rounded-xl bg-[#03140c] hover:bg-[#052216] border border-[#d4af37]/30 text-emerald-200 font-bold transition"
+                  >
+                    Batal
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition"
+                  >
+                    <Megaphone className="w-4 h-4" />
+                    <span>Simpan & Siarkan (Wajib Hadir)</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

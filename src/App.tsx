@@ -95,7 +95,22 @@ export default function App() {
   });
   const [kalenderList, setKalenderList] = useState<KalenderAkademikEvent[]>(() => {
     const saved = localStorage.getItem('sim_kalender');
-    return saved ? JSON.parse(saved) : INITIAL_KALENDER_AKADEMIK;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as KalenderAkademikEvent[];
+        const filtered = parsed.filter(e => 
+          e.id !== 'EVT-001' && 
+          e.id !== 'EVT-002' && 
+          !e.judul.toLowerCase().includes('rapat pleno dewan pengurus') &&
+          !e.judul.toLowerCase().includes('pekan ujian muhafadzoh')
+        );
+        localStorage.setItem('sim_kalender', JSON.stringify(filtered));
+        return filtered;
+      } catch {
+        return INITIAL_KALENDER_AKADEMIK;
+      }
+    }
+    return INITIAL_KALENDER_AKADEMIK;
   });
   const [ujianList, setUjianList] = useState<UjianSantriRecord[]>(() => {
     const saved = localStorage.getItem('sim_ujian_kitab');
@@ -787,63 +802,63 @@ export default function App() {
     );
   }
 
-  // 4. Video Sinematik Intro Opening (The Journey of Knowledge - Salaf Al-Maliki)
-  if (showIntro) {
-    return (
-      <IntroOpening
-        onComplete={() => setShowIntro(false)}
-        appName={settings.portal_title || 'SIM SALAF AL-MALIKI'}
-        subTitle={settings.nama_pesantren || 'PONDOK PESANTREN SALAF AL-MALIKI'}
-        logoUrl={settings.logo_pondok}
-        videoSrc={settings.intro_video_url || '/assets/intro_salaf_almaliki.mp4'}
-        optionPassword={settings.password_option_panel || 'admin123'}
-        onVideoChange={(newUrl, newName) => {
-          const updated = {
-            ...settings,
-            intro_video_url: newUrl,
-            intro_video_name: newName || 'Video Intro Kustom'
-          };
-          setSettings(updated);
-          localStorage.setItem('sim_settings', JSON.stringify(updated));
-        }}
-        onOpenOptionPanelVideo={() => {
-          setShowIntro(false);
-          setSession({
-            role: 'admin',
-            identifier: 'admin'
-          });
-          setActiveTab('pengaturan');
-          localStorage.setItem('sim_option_unlocked', 'true');
-          localStorage.setItem('sim_target_control_section', 'video_intro');
-          setShowDoors(true);
-        }}
-      />
-    );
-  }
-
-  // 5. Login Landing View (redesigned per reference: brand showcase + mihrab login panel)
+  // 5. Login Landing View (rendered with IntroOpening overlaid for seamless cross-dissolve)
   return (
-    <LoginScreen
-      settings={settings}
-      santriList={santriList}
-      pengurusList={pengurusList}
-      loginMode={loginMode}
-      setLoginMode={setLoginMode}
-      loginError={loginError}
-      setLoginError={setLoginError}
-      santriNamaInput={santriNamaInput} setSantriNamaInput={setSantriNamaInput}
-      santriPasswordInput={santriPasswordInput} setSantriPasswordInput={setSantriPasswordInput}
-      pengurusNamaInput={pengurusNamaInput} setPengurusNamaInput={setPengurusNamaInput}
-      pengurusPasswordInput={pengurusPasswordInput} setPengurusPasswordInput={setPengurusPasswordInput}
-      adminUsername={adminUsername} setAdminUsername={setAdminUsername}
-      adminPassword={adminPassword} setAdminPassword={setAdminPassword}
-      showPassword={showPassword} setShowPassword={setShowPassword}
-      rememberMe={rememberMe} setRememberMe={setRememberMe}
-      showForgotPasswordModal={showForgotPasswordModal} setShowForgotPasswordModal={setShowForgotPasswordModal}
-      onSubmit={handleLoginSubmit}
-      onGoogleSignIn={googleSignIn}
-      onSyncSheets={syncWithGoogleSheets}
-      onReplayIntro={() => setShowIntro(true)}
-    />
+    <>
+      <LoginScreen
+        settings={settings}
+        santriList={santriList}
+        pengurusList={pengurusList}
+        loginMode={loginMode}
+        setLoginMode={setLoginMode}
+        loginError={loginError}
+        setLoginError={setLoginError}
+        santriNamaInput={santriNamaInput} setSantriNamaInput={setSantriNamaInput}
+        santriPasswordInput={santriPasswordInput} setSantriPasswordInput={setSantriPasswordInput}
+        pengurusNamaInput={pengurusNamaInput} setPengurusNamaInput={setPengurusNamaInput}
+        pengurusPasswordInput={pengurusPasswordInput} setPengurusPasswordInput={setPengurusPasswordInput}
+        adminUsername={adminUsername} setAdminUsername={setAdminUsername}
+        adminPassword={adminPassword} setAdminPassword={setAdminPassword}
+        showPassword={showPassword} setShowPassword={setShowPassword}
+        rememberMe={rememberMe} setRememberMe={setRememberMe}
+        showForgotPasswordModal={showForgotPasswordModal} setShowForgotPasswordModal={setShowForgotPasswordModal}
+        onSubmit={handleLoginSubmit}
+        onGoogleSignIn={googleSignIn}
+        onSyncSheets={syncWithGoogleSheets}
+        onReplayIntro={() => setShowIntro(true)}
+      />
+
+      {/* 4. Video Sinematik Intro Opening dengan Transisi Halus (Smooth Cross-fade) */}
+      {showIntro && (
+        <IntroOpening
+          onComplete={() => setShowIntro(false)}
+          appName={settings.portal_title || 'SIM SALAF AL-MALIKI'}
+          subTitle={settings.nama_pesantren || 'PONDOK PESANTREN SALAF AL-MALIKI'}
+          logoUrl={settings.logo_pondok}
+          videoSrc={settings.intro_video_url || '/assets/intro_salaf_almaliki.mp4'}
+          optionPassword={settings.password_option_panel || 'admin123'}
+          onVideoChange={(newUrl, newName) => {
+            const updated = {
+              ...settings,
+              intro_video_url: newUrl,
+              intro_video_name: newName || 'Video Intro Kustom'
+            };
+            setSettings(updated);
+            localStorage.setItem('sim_settings', JSON.stringify(updated));
+          }}
+          onOpenOptionPanelVideo={() => {
+            setShowIntro(false);
+            setSession({
+              role: 'admin',
+              identifier: 'admin'
+            });
+            setActiveTab('pengaturan');
+            localStorage.setItem('sim_option_unlocked', 'true');
+            localStorage.setItem('sim_target_control_section', 'video_intro');
+            setShowDoors(true);
+          }}
+        />
+      )}
+    </>
   );
 }

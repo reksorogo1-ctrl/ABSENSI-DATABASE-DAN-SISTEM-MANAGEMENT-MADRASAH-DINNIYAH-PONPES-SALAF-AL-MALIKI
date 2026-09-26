@@ -36,6 +36,7 @@ interface PengurusDashboardProps {
   onSaveAbsensiSantri?: (records: AbsensiSantriRecord[]) => void;
   onSaveAbsensiGuru?: (records: AbsensiGuruRecord[]) => void;
   onSubmitIzinMengajar?: (req: IzinMengajarRequest) => void;
+  onDeleteKalenderEvent?: (id: string) => void;
 }
 
 export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
@@ -59,7 +60,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   onUpdatePengurusProfile,
   onSaveAbsensiSantri,
   onSaveAbsensiGuru,
-  onSubmitIzinMengajar
+  onSubmitIzinMengajar,
+  onDeleteKalenderEvent
 }) => {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
@@ -136,10 +138,30 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     return personalAbsensi.find(a => a.tanggal === todayIso);
   }, [personalAbsensi, todayIso]);
 
+  // List agenda yang dihapus / ditutup secara lokal
+  const [dismissedEvents, setDismissedEvents] = useState<string[]>(() => {
+    const saved = localStorage.getItem('sim_dismissed_kalender');
+    return saved ? JSON.parse(saved) : ['EVT-001'];
+  });
+
+  const handleDismissEvent = (id: string) => {
+    const updated = [...dismissedEvents, id];
+    setDismissedEvents(updated);
+    localStorage.setItem('sim_dismissed_kalender', JSON.stringify(updated));
+    if (onDeleteKalenderEvent) {
+      onDeleteKalenderEvent(id);
+    }
+  };
+
   // Filter urgent events / meetings for notifications
   const urgentEvents = useMemo(() => {
-    return kalenderList.filter(k => k.isUrgentNotif || k.kategori === 'Rapat');
-  }, [kalenderList]);
+    return kalenderList.filter(k => 
+      (k.isUrgentNotif || k.kategori === 'Rapat') &&
+      !dismissedEvents.includes(k.id) &&
+      k.id !== 'EVT-001' &&
+      !k.judul.toLowerCase().includes('rapat pleno dewan pengurus')
+    );
+  }, [kalenderList, dismissedEvents]);
 
   // Santri anak didik untuk Wali Kelas
   const myStudents = useMemo(() => {
@@ -208,26 +230,180 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     alert('Pengajuan izin tidak mengajar berhasil dikirim ke Dashboard Admin! Ketika Admin menyetujui, status kehadiran pada absensi ustadz/ustadzah langsung otomatis menjadi IZIN dan tercantum nama ustadz penggantinya.');
   };
 
-  // Presensi Kehadiran Mandiri Ustadz / Pengurus Hari Ini
-  const handleSelfAttendance = (status: 'Hadir' | 'Terlambat') => {
-    const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-    const currentDay = new Date().toLocaleDateString('id-ID', { weekday: 'long' }).toUpperCase();
+  // Konversi waktu 'HH:mm' ke menit dari tengah malam
+  const parseTimeToMinutes = (tStr?: string, fallback = '08:00') => {
+    const val = tStr && tStr.includes(':') ? tStr : fallback;
+    const [h, m] = val.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
+  // State jam saat ini agar mendeteksi perubahan waktu secara real-time
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentDate(new Date()), 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Logika Waktu Presensi Otomatis:
+  // TSANAWIYAH:
+  //   Jam 1: 08.00 - 08.30 (Hadir). Lewat 08.30 s.d 09.30 otomatis dihitung TERLAMBAT.
+  //   Jam 2: 09.45 - 10.15 (Hadir). Lewat 10.15 s.d 11.45 otomatis dihitung TERLAMBAT.
+  // ALIYAH:
+  //   Jam 1: 19.00 - 19.30 (Hadir). Lewat 19.30 s.d 20.45 otomatis dihitung TERLAMBAT.
+  //   Jam 2: 21.00 - 21.30 (Hadir). Lewat 21.30 s.d 22.30 otomatis dihitung TERLAMBAT.
+  // Di luar jam tersebut tombol tidak berfungsi. Pengaturan jam diatur di Option Panel.
+  const activeSession = useMemo(() => {
+    if (settings.bypass_jam_presensi_testing) {
+      return {
+        isActive: true,
+        tingkat: 'TSANAWIYAH & ALIYAH',
+        jamKe: 1,
+        status: 'Hadir' as const,
+        keterangan: 'Mode Pengujian Bebas Aktif di Option Panel'
+      };
+    }
+
+    const currentMins = currentDate.getHours() * 60 + currentDate.getMinutes();
+
+    // Jam Tsanawiyah
+    const tsan1Mulai = parseTimeToMinutes(settings.jam_tsanawiyah_1_mulai, '08:00');
+    const tsan1Batas = parseTimeToMinutes(settings.jam_tsanawiyah_1_batas_hadir, '08:30');
+    const tsan1Selesai = parseTimeToMinutes(settings.jam_tsanawiyah_1_selesai, '09:30');
+
+    const tsan2Mulai = parseTimeToMinutes(settings.jam_tsanawiyah_2_mulai, '09:45');
+    const tsan2Batas = parseTimeToMinutes(settings.jam_tsanawiyah_2_batas_hadir, '10:15');
+    const tsan2Selesai = parseTimeToMinutes(settings.jam_tsanawiyah_2_selesai, '11:45');
+
+    // Jam Aliyah
+    const aliyah1Mulai = parseTimeToMinutes(settings.jam_aliyah_1_mulai, '19:00');
+    const aliyah1Batas = parseTimeToMinutes(settings.jam_aliyah_1_batas_hadir, '19:30');
+    const aliyah1Selesai = parseTimeToMinutes(settings.jam_aliyah_1_selesai, '20:45');
+
+    const aliyah2Mulai = parseTimeToMinutes(settings.jam_aliyah_2_mulai, '21:00');
+    const aliyah2Batas = parseTimeToMinutes(settings.jam_aliyah_2_batas_hadir, '21:30');
+    const aliyah2Selesai = parseTimeToMinutes(settings.jam_aliyah_2_selesai, '22:30');
+
+    // Cek Tsanawiyah Jam 1
+    if (currentMins >= tsan1Mulai && currentMins <= tsan1Selesai) {
+      const isLate = currentMins > tsan1Batas;
+      return {
+        isActive: true,
+        tingkat: 'TSANAWIYAH',
+        jamKe: 1,
+        status: (isLate ? 'Terlambat' : 'Hadir') as 'Hadir' | 'Terlambat',
+        keterangan: isLate 
+          ? `Terlambat (Masuk setelah pukul ${settings.jam_tsanawiyah_1_batas_hadir || '08:30'} WIB)` 
+          : `Hadir Tepat Waktu (s.d pukul ${settings.jam_tsanawiyah_1_batas_hadir || '08:30'} WIB)`
+      };
+    }
+
+    // Cek Tsanawiyah Jam 2
+    if (currentMins >= tsan2Mulai && currentMins <= tsan2Selesai) {
+      const isLate = currentMins > tsan2Batas;
+      return {
+        isActive: true,
+        tingkat: 'TSANAWIYAH',
+        jamKe: 2,
+        status: (isLate ? 'Terlambat' : 'Hadir') as 'Hadir' | 'Terlambat',
+        keterangan: isLate 
+          ? `Terlambat (Masuk setelah pukul ${settings.jam_tsanawiyah_2_batas_hadir || '10:15'} WIB)` 
+          : `Hadir Tepat Waktu (s.d pukul ${settings.jam_tsanawiyah_2_batas_hadir || '10:15'} WIB)`
+      };
+    }
+
+    // Cek Aliyah Jam 1
+    if (currentMins >= aliyah1Mulai && currentMins <= aliyah1Selesai) {
+      const isLate = currentMins > aliyah1Batas;
+      return {
+        isActive: true,
+        tingkat: 'ALIYAH',
+        jamKe: 1,
+        status: (isLate ? 'Terlambat' : 'Hadir') as 'Hadir' | 'Terlambat',
+        keterangan: isLate 
+          ? `Terlambat (Masuk setelah pukul ${settings.jam_aliyah_1_batas_hadir || '19:30'} WIB)` 
+          : `Hadir Tepat Waktu (s.d pukul ${settings.jam_aliyah_1_batas_hadir || '19:30'} WIB)`
+      };
+    }
+
+    // Cek Aliyah Jam 2
+    if (currentMins >= aliyah2Mulai && currentMins <= aliyah2Selesai) {
+      const isLate = currentMins > aliyah2Batas;
+      return {
+        isActive: true,
+        tingkat: 'ALIYAH',
+        jamKe: 2,
+        status: (isLate ? 'Terlambat' : 'Hadir') as 'Hadir' | 'Terlambat',
+        keterangan: isLate 
+          ? `Terlambat (Masuk setelah pukul ${settings.jam_aliyah_2_batas_hadir || '21:30'} WIB)` 
+          : `Hadir Tepat Waktu (s.d pukul ${settings.jam_aliyah_2_batas_hadir || '21:30'} WIB)`
+      };
+    }
+
+    return {
+      isActive: false,
+      tingkat: '-',
+      jamKe: 0,
+      status: 'Hadir' as const,
+      keterangan: 'Di luar jam jadwal presensi'
+    };
+  }, [currentDate, settings]);
+
+  // Eksekusi Tombol HADIR SAJA (Terkoneksi langsung ke absensi ustadz/ustadzah secara real-time)
+  const handleHadirSaja = () => {
+    if (!activeSession.isActive) {
+      alert(
+        '⚠️ Tombol presensi tidak dapat digunakan saat ini karena berada di luar jam pelajaran!\n\n' +
+        'Jadwal Waktu Presensi yang Ditentukan:\n' +
+        `• Tsanawiyah Jam 1: ${settings.jam_tsanawiyah_1_mulai || '08:00'} - ${settings.jam_tsanawiyah_1_selesai || '09:30'} WIB (Batas Hadir: ${settings.jam_tsanawiyah_1_batas_hadir || '08:30'})\n` +
+        `• Tsanawiyah Jam 2: ${settings.jam_tsanawiyah_2_mulai || '09:45'} - ${settings.jam_tsanawiyah_2_selesai || '11:45'} WIB (Batas Hadir: ${settings.jam_tsanawiyah_2_batas_hadir || '10:15'})\n` +
+        `• Aliyah Jam 1: ${settings.jam_aliyah_1_mulai || '19:00'} - ${settings.jam_aliyah_1_selesai || '20:45'} WIB (Batas Hadir: ${settings.jam_aliyah_1_batas_hadir || '19:30'})\n` +
+        `• Aliyah Jam 2: ${settings.jam_aliyah_2_mulai || '21:00'} - ${settings.jam_aliyah_2_selesai || '22:30'} WIB (Batas Hadir: ${settings.jam_aliyah_2_batas_hadir || '21:30'})\n\n` +
+        'Catatan: Pengaturan jam dapat diatur sewaktu-waktu secara manual di Option Panel.'
+      );
+      return;
+    }
+
+    const now = new Date();
+    const nowTime = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    const currentDay = now.toLocaleDateString('id-ID', { weekday: 'long' }).toUpperCase();
+
+    // Koneksikan langsung ke jadwal mengajar pengurus hari ini
+    const todaySchedule = jadwalList.find(j => 
+      j.ustadz?.toLowerCase().trim() === pengurus.nama.toLowerCase().trim() &&
+      j.hari.toUpperCase() === currentDay &&
+      (activeSession.jamKe ? j.jamKe === activeSession.jamKe : true)
+    );
+
+    const targetKelas = todaySchedule?.kelas || pengurus.kelasBimbingan || (activeSession.tingkat.includes('TSANAWIYAH') ? '1 TSANAWIYAH' : '1 ALIYAH');
+    const targetMapel = todaySchedule?.mapel || pengurus.mapel || 'Pengawasan & Pembinaan Diniyah';
+
     const newRecord: AbsensiGuruRecord = {
       tanggal: todayIso,
       nama: pengurus.nama,
-      mapel: pengurus.mapel || 'Pengawasan & Pembinaan Diniyah',
-      kelas: waliKelasKelas || 'Umum Diniyah',
-      status: status,
-      catatan: status === 'Hadir' ? `Presensi Mandiri Tepat Waktu (${nowTime} WIB)` : `Presensi Mandiri Terlambat (${nowTime} WIB)`,
+      mapel: targetMapel,
+      kelas: targetKelas,
+      status: activeSession.status,
+      catatan: activeSession.status === 'Hadir'
+        ? `Presensi Hadir (${nowTime} WIB - ${activeSession.tingkat} Jam Ke-${activeSession.jamKe})`
+        : `Presensi Terlambat Otomatis (${nowTime} WIB - Melewati Batas Waktu)`,
       hari: currentDay,
-      jamKe: 1,
-      waktu: nowTime
+      jamKe: activeSession.jamKe || 1,
+      waktu: `${nowTime} WIB`
     };
 
     if (onSaveAbsensiGuru) {
       onSaveAbsensiGuru([newRecord]);
-      alert(`Presensi mandiri berhasil dicatat: STATUS ${status.toUpperCase()} pada ${nowTime} WIB! Terkoneksi langsung ke Database Dashboard Admin secara real-time.`);
     }
+
+    alert(
+      `Presensi Berhasil Dicatat!\n\n` +
+      `Ustadz/Ustadzah: ${pengurus.nama}\n` +
+      `Hari & Tanggal: ${currentDay}, ${todayIso}\n` +
+      `Waktu: ${nowTime} WIB\n` +
+      `Sesi: ${activeSession.tingkat} Jam Ke-${activeSession.jamKe}\n` +
+      `Status Terhitung: ${activeSession.status.toUpperCase()} (${activeSession.keterangan})\n\n` +
+      `Data langsung terkoneksi dan disinkronkan ke Database Absensi Ustadz/Ustadzah di Option Panel secara real-time.`
+    );
   };
 
   // Simpan Presensi Santri Kelas Bimbingan (Wali Kelas)
@@ -499,9 +675,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 {/* Status Kehadiran Hari Ini & Tombol Aksi */}
                 <div className="flex flex-wrap items-center gap-2.5">
                   {todayAttendance ? (
-                    <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-xs font-bold shadow">
+                    <div className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-emerald-950/90 border border-emerald-500/50 text-emerald-300 text-xs font-bold shadow-lg">
                       <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span>Status Anda Hari Ini: {todayAttendance.status} ({todayAttendance.waktu || 'Tepat Waktu'})</span>
+                      <span>Status Anda Hari Ini: <b>{todayAttendance.status.toUpperCase()}</b> ({todayAttendance.waktu || 'Tercatat'})</span>
                       {todayAttendance.ustadzPengganti && (
                         <span className="text-[10px] text-amber-300 ml-1">
                           • Pengganti: {todayAttendance.ustadzPengganti}
@@ -509,22 +685,42 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                       )}
                     </div>
                   ) : (
-                    <>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                      {/* Tombol Tunggal: HADIR SAJA (Sesuai Permintaan User) */}
                       <button
-                        onClick={() => handleSelfAttendance('Hadir')}
-                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-950 transition"
+                        type="button"
+                        onClick={handleHadirSaja}
+                        disabled={!activeSession.isActive}
+                        className={`px-5 py-2.5 rounded-xl font-black text-xs flex items-center gap-2 shadow-lg transition active:scale-95 ${
+                          activeSession.isActive
+                            ? activeSession.status === 'Terlambat'
+                              ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-950/60 ring-2 ring-amber-400 animate-pulse'
+                              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/60 ring-2 ring-emerald-400'
+                            : 'bg-slate-800/80 border border-slate-700 text-slate-400 cursor-not-allowed opacity-60'
+                        }`}
+                        title={activeSession.isActive ? `Klik untuk Hadir Sekarang (${activeSession.keterangan})` : 'Di luar jam jadwal presensi'}
+                        data-testid="hadir-saja-btn"
                       >
-                        <Check className="w-4 h-4" />
-                        <span>Presensi Hadir (Tepat Waktu)</span>
+                        <Check className="w-4 h-4 stroke-[3]" />
+                        <span>HADIR SAJA</span>
                       </button>
-                      <button
-                        onClick={() => handleSelfAttendance('Terlambat')}
-                        className="px-3.5 py-2 rounded-xl bg-yellow-600/80 hover:bg-yellow-600 text-white font-bold text-xs flex items-center gap-1.5 shadow transition"
-                      >
-                        <Clock className="w-4 h-4" />
-                        <span>Presensi Terlambat</span>
-                      </button>
-                    </>
+
+                      {/* Indikator Status Waktu Aktif */}
+                      <span className={`px-3 py-1.5 rounded-xl text-[11px] font-mono font-bold border flex items-center gap-1.5 ${
+                        activeSession.isActive
+                          ? activeSession.status === 'Terlambat'
+                            ? 'bg-amber-950/90 text-amber-300 border-amber-500/50'
+                            : 'bg-emerald-950/90 text-emerald-300 border-emerald-500/50'
+                          : 'bg-black/60 text-slate-400 border-slate-700'
+                      }`}>
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>
+                          {activeSession.isActive 
+                            ? `${activeSession.tingkat} Jam Ke-${activeSession.jamKe}: ${activeSession.status === 'Terlambat' ? '⚠️ Terlambat' : '🟢 Tepat Waktu'}` 
+                            : '🔒 Di luar jam presensi'}
+                        </span>
+                      </span>
+                    </div>
                   )}
 
                   <button

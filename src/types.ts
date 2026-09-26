@@ -252,6 +252,22 @@ export interface AppSettings {
   btn_reset_harian_text?: string;
   btn_reset_harian_color?: string;
 
+  // Pengaturan Jam Presensi Otomatis Ustadz/Ustadzah (Tsanawiyah & Aliyah)
+  jam_tsanawiyah_1_mulai?: string; // Default: '08:00'
+  jam_tsanawiyah_1_batas_hadir?: string; // Default: '08:30' (setelah ini otomatis Terlambat)
+  jam_tsanawiyah_1_selesai?: string; // Default: '09:30' (setelah ini tombol non-aktif)
+  jam_tsanawiyah_2_mulai?: string; // Default: '09:45'
+  jam_tsanawiyah_2_batas_hadir?: string; // Default: '10:15' (setelah ini otomatis Terlambat)
+  jam_tsanawiyah_2_selesai?: string; // Default: '11:45' (setelah ini tombol non-aktif)
+
+  jam_aliyah_1_mulai?: string; // Default: '19:00'
+  jam_aliyah_1_batas_hadir?: string; // Default: '19:30' (setelah ini otomatis Terlambat)
+  jam_aliyah_1_selesai?: string; // Default: '20:45' (setelah ini tombol/barcode non-aktif)
+  jam_aliyah_2_mulai?: string; // Default: '21:00'
+  jam_aliyah_2_batas_hadir?: string; // Default: '21:30' (setelah ini otomatis Terlambat)
+  jam_aliyah_2_selesai?: string; // Default: '22:30' (setelah ini tombol/barcode non-aktif)
+  bypass_jam_presensi_testing?: boolean; // Mode pengujian jam presensi bebas
+
   // Pengaturan visibilitas / hapus / aktifkan tombol
   show_quick_sync_button?: boolean;
   show_export_csv_button?: boolean;
