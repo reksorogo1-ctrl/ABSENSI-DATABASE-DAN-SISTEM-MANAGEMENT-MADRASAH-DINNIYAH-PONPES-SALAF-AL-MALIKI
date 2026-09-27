@@ -2,7 +2,8 @@ import {
   Santri, JadwalPelajaran, GuruPengajar, WaliKelas, NadzhomRecord, 
   NilaiUjianRecord, AppSettings, AbsensiSantriRecord, AbsensiGuruRecord,
   SyahriyahRecord, UangSakuRecord, KurikulumKitabRecord,
-  Pengurus, KalenderAkademikEvent, UjianSantriRecord, IzinMengajarRequest
+  Pengurus, KalenderAkademikEvent, UjianSantriRecord, IzinMengajarRequest,
+  SilabusMemaknaiRecord
 } from './types';
 
 export const DEFAULT_SPREADSHEET_ID = '1lgVwiAb0XSctKHBxFzZOSK6xpxmbLoCsWCjoEjvNq-Q';
@@ -475,28 +476,49 @@ export const INITIAL_WALI_KELAS: WaliKelas[] = [
 ];
 
 export const INITIAL_GURU_LIST: GuruPengajar[] = [
-  { id: 'GP-1', kelas: '1 TSANAWIYAH', nama: 'Ustazah Fina Nikmatul Kamelia', mapel: 'Alala & Nahwu' },
-  { id: 'GP-2', kelas: '1 TSANAWIYAH', nama: 'Ustazah Maulida Rohmah', mapel: 'Tajwid & Al-Quran' },
-  { id: 'GP-3', kelas: '1 TSANAWIYAH', nama: 'Ustazah Kasyifatul Aini', mapel: 'Pegon & Bahasa Arab' },
-  { id: 'GP-4', kelas: '1 TSANAWIYAH', nama: 'Ustadzah Qothrunada', mapel: 'Fiqih Mabadi' },
-  { id: 'GP-5', kelas: '1 TSANAWIYAH', nama: 'Ustazah Solihah', mapel: 'Tauhid & Shorof' },
+  // 1 TSANAWIYAH
+  { id: 'GP-1', kelas: '1 TSANAWIYAH', nama: 'Ustazah Fina Nikmatul Kamelia', mapel: 'Alala & Nahwu', kitab: 'Al-Jurumiyyah & Nadzhom Alala', noWa: '081234567801', foto: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-2', kelas: '1 TSANAWIYAH', nama: 'Ustazah Maulida Rohmah', mapel: 'Tajwid & Al-Quran', kitab: 'Tuhfatul Athfal & Hidayatus Shibyan', noWa: '081234567802', foto: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-3', kelas: '1 TSANAWIYAH', nama: 'Ustazah Kasyifatul Aini', mapel: 'Pegon & Bahasa Arab', kitab: 'Al-Miftah Lil Pegon & Durusullughah', noWa: '081234567803', foto: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-4', kelas: '1 TSANAWIYAH', nama: 'Ustadzah Qothrunada', mapel: 'Fiqih Mabadi', kitab: 'Mabadi Al-Fiqhiyyah Juz 1 & 2', noWa: '081234567804', foto: 'https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-5', kelas: '1 TSANAWIYAH', nama: 'Ustazah Solihah', mapel: 'Tauhid & Shorof', kitab: 'Aqidatul Awam & Al-Amtsilah', noWa: '081234567805', foto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80' },
 
-  { id: 'GP-6', kelas: '2 TSANAWIYAH', nama: 'Ustadz Adib Setiawan', mapel: "Fiqih & I'lal" },
-  { id: 'GP-7', kelas: '2 TSANAWIYAH', nama: 'Ustadz Yasir', mapel: 'Akhlaq Lil Banin' },
-  { id: 'GP-8', kelas: '2 TSANAWIYAH', nama: 'Ustazah Isna Mubarokah', mapel: 'Tajwid & Hadits Arbain' },
-  { id: 'GP-9', kelas: '2 TSANAWIYAH', nama: 'Ustazah Dewi Faila Shofa', mapel: 'Tarikh Islam' },
-  { id: 'GP-10', kelas: '2 TSANAWIYAH', nama: 'Ustadz Ahmad Shobirin', mapel: 'Nahwu Jurumiyyah & Tauhid' },
-  { id: 'GP-11', kelas: '2 TSANAWIYAH', nama: 'Ustadz Faza', mapel: 'Bahasa Arab' },
-  { id: 'GP-12', kelas: '2 TSANAWIYAH', nama: 'Ustadz Ali Said', mapel: 'Shorof Amsilah' },
+  // 2 TSANAWIYAH
+  { id: 'GP-6', kelas: '2 TSANAWIYAH', nama: 'Ustadz Adib Setiawan', mapel: "Fiqih & I'lal", kitab: 'Safinatun Naja & Qowa\'idul I\'lal', noWa: '081234567813', foto: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-7', kelas: '2 TSANAWIYAH', nama: 'Ustadz Yasir', mapel: 'Akhlaq Lil Banin', kitab: 'Akhlaq Lil Banin Juz 2', noWa: '081234567814', foto: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-8', kelas: '2 TSANAWIYAH', nama: 'Ustazah Isna Mubarokah', mapel: 'Tajwid & Hadits Arbain', kitab: 'Al-Arba\'in An-Nawawiyyah', noWa: '081234567815', foto: 'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-9', kelas: '2 TSANAWIYAH', nama: 'Ustazah Dewi Faila Shofa', mapel: 'Tarikh Islam', kitab: 'Khulashoh Nuril Yaqin Juz 1 & 2', noWa: '081234567816', foto: 'https://images.unsplash.com/photo-1598550874175-4d0ef436c909?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-10', kelas: '2 TSANAWIYAH', nama: 'Ustadz Ahmad Shobirin', mapel: 'Nahwu Jurumiyyah & Tauhid', kitab: 'Mukhtashar Jiddan & Nadzhom Al-Maqsud', noWa: '081234567817', foto: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-11', kelas: '2 TSANAWIYAH', nama: 'Ustadz Faza', mapel: 'Bahasa Arab', kitab: 'Durusullughah Al-Arabiyyah', noWa: '081234567818', foto: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-12', kelas: '2 TSANAWIYAH', nama: 'Ustadz Ali Said', mapel: 'Shorof Amsilah', kitab: 'Al-Amtsilah At-Tashrifiyyah', noWa: '081234567819', foto: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=400&auto=format&fit=crop&q=80' },
 
-  { id: 'GP-13', kelas: '3 TSANAWIYAH', nama: 'Ustadz Yasir', mapel: 'Akhlaq Taisirul Kholaq' },
-  { id: 'GP-14', kelas: '3 TSANAWIYAH', nama: 'Ustadz Ahmad Shobirin', mapel: 'Fiqih Fathul Qorib' },
-  { id: 'GP-15', kelas: '3 TSANAWIYAH', nama: 'Ustadz Bagus Danial', mapel: "Shorof & I'lal" },
-  { id: 'GP-16', kelas: '3 TSANAWIYAH', nama: 'Ustadz Mizan Khoirul', mapel: 'Hadits Bulughul Marom' },
-  { id: 'GP-17', kelas: '3 TSANAWIYAH', nama: 'Ustadz Sulaiman', mapel: 'Nahwu Imrithi & Tajwid' },
-  { id: 'GP-18', kelas: '3 TSANAWIYAH', nama: 'Ustadz M. Khoirul Jadid', mapel: 'Bahasa Arab' },
-  { id: 'GP-19', kelas: '3 TSANAWIYAH', nama: 'Ustadz Wildan', mapel: 'Tarikh Khulasoh' },
-  { id: 'GP-20', kelas: '3 TSANAWIYAH', nama: 'Ustadz Munawar', mapel: 'Tauhid Aqidatul Awam' }
+  // 3 TSANAWIYAH
+  { id: 'GP-13', kelas: '3 TSANAWIYAH', nama: 'Ustadz Yasir', mapel: 'Akhlaq Taisirul Kholaq', kitab: 'Taisirul Khalaq fi Ilmil Akhlaq', noWa: '081234567814', foto: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-14', kelas: '3 TSANAWIYAH', nama: 'Ustadz Ahmad Shobirin', mapel: 'Fiqih Fathul Qorib', kitab: 'Fathul Qorib Al-Mujib', noWa: '081234567817', foto: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-15', kelas: '3 TSANAWIYAH', nama: 'Ustadz Bagus Danial', mapel: "Shorof & I'lal", kitab: 'Qawa\'idul I\'lal & Nadzhom Maqsud', noWa: '081234567820', foto: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-16', kelas: '3 TSANAWIYAH', nama: 'Ustadz Mizan Khoirul', mapel: 'Hadits Bulughul Marom', kitab: 'Bulughul Maram min Adillatil Ahkam', noWa: '081234567821', foto: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-17', kelas: '3 TSANAWIYAH', nama: 'Ustadz Sulaiman', mapel: 'Nahwu Imrithi & Tajwid', kitab: 'Al-Imrithi & Mandzumah Jazariyyah', noWa: '081234567822', foto: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-18', kelas: '3 TSANAWIYAH', nama: 'Ustadz M. Khoirul Jadid', mapel: 'Bahasa Arab', kitab: 'Muhadatsah & Nahwu Lanjutan', noWa: '081234567823', foto: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-19', kelas: '3 TSANAWIYAH', nama: 'Ustadz Wildan', mapel: 'Tarikh Khulasoh', kitab: 'Khulashoh Nuril Yaqin', noWa: '081234567824', foto: 'https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-20', kelas: '3 TSANAWIYAH', nama: 'Ustadz Munawar', mapel: 'Tauhid Aqidatul Awam', kitab: 'Aqidatul Awam & Kifayatul Awam', noWa: '081234567806', foto: 'https://images.unsplash.com/photo-1513956589380-bad6acb9b9d4?w=400&auto=format&fit=crop&q=80' },
+
+  // 1 ALIYAH
+  { id: 'GP-21', kelas: '1 ALIYAH', nama: 'Ustadz Ahmad Shobirin', mapel: 'Nahwu & Shorof (Alfiyah)', kitab: 'Alfiyah Ibnu Malik (Juz 1)', noWa: '081234567817', foto: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-22', kelas: '1 ALIYAH', nama: 'Ustadz Adib Setiawan', mapel: 'Ushul Fiqh', kitab: 'Al-Waraqat & Lubbul Ushul', noWa: '081234567813', foto: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-23', kelas: '1 ALIYAH', nama: 'Ustadz Mizan Khoirul', mapel: 'Mustholahul Hadits', kitab: 'Al-Manzhumah Al-Baiquniyyah', noWa: '081234567821', foto: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-24', kelas: '1 ALIYAH', nama: 'Ustadz Yasir', mapel: 'Qawa\'id Fiqhiyyah', kitab: 'Al-Faraidul Bahiyyah', noWa: '081234567814', foto: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-25', kelas: '1 ALIYAH', nama: 'Ustadz Sulaiman', mapel: 'Fiqh Mazhab Syafi\'i', kitab: 'Fathul Qorib Lanjutan', noWa: '081234567822', foto: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400&auto=format&fit=crop&q=80' },
+
+  // 2 ALIYAH
+  { id: 'GP-26', kelas: '2 ALIYAH', nama: 'Ustadz Ahmad Shobirin', mapel: 'Tafsir Al-Quran', kitab: 'Tafsir Al-Jalalain', noWa: '081234567817', foto: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-27', kelas: '2 ALIYAH', nama: 'Ustadz Mizan Khoirul', mapel: 'Balaghah', kitab: 'Al-Jauharul Maknun', noWa: '081234567821', foto: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-28', kelas: '2 ALIYAH', nama: 'Ustadz Yasir', mapel: 'Fiqih Fathul Wahhab', kitab: 'Fathul Wahhab bi Syarhi Manhajit Thullab', noWa: '081234567814', foto: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-29', kelas: '2 ALIYAH', nama: 'Ustadz Munawar', mapel: 'Mantiq (Logika)', kitab: 'As-Sullamul Munauraq', noWa: '081234567806', foto: 'https://images.unsplash.com/photo-1513956589380-bad6acb9b9d4?w=400&auto=format&fit=crop&q=80' },
+
+  // 3 ALIYAH
+  { id: 'GP-30', kelas: '3 ALIYAH', nama: 'Ustadz Yasir', mapel: 'Hadits Shahih Bukhari', kitab: 'Shahih Al-Bukhari (Khataman Musalsal)', noWa: '081234567814', foto: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-31', kelas: '3 ALIYAH', nama: 'Ustadz Sulaiman', mapel: 'Ushul Fiqh Lanjutan', kitab: 'Jam\'ul Jawami\'', noWa: '081234567822', foto: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400&auto=format&fit=crop&q=80' },
+  { id: 'GP-32', kelas: '3 ALIYAH', nama: 'Ustadz Mizan Khoirul', mapel: 'Alfiyah Khataman', kitab: 'Alfiyah Ibnu Malik (Bait 700 - 1002)', noWa: '081234567821', foto: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&auto=format&fit=crop&q=80' }
 ];
 
 export const INITIAL_NADZHOM_LIST: NadzhomRecord[] = [
@@ -607,12 +629,82 @@ export const INITIAL_JADWAL_LIST: JadwalPelajaran[] = [
   { kelas: '2 ALIYAH', hari: 'MALAM AHAD', jamKe: 2, waktu: '21.30 - 23.00', mapel: 'FATHUL WAHHAB', nama: 'Ustadz Yasir' },
   { kelas: '2 ALIYAH', hari: 'MALAM SENIN', jamKe: 1, waktu: '19.30 - 21.00', mapel: 'USHUL FIQH', nama: 'Ustadz Adib Setiawan' },
   { kelas: '2 ALIYAH', hari: 'MALAM SENIN', jamKe: 2, waktu: '21.30 - 23.00', mapel: 'MANTIQ', nama: 'Ustadz Munawar' },
+  { kelas: '2 ALIYAH', hari: 'MALAM SELASA', jamKe: 1, waktu: '19.30 - 21.00', mapel: 'TAFSIR JALALAIN', nama: 'Ustadz Ahmad Shobirin' },
+  { kelas: '2 ALIYAH', hari: 'MALAM SELASA', jamKe: 2, waktu: '21.30 - 23.00', mapel: 'FATHUL WAHHAB', nama: 'Ustadz Yasir' },
+  { kelas: '2 ALIYAH', hari: 'MALAM RABU', jamKe: 1, waktu: '19.30 - 21.00', mapel: 'BALAGHOH', nama: 'Ustadz Mizan Khoirul' },
+  { kelas: '2 ALIYAH', hari: 'MALAM RABU', jamKe: 2, waktu: '21.30 - 23.00', mapel: 'ALFIYAH IBN MALIK', nama: 'Ustadz Sulaiman' },
+  { kelas: '2 ALIYAH', hari: 'MALAM KAMIS', jamKe: 1, waktu: '19.30 - 21.00', mapel: 'MANTIQ', nama: 'Ustadz Munawar' },
+  { kelas: '2 ALIYAH', hari: 'MALAM KAMIS', jamKe: 2, waktu: '21.30 - 23.00', mapel: 'USHUL FIQH', nama: 'Ustadz Adib Setiawan' },
 
   // 3 ALIYAH
   { kelas: '3 ALIYAH', hari: 'MALAM SABTU', jamKe: 1, waktu: '19.30 - 21.00', mapel: 'SHOHIH BUKHARI', nama: 'Ustadz Yasir' },
   { kelas: '3 ALIYAH', hari: 'MALAM SABTU', jamKe: 2, waktu: '21.30 - 23.00', mapel: 'FATHUL WAHHAB', nama: 'Ustadz Ahmad Shobirin' },
   { kelas: '3 ALIYAH', hari: 'MALAM AHAD', jamKe: 1, waktu: '19.30 - 21.00', mapel: 'JAM\'UL JAWAMI\'', nama: 'Ustadz Sulaiman' },
-  { kelas: '3 ALIYAH', hari: 'MALAM AHAD', jamKe: 2, waktu: '21.30 - 23.00', mapel: 'ALFIYAH (KHATAMAN)', nama: 'Ustadz Mizan Khoirul' }
+  { kelas: '3 ALIYAH', hari: 'MALAM AHAD', jamKe: 2, waktu: '21.30 - 23.00', mapel: 'ALFIYAH (KHATAMAN)', nama: 'Ustadz Mizan Khoirul' },
+  { kelas: '3 ALIYAH', hari: 'MALAM SENIN', jamKe: 1, waktu: '19.30 - 21.00', mapel: 'SHOHIH BUKHARI', nama: 'Ustadz Yasir' },
+  { kelas: '3 ALIYAH', hari: 'MALAM SENIN', jamKe: 2, waktu: '21.30 - 23.00', mapel: 'JAM\'UL JAWAMI\'', nama: 'Ustadz Sulaiman' },
+  { kelas: '3 ALIYAH', hari: 'MALAM SELASA', jamKe: 1, waktu: '19.30 - 21.00', mapel: 'FATHUL WAHHAB', nama: 'Ustadz Ahmad Shobirin' },
+  { kelas: '3 ALIYAH', hari: 'MALAM SELASA', jamKe: 2, waktu: '21.30 - 23.00', mapel: 'ALFIYAH (KHATAMAN)', nama: 'Ustadz Mizan Khoirul' },
+  { kelas: '3 ALIYAH', hari: 'MALAM RABU', jamKe: 1, waktu: '19.30 - 21.00', mapel: 'SHOHIH BUKHARI', nama: 'Ustadz Yasir' },
+  { kelas: '3 ALIYAH', hari: 'MALAM RABU', jamKe: 2, waktu: '21.30 - 23.00', mapel: 'FATHUL WAHHAB', nama: 'Ustadz Ahmad Shobirin' },
+  { kelas: '3 ALIYAH', hari: 'MALAM KAMIS', jamKe: 1, waktu: '19.30 - 21.00', mapel: 'JAM\'UL JAWAMI\'', nama: 'Ustadz Sulaiman' },
+  { kelas: '3 ALIYAH', hari: 'MALAM KAMIS', jamKe: 2, waktu: '21.30 - 23.00', mapel: 'ALFIYAH (KHATAMAN)', nama: 'Ustadz Mizan Khoirul' }
+];
+
+export const INITIAL_SILABUS_MEMAKNAI: SilabusMemaknaiRecord[] = [
+  // 1 TSANAWIYAH - SEMESTER 1
+  { id: 'SLB-101', kelas: '1 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 1', namaKitab: 'Matan Al-Jurumiyyah', mulai: 'Fasal 1: Bab Kalam & Tanda I\'rab', batasAkhir: 'Khatam Bab Al-Af\'al (Marfu\'atul Asma\')', materiSaatIni: 'Bab Na\'at & Athaf (Hal. 38)', ustadzPengampu: 'Ustazah Fina Nikmatul Kamelia', targetMateri: 'Bab Kalam s/d Bab Al-Af\'al', status: 'Sesuai Target', keterangan: 'Ngaji bandongan pagi jam ke-2' },
+  { id: 'SLB-102', kelas: '1 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 1', namaKitab: 'Nadzhom Alala', mulai: 'Bait 1: Syuruthu Ta\'allum', batasAkhir: 'Khatam Bait 37: Doa & Adab Guru', materiSaatIni: 'Bait 22: Hurmatul Ustadz', ustadzPengampu: 'Ustazah Fina Nikmatul Kamelia', targetMateri: '37 Bait Nadzhom + Syarah', status: 'Sesuai Target', keterangan: 'Target khatam sebelum mid semester' },
+  { id: 'SLB-103', kelas: '1 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 1', namaKitab: 'Al-Amtsilah At-Tashrifiyyah', mulai: 'Bab 1: Tsulatsi Mujarrad (Fa\'ala Yaf\'ulu)', batasAkhir: 'Bab 6: Tsulatsi Mujarrad Bina\' Naqis & Lafif', materiSaatIni: 'Bab 4: Fa\'ila Yaf\'alu (Hal. 24)', ustadzPengampu: 'Ustazah Solihah', targetMateri: 'Tashrif Tsulatsi Mujarrad Bab 1 - 6', status: 'Sesuai Target', keterangan: 'Wajib hafal bina\' dan wazan' },
+  { id: 'SLB-104', kelas: '1 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 1', namaKitab: 'Mabadi Al-Fiqhiyyah Juz 1 & 2', mulai: 'Bab Thoharoh & Wudhu', batasAkhir: 'Bab Shalat 5 Waktu & Syarat Sah', materiSaatIni: 'Bab Sujud Sahwi & Rukun Shalat (Hal. 18)', ustadzPengampu: 'Ustadzah Qothrunada', targetMateri: 'Kajian Thoharoh, Wudhu, Shalat 5 Waktu', status: 'Sesuai Target', keterangan: 'Praktek ibadah harian santri' },
+  { id: 'SLB-105', kelas: '1 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 1', namaKitab: 'Aqidatul Awam', mulai: 'Bait 1: Bismillahi wal Hamdu', batasAkhir: 'Bait 57: Sifat Wajib & Mustahil Rasul', materiSaatIni: 'Bait 45: Silsilah Nasab Nabi Muhammad', ustadzPengampu: 'Ustazah Solihah', targetMateri: '57 Bait Sifat 20 & Aqoid 50', status: 'Sesuai Target', keterangan: 'Khataman sebelum Imtihan Ganjil' },
+  // 1 TSANAWIYAH - SEMESTER 2
+  { id: 'SLB-106', kelas: '1 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 2', namaKitab: 'Matan Al-Jurumiyyah (Juz 2)', mulai: 'Bab Manshubatul Asma\' (Maf\'ul Bih)', batasAkhir: 'Khatam Mahfudhatul Asma\' & Idhofah', materiSaatIni: 'Bab Zharaf Makan & Zaman (Hal. 52)', ustadzPengampu: 'Ustazah Fina Nikmatul Kamelia', targetMateri: 'Manshubat s/d Mahfudhat', status: 'Sedang Berjalan', keterangan: 'Lanjutan kajian i\'rob pegon' },
+  { id: 'SLB-107', kelas: '1 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 2', namaKitab: 'Tuhfatul Athfal', mulai: 'Bab Ahkamun Nun Sakinah wat Tanwin', batasAkhir: 'Khatam Bab Ahkamul Maddi wal Aqsam', materiSaatIni: 'Bab Idgham Bighunnah (Hal. 14)', ustadzPengampu: 'Ustazah Maulida Rohmah', targetMateri: 'Hukum Mad & Ahkamul Huruf', status: 'Sedang Berjalan', keterangan: 'Praktek tajwid tilawah' },
+
+  // 2 TSANAWIYAH - SEMESTER 1
+  { id: 'SLB-201', kelas: '2 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 1', namaKitab: 'Mukhtashar Jiddan (Syarh Jurumiyyah)', mulai: 'Fasal 1: Khutbatul Kitab & Tarkib Kalam', batasAkhir: 'Bab Marfu\'atul Asma\' & Isim Fa\'il', materiSaatIni: 'Bab Mubtada\' & Khabar (Hal. 46)', ustadzPengampu: 'Ustadz Ahmad Shobirin', targetMateri: 'Kajian tarkib i\'rob & Marfu\'atul Asma\'', status: 'Sesuai Target', keterangan: 'Bandongan makna gandul Jawa pegon' },
+  { id: 'SLB-202', kelas: '2 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 1', namaKitab: 'Safinatun Naja & Sullamut Taufiq', mulai: 'Fasal 1: Arkanul Islam wal Iman', batasAkhir: 'Fasal Syuruthul Qashri wal Jam\'i', materiSaatIni: 'Fasal Shalat Jama\'ah & Jam\' Qashar', ustadzPengampu: 'Ustadz Adib Setiawan', targetMateri: 'Fiqih Ibadah & Muamalat Pemula', status: 'Sesuai Target', keterangan: 'Target koreksian makna sah' },
+  { id: 'SLB-203', kelas: '2 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 1', namaKitab: 'Qawa\'idul I\'lal (Mundzir Nadzir)', mulai: 'Kaidah I\'lal 1: Wawu / Ya\' Berharakat', batasAkhir: 'Kaidah I\'lal 19: Idgham Mitslain', materiSaatIni: 'Kaidah I\'lal ke-11: Ibdaal Taa\' (Hal. 30)', ustadzPengampu: 'Ustadz Adib Setiawan', targetMateri: 'Kaidah I\'lal 1 - 19 & Bina\' Mu\'tal', status: 'Sesuai Target', keterangan: 'Penyelesaian soal rumus shorof' },
+  { id: 'SLB-204', kelas: '2 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 1', namaKitab: 'Akhlaq Lil Banin Juz 2', mulai: 'Bab Adabul Walad ma\'a Walidaih', batasAkhir: 'Bab Adabul Muasyarah wal Ukhuwwah', materiSaatIni: 'Bab Husnul Khuluq ma\'al Jiran (Hal. 35)', ustadzPengampu: 'Ustadz Yasir', targetMateri: 'Adab Pergaulan & Birrul Walidain', status: 'Sesuai Target', keterangan: 'Materi adab salafiyah' },
+  // 2 TSANAWIYAH - SEMESTER 2
+  { id: 'SLB-205', kelas: '2 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 2', namaKitab: 'Nadzhom Al-Maqsud', mulai: 'Bait 1: Hamdulilahil Ladzi Qod Shorofa', batasAkhir: 'Khatam Bait 113: Bina\' Tsulatsi Mazid', materiSaatIni: 'Bait 60: Fa\'alla & Tafa\'ala', ustadzPengampu: 'Ustadz Ahmad Shobirin', targetMateri: '113 Bait Shorof & Bina\' Tsulatsi Mazid', status: 'Sedang Berjalan', keterangan: 'Hafalan nadzhom berbobot' },
+  { id: 'SLB-206', kelas: '2 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 2', namaKitab: 'Al-Arba\'in An-Nawawiyyah', mulai: 'Hadits 1: Innamal A\'malu bin Niyyat', batasAkhir: 'Hadits 42: Ittaqillaha Haitsuma Kunta', materiSaatIni: 'Hadits 26: Kulli Sulaamaa (Hal. 40)', ustadzPengampu: 'Ustazah Isna Mubarokah', targetMateri: 'Hadits 21 sampai Hadits 42', status: 'Sedang Berjalan', keterangan: 'Pemahaman matan hadits' },
+
+  // 3 TSANAWIYAH - SEMESTER 1
+  { id: 'SLB-301', kelas: '3 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 1', namaKitab: 'Nadzhom Al-Imrithi', mulai: 'Bait 1: Al-Hamdu Lillahi bi Kulli Hamdi', batasAkhir: 'Bait 150: Bab Tawabi\' & Na\'at', materiSaatIni: 'Bait 110: Bab Inna wa Akhwatuha', ustadzPengampu: 'Ustadz Sulaiman', targetMateri: '254 Bait Nadzhom Makna + Muradh', status: 'Sesuai Target', keterangan: 'Khataman sebelum Imtihan Kubro' },
+  { id: 'SLB-302', kelas: '3 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 1', namaKitab: 'Fathul Qorib Al-Mujib (Juz 1)', mulai: 'Kitabuth Thoharoh & Anwa\'ul Miyah', batasAkhir: 'Khatam Kitabuz Zakah wash Shiyam', materiSaatIni: 'Fasal Shalat Jama\' & Qashar (Hal. 34)', ustadzPengampu: 'Ustadz Ahmad Shobirin', targetMateri: 'Kitab Thoharoh, Sholat, Shiyam & Zakat', status: 'Sesuai Target', keterangan: 'Ujian baca kitab gundul' },
+  { id: 'SLB-303', kelas: '3 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 1', namaKitab: 'Bulughul Maram min Adillatil Ahkam', mulai: 'Kitabuth Thoharoh: Bab Bab Miyah', batasAkhir: 'Kitabush Sholah: Bab Shalatil Jama\'ah', materiSaatIni: 'Bab Sujudit Tilawah wash Sahwi', ustadzPengampu: 'Ustadz Mizan Khoirul', targetMateri: 'Hadits Hukum Thoharoh & Sholat', status: 'Sesuai Target', keterangan: 'Hafalan matan & sanad ringkas' },
+  { id: 'SLB-304', kelas: '3 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 1', namaKitab: 'Taisirul Khalaq fi Ilmil Akhlaq', mulai: 'Bab At-Taqwa wal Ikhlas', batasAkhir: 'Bab Az-Zuhd wal Qana\'ah', materiSaatIni: 'Bab Al-Amanah wash Shidq', ustadzPengampu: 'Ustadz Yasir', targetMateri: 'Bab Tazkiyatun Nafs & Zuhud', status: 'Sesuai Target', keterangan: 'Khatam separuh juz' },
+  // 3 TSANAWIYAH - SEMESTER 2
+  { id: 'SLB-305', kelas: '3 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 2', namaKitab: 'Fathul Qorib (Juz 2 - Muamalah & Nikah)', mulai: 'Kitabul Buyu\' wal Mu\'amalat', batasAkhir: 'Khatam Kitabun Nikah wal Jinayat', materiSaatIni: 'Fasal Khiyar & Riba (Hal. 68)', ustadzPengampu: 'Ustadz Ahmad Shobirin', targetMateri: 'Kitabul Buyu\', Faraidh, Nikah, Jinayat', status: 'Sedang Berjalan', keterangan: 'Materi Bahtsul Masail dasar' },
+  { id: 'SLB-306', kelas: '3 TSANAWIYAH', tingkatan: 'Tsanawiyah', semester: 'Semester 2', namaKitab: 'Mandzumah Jazariyyah', mulai: 'Bait 1: Yaqulu Raji Afwi Rabbi', batasAkhir: 'Khatam Bait 107: Ahkamul Waqfi wal Ibtida\'', materiSaatIni: 'Bait 54: Sifatul Huruf Al-Ashliyyah', ustadzPengampu: 'Ustadz Sulaiman', targetMateri: '107 Bait Tajwid Tajridul Huruf', status: 'Sedang Berjalan', keterangan: 'Sanad tajwid santri akhir' },
+
+  // 1 ALIYAH - SEMESTER 1
+  { id: 'SLB-401', kelas: '1 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 1', namaKitab: 'Alfiyah Ibnu Malik (Bait 1 - 350)', mulai: 'Bait 1: Qola Muhammadun Huwabnu Maliki', batasAkhir: 'Bait 350: Bab Al-I\'mal wal Isytighol', materiSaatIni: 'Bait 180: Bab Isim Maushul & Shilah', ustadzPengampu: 'Ustadz Ahmad Shobirin', targetMateri: 'Muqoddimah s/d I\'rab Af\'al', status: 'Sesuai Target', keterangan: 'Ngaji malam hari ba\'da Isya\'' },
+  { id: 'SLB-402', kelas: '1 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 1', namaKitab: 'Al-Waraqat & Lubbul Ushul', mulai: 'Fasal 1: Ta\'riful Ushul wal Fiqh', batasAkhir: 'Fasal Dalilul Amr wan Nahyi', materiSaatIni: 'Fasal Al-Amru wal Khas (Hal. 22)', ustadzPengampu: 'Ustadz Adib Setiawan', targetMateri: 'Materi Ushul Fiqh: Am, Khas, Amr & Nahyi', status: 'Sesuai Target', keterangan: 'Kajian ushuliyah salafiyah' },
+  { id: 'SLB-403', kelas: '1 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 1', namaKitab: 'Al-Manzhumah Al-Baiquniyyah', mulai: 'Bait 1: Abdau bil Hamdi Musholliyan', batasAkhir: 'Khatam Bait 34: Hadits Maudhu\'', materiSaatIni: 'Bait 18: Hadits Hasan & Dhaif', ustadzPengampu: 'Ustadz Mizan Khoirul', targetMateri: '34 Bait Istilah Ilmu Hadits', status: 'Sesuai Target', keterangan: 'Target hafalan mutqin' },
+  { id: 'SLB-404', kelas: '1 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 1', namaKitab: 'Al-Faraidul Bahiyyah', mulai: 'Kaidah 1: Al-Umuuru bi Maqooshidihaa', batasAkhir: 'Kaidah 5: Al-Adatu Muhakkamatun', materiSaatIni: 'Kaidah 3: Al-Masyaqqatu Tajlibut Taisir', ustadzPengampu: 'Ustadz Yasir', targetMateri: 'Al-Qawa\'idul Khomsah Al-Kubra', status: 'Sesuai Target', keterangan: 'Kaidah ushul fiqih aplikatif' },
+  // 1 ALIYAH - SEMESTER 2
+  { id: 'SLB-405', kelas: '1 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 2', namaKitab: 'Alfiyah Ibnu Malik (Bait 351 - 700)', mulai: 'Bait 351: Bab At-Ta\'addi wal Luzum', batasAkhir: 'Bait 700: Bab At-Tamyiz wal Istitsna\'', materiSaatIni: 'Bait 480: Bab Munada & Idhafah', ustadzPengampu: 'Ustadz Ahmad Shobirin', targetMateri: 'Bab Al-I\'mal, Isim Fa\'il, Maf\'ul, Na\'at, Athaf', status: 'Sedang Berjalan', keterangan: 'Tarkib nahwu madya' },
+  { id: 'SLB-406', kelas: '1 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 2', namaKitab: 'Ghayatul Wushul Syarh Lubbil Ushul', mulai: 'Mabahitsul Kitab was Sunnah', batasAkhir: 'Mabahitsul Ijma\' wal Qiyas', materiSaatIni: 'Fasal Al-Mujmal wal Mubayyan', ustadzPengampu: 'Ustadz Adib Setiawan', targetMateri: 'Kaidah Istinbath Syar\'iyyah', status: 'Sedang Berjalan', keterangan: 'Kajian ushul fiqih mendalam' },
+
+  // 2 ALIYAH - SEMESTER 1
+  { id: 'SLB-501', kelas: '2 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 1', namaKitab: 'Tafsir Al-Jalalain (Juz 1 - 3)', mulai: 'Surah Al-Fatihah & Awal Al-Baqarah', batasAkhir: 'Akhir Surah Ali Imran (Ayat 200)', materiSaatIni: 'Surah Al-Baqarah Ayat 183 - 187 (Ayat Puasa)', ustadzPengampu: 'Ustadz Ahmad Shobirin', targetMateri: 'Surah Al-Fatihah, Al-Baqarah s/d Ali Imran', status: 'Sesuai Target', keterangan: 'Ngaji tafsir malam hari' },
+  { id: 'SLB-502', kelas: '2 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 1', namaKitab: 'Al-Jauharul Maknun', mulai: 'Bab Ilmil Ma\'ani: Al-Khabar wal Insya\'', batasAkhir: 'Bab Ilmil Badi\': Al-Muhassinat', materiSaatIni: 'Bab At-Tasybih wal Isti\'arah', ustadzPengampu: 'Ustadz Mizan Khoirul', targetMateri: 'Fan Balaghah: Ilmu Ma\'ani, Bayan, & Badi\'', status: 'Sesuai Target', keterangan: 'Membedah sastra Al-Quran' },
+  { id: 'SLB-503', kelas: '2 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 1', namaKitab: 'Fathul Wahhab bi Syarhi Manhajit Thullab', mulai: 'Kitabul Buyu\' wal Qiradh', batasAkhir: 'Kitabul Waqfi wal Washiyyah', materiSaatIni: 'Fasal Rahn & Kafalah (Hal. 82)', ustadzPengampu: 'Ustadz Yasir', targetMateri: 'Bab Buyu\', Salam, Rahn & Muamalah', status: 'Sesuai Target', keterangan: 'Kajian Fiqih tingkat tinggi' },
+  { id: 'SLB-504', kelas: '2 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 1', namaKitab: 'As-Sullamul Munauraq', mulai: 'Bait 1: Hamdan li Man Qod Akhrajan Nata-ij', batasAkhir: 'Bait 80: Bab Al-Qiyas wal Burhan', materiSaatIni: 'Bait 42: Bab Al-Kulliyyat Al-Khams', ustadzPengampu: 'Ustadz Munawar', targetMateri: 'Ilmu Mantiq: Tashawwur, Tashdiq, Qiyas', status: 'Sesuai Target', keterangan: 'Logika dialektika ushul' },
+  // 2 ALIYAH - SEMESTER 2
+  { id: 'SLB-505', kelas: '2 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 2', namaKitab: 'Tafsir Al-Jalalain (Juz 4 - 6)', mulai: 'Awal Surah An-Nisa\' (Ayat 1)', batasAkhir: 'Akhir Surah Al-Ma\'idah', materiSaatIni: 'Surah An-Nisa\' Ayat Faraidh & Mahram', ustadzPengampu: 'Ustadz Ahmad Shobirin', targetMateri: 'Surah An-Nisa\' & Al-Ma\'idah', status: 'Sedang Berjalan', keterangan: 'Kajian tafsir ayat ahkam' },
+  { id: 'SLB-506', kelas: '2 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 2', namaKitab: 'Uqudul Juman fi Ilmil Ma\'ani wal Bayan', mulai: 'Muqaddimah Ilmu Balaghah As-Suyuthi', batasAkhir: 'Bab Fashl wal Washl wal Ijaz', materiSaatIni: 'Bab Al-Qashr wal Hasyr', ustadzPengampu: 'Ustadz Mizan Khoirul', targetMateri: 'Sastra Balaghah Lanjutan Imam As-Suyuthi', status: 'Sedang Berjalan', keterangan: 'Kajian sastra Arab tingkat tinggi' },
+
+  // 3 ALIYAH - SEMESTER 1
+  { id: 'SLB-601', kelas: '3 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 1', namaKitab: 'Shahih Al-Bukhari (Musalsal)', mulai: 'Kitab Bad\'il Wahyi (Hadits 1)', batasAkhir: 'Khatam Kitabul Iman (Hadits 58)', materiSaatIni: 'Kitabul Ilmi: Bab Man Yu\'idul Hadits Tsalatsan', ustadzPengampu: 'Ustadz Yasir', targetMateri: 'Kitab Bad\'il Wahyi s/d Kitabul Iman', status: 'Sesuai Target', keterangan: 'Khataman musalsal sanad pengasuh' },
+  { id: 'SLB-602', kelas: '3 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 1', namaKitab: 'Jam\'ul Jawami\' Tajuddin As-Subki', mulai: 'Al-Kitabul Awwal: Fil Kitabi wal Bayan', batasAkhir: 'Al-Kitabut Tsani: Fis Sunnah wal Akhbar', materiSaatIni: 'Fasal Af\'alur Rasul Shallallahu \'Alaihi wa Sallam', ustadzPengampu: 'Ustadz Sulaiman', targetMateri: 'Kajian Ushul Fiqh Lanjutan & Istinbath Hukum', status: 'Sesuai Target', keterangan: 'Materi Bahtsul Masail santri senior' },
+  { id: 'SLB-603', kelas: '3 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 1', namaKitab: 'Alfiyah Ibnu Malik (Khataman Bait 700 - 1002)', mulai: 'Bait 700: Bab At-Tashghir wal Iddikhor', batasAkhir: 'Khatam Bait 1002: Tammat bi Hamdillah', materiSaatIni: 'Bait 860: Bab Al-I\'lal bil Qalbi wal Hadzf', ustadzPengampu: 'Ustadz Mizan Khoirul', targetMateri: 'Bait 700 sampai Bait 1002 Khatam', status: 'Sesuai Target', keterangan: 'Persiapan Wisuda Alfiyah Akbar' },
+  // 3 ALIYAH - SEMESTER 2
+  { id: 'SLB-604', kelas: '3 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 2', namaKitab: 'Shahih Muslim & Sunan Abi Dawud', mulai: 'Muqaddimah Shahih Muslim (Ilmu Sanad)', batasAkhir: 'Kitabul Fitan wa Asyrathis Sa\'ah', materiSaatIni: 'Kitabul Birr wash Shilah wal Adab', ustadzPengampu: 'Ustadz Yasir', targetMateri: 'Kitabul Ilmi wal Fitan & Takhrij Hadits', status: 'Sedang Berjalan', keterangan: 'Kajian Sanad Kutubussittah' },
+  { id: 'SLB-605', kelas: '3 ALIYAH', tingkatan: 'Aliyah', semester: 'Semester 2', namaKitab: 'Ihya Ulumiddin (Mukhtashar)', mulai: 'Rub\'ul Ibadat: Kitabul Ilmi wal I\'tiqad', batasAkhir: 'Rub\'ul Munjiyat: Bab Tawbah wash Shabr', materiSaatIni: 'Bab Adab Tilawatil Qur\'an wal Adzkar', ustadzPengampu: 'Ustadz Ahmad Shobirin', targetMateri: 'Rub\'ul Ibadat & Rub\'ul Muhlikat', status: 'Sedang Berjalan', keterangan: 'Tasawwuf Amali & Adab Khidmah' }
 ];
 
 export const INITIAL_SYAHRIYAH_LIST: SyahriyahRecord[] = [
@@ -862,4 +954,38 @@ export const INITIAL_IZIN_MENGAJAR_LIST: IzinMengajarRequest[] = [
     catatanAdmin: 'Menunggu konfirmasi ketersediaan ustadz pengganti',
     createdAt: '2026-09-25 07:15'
   }
+];
+
+export const INITIAL_SILABUS_LIST: SilabusMemaknaiRecord[] = [
+  // 1 TSANAWIYAH
+  { id: 'SLB-101', namaKitab: 'Nadzhom Alala Tanalul Ilma', kelas: '1 TSANAWIYAH', tingkatan: 'Tsanawiyah', mulai: '2026-07-15', batasAkhir: '2026-10-30', ustadzPengampu: 'Ustazah Fina Nikmatul Kamelia', targetMateri: 'Bait 1 - 37 (Khatam & Sah Makna Gandul)', status: 'Berjalan', keterangan: 'Khataman & Ujian Hafalan' },
+  { id: 'SLB-102', namaKitab: 'Matan Al-Ajurumiyyah (Nahwu)', kelas: '1 TSANAWIYAH', tingkatan: 'Tsanawiyah', mulai: '2026-07-20', batasAkhir: '2026-12-15', ustadzPengampu: 'Ustazah Fina Nikmatul Kamelia', targetMateri: 'Bab Kalam s/d Bab Mahfudhotil Asma', status: 'Berjalan', keterangan: 'Makna Pegon Jawa gandul' },
+  { id: 'SLB-103', namaKitab: 'Mabadi Al-Fiqhiyyah Juz 1 & 2', kelas: '1 TSANAWIYAH', tingkatan: 'Tsanawiyah', mulai: '2026-07-18', batasAkhir: '2026-11-20', ustadzPengampu: 'Ustadzah Qothrunada', targetMateri: 'Thoharoh, Wudhu, Sholat Fardhu', status: 'Berjalan', keterangan: 'Praktik ubudiyyah santri' },
+  { id: 'SLB-104', namaKitab: 'Tuhfatul Athfal (Tajwid)', kelas: '1 TSANAWIYAH', tingkatan: 'Tsanawiyah', mulai: '2026-07-25', batasAkhir: '2026-11-10', ustadzPengampu: 'Ustazah Maulida Rohmah', targetMateri: 'Hukum Nun Mati, Tanwin, Mad & Waqof', status: 'Berjalan', keterangan: 'Nadzhom tajwid dasar' },
+
+  // 2 TSANAWIYAH
+  { id: 'SLB-201', namaKitab: 'Matan Taqrib (Ghayah wat Taqrib)', kelas: '2 TSANAWIYAH', tingkatan: 'Tsanawiyah', mulai: '2026-07-15', batasAkhir: '2026-12-20', ustadzPengampu: 'Ustadz Adib Setiawan', targetMateri: 'Kitab Thoharoh s/d Kitab Shalat Jamaah', status: 'Berjalan', keterangan: 'Makna gandul tarkib fiqih' },
+  { id: 'SLB-202', namaKitab: 'Akhlaq Lil Banin Juz 2', kelas: '2 TSANAWIYAH', tingkatan: 'Tsanawiyah', mulai: '2026-07-20', batasAkhir: '2026-11-30', ustadzPengampu: 'Ustadz Yasir', targetMateri: 'Adab Bergaul, Adab Guru, Orang Tua', status: 'Berjalan', keterangan: 'Pembiasaan akhlaq harian' },
+  { id: 'SLB-203', namaKitab: 'Al-Amtsilah At-Tashrifiyyah', kelas: '2 TSANAWIYAH', tingkatan: 'Tsanawiyah', mulai: '2026-07-22', batasAkhir: '2026-12-10', ustadzPengampu: 'Ustadz Ali Said', targetMateri: 'Tashrif Ushul & Furu\' Tsulasi Mujarrad', status: 'Berjalan', keterangan: 'Hafalan pola wazan shorof' },
+  { id: 'SLB-204', namaKitab: 'Qawa\'idul I\'lal', kelas: '2 TSANAWIYAH', tingkatan: 'Tsanawiyah', mulai: '2026-08-01', batasAkhir: '2026-12-15', ustadzPengampu: 'Ustadz Adib Setiawan', targetMateri: 'Kaidah I\'lal 1 - 19 Bina\' Mu\'tal', status: 'Berjalan', keterangan: 'Analisis perubahan huruf illat' },
+
+  // 3 TSANAWIYAH
+  { id: 'SLB-301', namaKitab: 'Nadzhom Al-Imrithi', kelas: '3 TSANAWIYAH', tingkatan: 'Tsanawiyah', mulai: '2026-07-15', batasAkhir: '2026-12-20', ustadzPengampu: 'Ustadz Sulaiman', targetMateri: 'Bait 1 - 254 (Lengkap Khatam)', status: 'Berjalan', keterangan: 'Syarat wajib kelulusan Tsanawiyah' },
+  { id: 'SLB-302', namaKitab: 'Fathul Qorib Al-Mujib (Lanjutan)', kelas: '3 TSANAWIYAH', tingkatan: 'Tsanawiyah', mulai: '2026-07-18', batasAkhir: '2026-12-22', ustadzPengampu: 'Ustadz Ahmad Shobirin', targetMateri: 'Bab Shiyam, Zakat, Haji & Muamalat', status: 'Berjalan', keterangan: 'Koreksian kitab & uji baca' },
+  { id: 'SLB-303', namaKitab: 'Bulughul Maram min Adillatil Ahkam', kelas: '3 TSANAWIYAH', tingkatan: 'Tsanawiyah', mulai: '2026-07-20', batasAkhir: '2026-12-15', ustadzPengampu: 'Ustadz Mizan Khoirul', targetMateri: 'Kitab Thoharoh s/d Kitab Shalat', status: 'Berjalan', keterangan: 'Takhrij & makna hadits ahkam' },
+
+  // 1 ALIYAH
+  { id: 'SLB-401', namaKitab: 'Al-Manzhumah Al-Baiquniyyah (Mustholah)', kelas: '1 ALIYAH', tingkatan: 'Aliyah', mulai: '2026-07-15', batasAkhir: '2026-11-20', ustadzPengampu: 'Ustadz Mizan Khoirul', targetMateri: '34 Bait Nadzhom Mustholahul Hadits', status: 'Berjalan', keterangan: 'Kaidah hadits shahih & dhaif' },
+  { id: 'SLB-402', namaKitab: 'Alfiyah Ibnu Malik (Juz 1)', kelas: '1 ALIYAH', tingkatan: 'Aliyah', mulai: '2026-07-18', batasAkhir: '2026-12-25', ustadzPengampu: 'Ustadz Ahmad Shobirin', targetMateri: 'Muqoddimah s/d Bab Af\'alul Muqorobah', status: 'Berjalan', keterangan: 'Setoran bait & pemaknaan' },
+  { id: 'SLB-403', namaKitab: 'Al-Waraqat fi Ushulil Fiqh', kelas: '1 ALIYAH', tingkatan: 'Aliyah', mulai: '2026-07-20', batasAkhir: '2026-11-30', ustadzPengampu: 'Ustadz Adib Setiawan', targetMateri: 'Aqsamul Kalam, Amr Nahi, Mujmal Mubayyan', status: 'Berjalan', keterangan: 'Dasar ushul fiqih Syafi\'iyyah' },
+
+  // 2 ALIYAH
+  { id: 'SLB-501', namaKitab: 'Tafsir Al-Jalalain', kelas: '2 ALIYAH', tingkatan: 'Aliyah', mulai: '2026-07-15', batasAkhir: '2026-12-25', ustadzPengampu: 'Ustadz Ahmad Shobirin', targetMateri: 'Juz 1 s/d Juz 3 (Surah Al-Baqarah)', status: 'Berjalan', keterangan: 'I\'rob & asbabun nuzul' },
+  { id: 'SLB-502', namaKitab: 'Al-Jauharul Maknun (Balaghah)', kelas: '2 ALIYAH', tingkatan: 'Aliyah', mulai: '2026-07-18', batasAkhir: '2026-12-15', ustadzPengampu: 'Ustadz Mizan Khoirul', targetMateri: 'Fan Ilmu Ma\'ani, Bayan, & Badi\'', status: 'Berjalan', keterangan: 'Sastra & retorika arab salaf' },
+  { id: 'SLB-503', namaKitab: 'Fathul Wahhab bi Syarhi Manhajit Thullab', kelas: '2 ALIYAH', tingkatan: 'Aliyah', mulai: '2026-07-20', batasAkhir: '2026-12-28', ustadzPengampu: 'Ustadz Yasir', targetMateri: 'Bab Buyu\', Salam, Rahn, Syirkah', status: 'Berjalan', keterangan: 'Fiqih muamalat turots tingkat tinggi' },
+
+  // 3 ALIYAH
+  { id: 'SLB-601', namaKitab: 'Shahih Al-Bukhari (Khataman Musalsal)', kelas: '3 ALIYAH', tingkatan: 'Aliyah', mulai: '2026-07-15', batasAkhir: '2026-12-28', ustadzPengampu: 'Ustadz Yasir', targetMateri: 'Kitab Bad\'il Wahyi s/d Kitabul Iman', status: 'Berjalan', keterangan: 'Sanad muttashil hadits shohih' },
+  { id: 'SLB-602', namaKitab: 'Jam\'ul Jawami\' Tajuddin As-Subki', kelas: '3 ALIYAH', tingkatan: 'Aliyah', mulai: '2026-07-18', batasAkhir: '2026-12-25', ustadzPengampu: 'Ustadz Sulaiman', targetMateri: 'Kitabul Kitab, Sunnah, Ijma\', Qiyas', status: 'Berjalan', keterangan: 'Kaidah istinbath hukum ushuliyyah' },
+  { id: 'SLB-603', namaKitab: 'Alfiyah Ibnu Malik (Khataman Bait 1002)', kelas: '3 ALIYAH', tingkatan: 'Aliyah', mulai: '2026-07-15', batasAkhir: '2026-12-30', ustadzPengampu: 'Ustadz Mizan Khoirul', targetMateri: 'Bait 501 s/d 1002 (Khataman & Ijazahan)', status: 'Berjalan', keterangan: 'Wisuda kelulusan Aliyah diniyah' }
 ];

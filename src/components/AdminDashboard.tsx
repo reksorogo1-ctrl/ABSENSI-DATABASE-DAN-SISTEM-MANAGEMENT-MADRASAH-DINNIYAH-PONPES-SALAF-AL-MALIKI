@@ -6,7 +6,8 @@ import {
   Settings2, ToggleLeft, ToggleRight, Sparkles, Check, PieChart as PieChartIcon,
   Type, Megaphone, Copy, FileSpreadsheet, Newspaper, CheckCheck, RotateCcw,
   CreditCard, Wallet, AlertTriangle, Phone, MessageCircle, ArrowDownLeft, ArrowUpRight, Trash2, GraduationCap,
-  Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload, Play
+  Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload, Play,
+  ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine
 } from 'lucide-react';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Legend, 
@@ -19,11 +20,16 @@ import {
   Santri, AbsensiSantriRecord, AbsensiGuruRecord, JadwalPelajaran, 
   GuruPengajar, NadzhomRecord, NilaiUjianRecord, AppSettings, DashboardStats,
   SyahriyahRecord, UangSakuRecord, KurikulumKitabRecord,
-  Pengurus, KalenderAkademikEvent, UjianSantriRecord, IzinMengajarRequest
+  Pengurus, KalenderAkademikEvent, UjianSantriRecord, IzinMengajarRequest,
+  SilabusMemaknaiRecord
 } from '../types';
 import { 
   saveVideoFile, saveVideoUrl, resetVideoToDefault, resolveActiveVideo, type VideoInfo 
 } from '../lib/videoStorage';
+import { 
+  checkPresensiSchedule, getServerTime, subscribeAttendanceUpdates, 
+  RealtimeAttendancePayload, OFFICIAL_SCHEDULES 
+} from '../serverTime';
 
 interface AdminDashboardProps {
   settings: AppSettings;
@@ -38,6 +44,7 @@ interface AdminDashboardProps {
   syahriyahList?: SyahriyahRecord[];
   uangSakuList?: UangSakuRecord[];
   kurikulumList?: KurikulumKitabRecord[];
+  silabusList?: SilabusMemaknaiRecord[];
   pengurusList?: Pengurus[];
   kalenderList?: KalenderAkademikEvent[];
   ujianList?: UjianSantriRecord[];
@@ -55,6 +62,7 @@ interface AdminDashboardProps {
   onSaveAbsensiGuru: (records: AbsensiGuruRecord[]) => void;
   onSaveNewSantri: (newSantri: Santri) => void;
   onSaveNewGuru: (newGuru: GuruPengajar) => void;
+  onDeleteGuru?: (idOrName: string) => void;
   onSaveNewJadwal: (newJadwal: JadwalPelajaran) => void;
   onSaveNadzhom: (nadzhom: NadzhomRecord) => void;
   onSaveNilai: (nilai: NilaiUjianRecord) => void;
@@ -65,6 +73,8 @@ interface AdminDashboardProps {
   onSaveUangSaku?: (record: UangSakuRecord) => void;
   onSaveKurikulum?: (record: KurikulumKitabRecord) => void;
   onDeleteKurikulum?: (id: string) => void;
+  onSaveSilabus?: (record: SilabusMemaknaiRecord) => void;
+  onDeleteSilabus?: (id: string) => void;
   onSavePengurus?: (pengurus: Pengurus) => void;
   onUpdatePengurus?: (pengurus: Pengurus) => void;
   onSaveKalender?: (event: KalenderAkademikEvent) => void;
@@ -72,6 +82,11 @@ interface AdminDashboardProps {
   onSaveUjianSantri?: (record: UjianSantriRecord) => void;
   onApproveIzinMengajar?: (id: string, ustadzPengganti: string, status: 'Disetujui' | 'Ditolak', catatan?: string) => void;
   onDeleteSantri?: (id: string) => void;
+  sheetsService?: any;
+  isGoogleConnected?: boolean;
+  setIsGoogleConnected?: (connected: boolean) => void;
+  onOpenSheetsModal?: () => void;
+  onDataImported?: (data: any) => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -87,6 +102,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   syahriyahList = [],
   uangSakuList = [],
   kurikulumList = [],
+  silabusList = [],
   pengurusList = [],
   kalenderList = [],
   ujianList = [],
@@ -98,10 +114,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   isSyncing,
   onSyncWithSheets,
   onLogout,
+  sheetsService,
+  isGoogleConnected = false,
+  setIsGoogleConnected,
+  onOpenSheetsModal,
+  onDataImported,
   onSaveAbsensiSantri,
   onSaveAbsensiGuru,
   onSaveNewSantri,
   onSaveNewGuru,
+  onDeleteGuru,
   onSaveNewJadwal,
   onSaveNadzhom,
   onSaveNilai,
@@ -112,6 +134,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onSaveUangSaku,
   onSaveKurikulum,
   onDeleteKurikulum,
+  onSaveSilabus,
+  onDeleteSilabus,
   onSavePengurus,
   onUpdatePengurus,
   onSaveKalender,
@@ -149,21 +173,161 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // State Status Absensi Guru per item
   const [guruAbsensiState, setGuruAbsensiState] = useState<Record<string, { status: 'Hadir' | 'Terlambat' | 'Izin' | 'Alpha', catatan: string }>>({});
 
-  // Rekapan Absensi Guru (Tersimpan lokal & sheets)
-  const [rekapGuruLog, setRekapGuruLog] = useState<AbsensiGuruRecord[]>([
-    { tanggal: '2026-09-22', nama: 'Ustazah Fina Nikmatul Kamelia', mapel: 'ALALA', kelas: '1 TSANAWIYAH', status: 'Hadir', catatan: 'Bab Niat Tholabul Ilmi', hari: 'SABTU', jamKe: 1, waktu: '08.30 - 09.45' },
-    { tanggal: '2026-09-22', nama: 'Ustazah Maulida Rohmah', mapel: 'TAJWID', kelas: '1 TSANAWIYAH', status: 'Hadir', catatan: 'Makharijul Huruf', hari: 'AHAD', jamKe: 1, waktu: '08.30 - 09.45' },
-    { tanggal: '2026-09-22', nama: 'Ustadz Yasir', mapel: 'AKHLAQ', kelas: '2 TSANAWIYAH', status: 'Hadir', catatan: 'Adab kepada ustadz', hari: 'SABTU', jamKe: 2, waktu: '10.15 - 11.30' },
-    { tanggal: '2026-09-22', nama: 'Ustadz Adib Setiawan', mapel: 'FIQIH', kelas: '2 TSANAWIYAH', status: 'Terlambat', catatan: 'Terlambat 10 menit karena udzur', hari: 'SABTU', jamKe: 1, waktu: '08.30 - 09.45' },
-    { tanggal: '2026-09-22', nama: 'Ustadz Ahmad Shobirin', mapel: 'NAHWU JURUMIYYAH', kelas: '2 TSANAWIYAH', status: 'Hadir', catatan: 'Bab Kalam', hari: 'SELASA', jamKe: 1, waktu: '08.30 - 09.45' }
-  ]);
+  // Jam Server Real-Time Ticker untuk Admin Dashboard
+  const [adminServerClock, setAdminServerClock] = useState<Date>(getServerTime());
+  useEffect(() => {
+    const timer = setInterval(() => setAdminServerClock(getServerTime()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const adminPresensiStatus = useMemo(() => {
+    return checkPresensiSchedule(adminServerClock, {
+      bypassActive: settings.bypass_jam_presensi_testing
+    });
+  }, [adminServerClock, settings.bypass_jam_presensi_testing]);
+
+  // Alert Notifikasi Masuk Real-Time dari Pengurus
+  const [realtimeAlert, setRealtimeAlert] = useState<{
+    type: 'guru' | 'santri';
+    title: string;
+    detail: string;
+    time: string;
+  } | null>(null);
+
+  // Subscribe ke siaran presensi real-time dari Pengurus Dashboard
+  useEffect(() => {
+    const unsub = subscribeAttendanceUpdates((payload) => {
+      const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      if (payload.type === 'guru' && payload.records?.length) {
+        const first = payload.records[0];
+        setRealtimeAlert({
+          type: 'guru',
+          title: `Presensi Ustadz Baru Masuk: ${first.nama}`,
+          detail: `Status: ${first.status.toUpperCase()} (${first.catatan || first.waktu}) • Kelas: ${first.kelas}`,
+          time: `${timeStr} WIB`
+        });
+      } else if (payload.type === 'santri' && payload.records?.length) {
+        setRealtimeAlert({
+          type: 'santri',
+          title: `Presensi Santri Diperbarui (${payload.records.length} Santri)`,
+          detail: `Diinput manual oleh Pengurus (${payload.sender || 'Wali Kelas'}). Data langsung terupdate ke Fitur Absensi Santri.`,
+          time: `${timeStr} WIB`
+        });
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Rekapan Absensi Guru & Santri (Tersimpan dari Simpan Rekap & Ganti Hari)
+  const [rekapGuruLog, setRekapGuruLog] = useState<AbsensiGuruRecord[]>(() => {
+    const saved = localStorage.getItem('sim_rekap_guru_harian_history');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [rekapSantriLog, setRekapSantriLog] = useState<AbsensiSantriRecord[]>(() => {
+    const saved = localStorage.getItem('sim_rekap_santri_harian_history');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Sinkronisasi realtime riwayat rekapan saat ada reset / update
+  useEffect(() => {
+    const handleStorageChange = () => {
+      try {
+        const savedG = localStorage.getItem('sim_rekap_guru_harian_history');
+        if (savedG) setRekapGuruLog(JSON.parse(savedG));
+        const savedS = localStorage.getItem('sim_rekap_santri_harian_history');
+        if (savedS) setRekapSantriLog(JSON.parse(savedS));
+      } catch {}
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Gabungkan absensiGuruList (live real-time dari props/pengurus) dengan rekapGuruLog
+  const combinedGuruLog = useMemo(() => {
+    const map = new Map<string, AbsensiGuruRecord>();
+    // Tambahkan absensiGuruList live real-time
+    (absensiGuruList || []).forEach(item => {
+      const key = `${item.tanggal}_${item.nama}_${item.kelas}_${item.jamKe}`;
+      map.set(key, item);
+    });
+    // Tambahkan rekapGuruLog
+    rekapGuruLog.forEach(item => {
+      const key = `${item.tanggal}_${item.nama}_${item.kelas}_${item.jamKe}`;
+      if (!map.has(key)) {
+        map.set(key, item);
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => {
+      return (b.tanggal || '').localeCompare(a.tanggal || '');
+    });
+  }, [absensiGuruList, rekapGuruLog]);
 
   // State Pilihan Bulan untuk Rekapitulasi Bulanan (Tanggal 1 - 30)
   const [selectedBulanSantri, setSelectedBulanSantri] = useState<string>('September 2026');
   const [selectedBulanGuru, setSelectedBulanGuru] = useState<string>('September 2026');
 
-  // Filter untuk Jadwal tab
+  // Filter untuk Jadwal tab - Terpisah per Tingkatan Tsanawiyah & Aliyah
+  const [jadwalTsAngkatan, setJadwalTsAngkatan] = useState<string>('SEMUA');
+  const [jadwalTsDay, setJadwalTsDay] = useState<string>('SEMUA');
+  const [jadwalAlAngkatan, setJadwalAlAngkatan] = useState<string>('SEMUA');
+  const [jadwalAlDay, setJadwalAlDay] = useState<string>('SEMUA');
+  const [silabusAngkatanFilter, setSilabusAngkatanFilter] = useState<string>('SEMUA');
   const [jadwalActiveAngkatan, setJadwalActiveAngkatan] = useState<string>('SEMUA');
+  const [jadwalSelectedDay, setJadwalSelectedDay] = useState<string>('SEMUA');
+
+  // State untuk Jadwal Pelajaran (Tambah / Edit Jadwal)
+  const [showAddJadwalModal, setShowAddJadwalModal] = useState<boolean>(false);
+  const [editingJadwal, setEditingJadwal] = useState<JadwalPelajaran | null>(null);
+  const [jadwalForm, setJadwalForm] = useState<{
+    id?: string;
+    hari: string;
+    jamKe: number;
+    waktu: string;
+    kelas: string;
+    mapel: string;
+    nama: string;
+    tingkatan: 'Tsanawiyah' | 'Aliyah';
+  }>({
+    hari: 'SABTU',
+    jamKe: 1,
+    waktu: '13.30 - 14.15 WIB',
+    kelas: '1 TSANAWIYAH',
+    mapel: '',
+    nama: guruList[0]?.nama || '',
+    tingkatan: 'Tsanawiyah'
+  });
+
+  // State untuk Silabus Memaknai
+  const [silabusSemesterTab, setSilabusSemesterTab] = useState<'Semester 1' | 'Semester 2'>('Semester 1');
+  const [showAddSilabusModal, setShowAddSilabusModal] = useState<boolean>(false);
+  const [editingSilabus, setEditingSilabus] = useState<SilabusMemaknaiRecord | null>(null);
+  const [silabusForm, setSilabusForm] = useState<{
+    id: string;
+    namaKitab: string;
+    kelas: string;
+    tingkatan: 'Tsanawiyah' | 'Aliyah';
+    semester: 'Semester 1' | 'Semester 2';
+    mulai: string;
+    batasAkhir: string;
+    materiSaatIni: string;
+    ustadzPengampu: string;
+    targetMateri: string;
+    status: string;
+    keterangan: string;
+  }>({
+    id: '',
+    namaKitab: '',
+    kelas: '1 TSANAWIYAH',
+    tingkatan: 'Tsanawiyah',
+    semester: 'Semester 1',
+    mulai: '',
+    batasAkhir: '',
+    materiSaatIni: '',
+    ustadzPengampu: guruList[0]?.nama || 'Ustazah Fina Nikmatul Kamelia',
+    targetMateri: '',
+    status: 'Sesuai Target',
+    keterangan: ''
+  });
 
   // Filter untuk Data Guru & Santri tab (PER ANGKATAN)
   const [selectedAngkatanGuru, setSelectedAngkatanGuru] = useState<string>('1 TSANAWIYAH');
@@ -233,8 +397,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Kalkulasi Rekapan Bulanan Guru (Tanggal 1 sampai 30)
   const rekapBulananGuru = useMemo(() => {
     return guruList.map((guru, index) => {
-      // Cari rekap guru dari log dan jadwal
-      const logs = rekapGuruLog.filter(l => l.nama.toLowerCase() === guru.nama.toLowerCase());
+      // Cari rekap guru dari log dan jadwal (menggunakan combinedGuruLog yang terhubung live real-time)
+      const logs = combinedGuruLog.filter(l => l.nama.toLowerCase() === guru.nama.toLowerCase());
       const actualHadir = logs.filter(l => l.status === 'Hadir').length;
       const actualTerlambat = logs.filter(l => l.status === 'Terlambat').length;
       const actualIzin = logs.filter(l => l.status === 'Izin').length;
@@ -262,7 +426,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         predikat: persentase >= 95 ? 'Sangat Teladan' : persentase >= 85 ? 'Tertib' : 'Evaluasi Disiplin'
       };
     });
-  }, [guruList, rekapGuruLog]);
+  }, [guruList, combinedGuruLog]);
 
   // Helper Ekspor Data (Google Sheets / CSV, Microsoft Word, dan Print / PDF)
   const downloadCSV = (filename: string, headers: string[], rows: (string | number)[][]) => {
@@ -677,6 +841,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     password: ''
   });
 
+  // State untuk Tab Integrasi Google Sheets
+  const [sheetsPreviewTab, setSheetsPreviewTab] = useState<'santri' | 'guru' | 'absensi-guru' | 'absensi-santri' | 'jadwal' | 'nadzhom' | 'nilai' | 'syahriyah'>('absensi-guru');
+  const [sheetsInputId, setSheetsInputId] = useState<string>(spreadsheetId);
+  const [sheetsStatusMsg, setSheetsStatusMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [isSheetsBusy, setIsSheetsBusy] = useState<boolean>(false);
+  const [sheetsConfirmModal, setSheetsConfirmModal] = useState<{
+    isOpen: boolean;
+    action: 'exportAll' | 'importAll' | 'createSheet' | 'exportTab';
+    tabName?: string;
+    title: string;
+    desc: string;
+  }>({
+    isOpen: false,
+    action: 'exportAll',
+    title: '',
+    desc: ''
+  });
+
   // State untuk Edit Profil Anak & Password Wali (NIS) di Option Panel
   const [selectedProfileSantriId, setSelectedProfileSantriId] = useState<string>(
     santriList[0]?.id || 'S-1001'
@@ -967,8 +1149,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <aside className="build-sidebar w-full md:w-72 bg-[#052216]/95 border-r border-[#d4af37]/30 p-5 flex flex-col justify-between shrink-0 shadow-2xl backdrop-blur-md">
         <div className="space-y-6">
           {/* Logo & Header */}
-          <div className="flex flex-col gap-3 pb-4 border-b border-[#d4af37]/20">
-            <BrandLogos settings={settings} size="sm" gap="gap-2.5" idPrefix="admin-header" />
+          <div className="flex items-center gap-3 pb-4 border-b border-[#d4af37]/20">
+            <BrandLogos settings={settings} size="sm" idPrefix="admin-header" />
             <div className="overflow-hidden">
               <h2 className="font-bold text-sm text-[#d4af37] truncate uppercase tracking-wider font-serif">
                 {settings.nama_pondok}
@@ -992,6 +1174,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               { id: 'santri', label: settings.text_santri_title || 'Data Santri & Foto', icon: Users },
               { id: 'nadzhom', label: 'Setoran Nadzhom', icon: BookOpen },
               { id: 'nilai', label: 'Nilai Ujian', icon: Award },
+              { id: 'google-sheets', label: 'Google Sheets & Drive', icon: FileSpreadsheet, badge: isGoogleConnected ? 'Sync' : 'Cloud' },
               { id: 'pengaturan', label: 'Option Panel (Pusat Kontrol)', icon: Sliders, badge: 'Password' }
             ].map(tab => {
               const Icon = tab.icon;
@@ -1047,6 +1230,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
+        {/* BANNER NOTIFIKASI PRESENSI REAL-TIME DARI PENGURUS */}
+        {realtimeAlert && (
+          <div className="card-3d-glass rounded-2xl p-4 border-2 border-emerald-400 bg-gradient-to-r from-emerald-950/95 via-[#062417] to-emerald-950/95 shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-pulse">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500 text-black flex items-center justify-center font-black shadow-lg shrink-0">
+                <Sparkles className="w-5 h-5 text-black" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-emerald-300 uppercase tracking-wider">
+                    {realtimeAlert.title}
+                  </span>
+                  <span className="text-[10px] text-amber-300 font-mono bg-black/60 px-2 py-0.5 rounded-full border border-amber-500/40">
+                    {realtimeAlert.time}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-black font-extrabold text-[9px] uppercase tracking-wider">
+                    Live Real-Time
+                  </span>
+                </div>
+                <p className="text-xs text-white mt-0.5 font-medium">
+                  {realtimeAlert.detail}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-center">
+              <button
+                onClick={() => {
+                  setActiveTab(realtimeAlert.type === 'guru' ? 'absensi-guru' : 'absensi-santri');
+                  setRealtimeAlert(null);
+                }}
+                className="btn-3d-gold px-3.5 py-1.5 rounded-xl text-black font-extrabold text-xs whitespace-nowrap shadow"
+              >
+                Buka Fitur {realtimeAlert.type === 'guru' ? 'Absensi Ustadz' : 'Absensi Santri'}
+              </button>
+              <button
+                onClick={() => setRealtimeAlert(null)}
+                className="p-1.5 rounded-xl hover:bg-emerald-900 text-slate-300 hover:text-white transition"
+                title="Tutup Notifikasi"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Top Header - 3D Luxury Beveled Banner (Semua Teks Bisa Diatur via Option Panel) */}
         <header className="build-header header-3d-banner rounded-2xl p-5 backdrop-blur flex flex-col md:flex-row justify-between items-center gap-4">
           <div>
@@ -1060,6 +1288,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           <div className="flex items-center space-x-3 text-right">
+            <button
+              onClick={() => onOpenSheetsModal ? onOpenSheetsModal() : setActiveTab('google-sheets')}
+              className="px-3.5 py-2 rounded-xl bg-[#031c10] border border-[#d4af37]/60 text-xs font-bold text-[#f3e5ab] flex items-center gap-2 hover:bg-[#062c1b] transition shadow"
+              title="Kelola Google Sheets & Drive"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+              <span>Google Sheets</span>
+              <span className={`w-2 h-2 rounded-full ${isGoogleConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            </button>
+
             <button
               onClick={() => setActiveTab('pengaturan')}
               className="btn-3d-gold px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center gap-2"
@@ -2710,6 +2948,94 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
+            {/* REAL-TIME FEED PRESENSI SANTRI: INPUT MANUAL PENGURUS & WALI KELAS */}
+            <div className="card-3d-glass rounded-2xl p-5 border-2 border-emerald-500/50 bg-[#031c12]/90 space-y-3.5 shadow-xl">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-[#d4af37]/25">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#0b3824] border-2 border-emerald-400 flex items-center justify-center text-emerald-300 shadow">
+                    <UserCheck className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm sm:text-base font-extrabold text-white text-gold-3d">
+                        Monitoring Real-Time Presensi Santri (Input Manual Pengurus)
+                      </h4>
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                        <span>Live Sync Terhubung</span>
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-emerald-200 mt-0.5">
+                      Setiap absensi santri yang diinput dan disimpan melalui Dashboard Pengurus (Wali Kelas / Asatidz) otomatis langsung masuk ke sini secara real-time.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1.5 rounded-xl bg-black/60 border border-[#d4af37]/40 text-xs font-mono text-[#f3e5ab] font-bold">
+                    {(absensiSantriList || []).length} Presensi Santri Masuk
+                  </span>
+                </div>
+              </div>
+
+              {/* Tabel Feed Real-Time Santri Terbaru */}
+              {(absensiSantriList && absensiSantriList.length > 0) ? (
+                <div className="overflow-x-auto rounded-xl border border-[#d4af37]/20">
+                  <table className="w-full min-w-[700px] text-left text-xs">
+                    <thead className="bg-[#052216] text-[#d4af37]">
+                      <tr>
+                        <th className="p-2.5 w-24">TANGGAL</th>
+                        <th className="p-2.5">NAMA SANTRI & NIS</th>
+                        <th className="p-2.5 w-32">ANGKATAN</th>
+                        <th className="p-2.5 w-28 text-center">STATUS</th>
+                        <th className="p-2.5">KETERANGAN / SUMBER INPUT</th>
+                        <th className="p-2.5 w-28 text-center">SINKRONISASI</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
+                      {absensiSantriList.slice(0, 8).map((rec, i) => (
+                        <tr key={i} className="hover:bg-[#d4af37]/5 transition">
+                          <td className="p-2.5 font-mono text-emerald-300 font-bold">{rec.tanggal}</td>
+                          <td className="p-2.5 font-bold text-white">
+                            <span>{rec.nama}</span>
+                            {rec.idSantri && (
+                              <span className="text-[10px] text-slate-400 font-mono block">NIS: {rec.idSantri}</span>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-emerald-200 font-semibold">{rec.kelas}</td>
+                          <td className="p-2.5 text-center">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold inline-block border ${
+                              rec.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50' :
+                              rec.status === 'Izin' ? 'bg-amber-950 text-amber-300 border-amber-500/50' :
+                              rec.status === 'Sakit' ? 'bg-blue-950 text-blue-300 border-blue-500/50' :
+                              'bg-red-950 text-red-300 border-red-500/50'
+                            }`}>
+                              {rec.status === 'Hadir' && '✓ Hadir'}
+                              {rec.status === 'Izin' && '✉ Izin'}
+                              {rec.status === 'Sakit' && '🏥 Sakit'}
+                              {rec.status === 'Alpha' && '✗ Alpha'}
+                            </span>
+                          </td>
+                          <td className="p-2.5 text-slate-300 text-[11px] italic">
+                            {rec.keterangan || 'Presensi otomatis/manual'}
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold font-mono">
+                              ✓ Real-Time
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-black/40 text-center text-xs text-slate-400">
+                  Belum ada presensi santri yang diinput hari ini. Pengurus/Wali Kelas dapat menginput presensi melalui Dashboard Pengurus.
+                </div>
+              )}
+            </div>
+
             {/* List by Angkatan */}
             <div className="space-y-6">
               {classList.map(kls => {
@@ -2905,6 +3231,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
+            {/* BANNER VERIFIKASI JAM SERVER REAL-TIME (TSANAWIYAH & ALIYAH) */}
+            <div className="card-3d-glass rounded-2xl p-4 border border-[#d4af37]/40 bg-[#031c12]/90 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-center space-x-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-[#0b3824] border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow shrink-0">
+                  <Clock className="w-6 h-6 text-[#d4af37]" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs sm:text-sm font-extrabold text-white text-gold-3d">
+                      Pengecekan Waktu Jam Server Real-Time Presensi
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 ${
+                      adminPresensiStatus.isActive
+                        ? adminPresensiStatus.status === 'Terlambat'
+                          ? 'bg-amber-950 text-amber-300 border-amber-500/50'
+                          : 'bg-emerald-950 text-emerald-300 border-emerald-500/50'
+                        : 'bg-black/60 text-slate-400 border-slate-700'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${adminPresensiStatus.isActive ? 'bg-emerald-400 animate-ping' : 'bg-slate-500'}`} />
+                      <span>{adminPresensiStatus.isActive ? `Sesi ${adminPresensiStatus.tingkat} Aktif (${adminPresensiStatus.status})` : 'Di Luar Jadwal (Tombol Nonaktif)'}</span>
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-200 mt-0.5">
+                    Jadwal Resmi: <b>TSANAWIYAH (08.00-08.30)</b> • <b>ALIYAH (19.00-19.30 & 21.00-21.30)</b>. Melewati batas awal otomatis berstatus <b>Terlambat</b>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="px-3.5 py-1.5 rounded-xl bg-black/70 border border-[#d4af37]/40 text-right">
+                  <span className="text-[9px] text-[#d4af37] font-bold block uppercase leading-none">JAM SERVER (WIB)</span>
+                  <span className="text-sm font-black text-white font-mono tracking-wider leading-none mt-1 block">
+                    {adminPresensiStatus.wibTimeStr}
+                  </span>
+                </div>
+                <div className="px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-mono font-bold">
+                  {(absensiGuruList || []).length} Presensi Ustadz Masuk
+                </div>
+              </div>
+            </div>
+
             {/* 1. PILIH KELAS / ANGKATAN */}
             <div>
               <label className="text-[11px] font-bold text-[#d4af37] uppercase tracking-wider block mb-2">
@@ -3012,7 +3379,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       .filter(j => j.kelas === guruSelectedClass && j.hari.toUpperCase() === guruSelectedDay.toUpperCase())
                       .map((item, idx) => {
                         const key = `${item.kelas}_${item.hari}_${item.jamKe}`;
-                        const current = guruAbsensiState[key] || { status: 'Hadir', catatan: 'Bab Pelajaran Berjalan' };
+                        // Cek apakah ada data presensi real-time dari absensiGuruList hari ini
+                        const liveRec = (absensiGuruList || []).find(
+                          r => r.nama.toLowerCase().trim() === item.nama.toLowerCase().trim() &&
+                               (r.jamKe ? Number(r.jamKe) === Number(item.jamKe) : true)
+                        );
+                        const current = liveRec 
+                          ? { status: liveRec.status, catatan: liveRec.catatan }
+                          : (guruAbsensiState[key] || { status: 'Hadir', catatan: 'Bab Pelajaran Berjalan' });
 
                         return (
                           <tr key={idx} className="hover:bg-[#d4af37]/5 transition">
@@ -3023,13 +3397,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </td>
                             <td className="p-3 font-mono font-bold text-white">{item.waktu}</td>
                             <td className="p-3 font-extrabold text-white text-sm">{item.mapel}</td>
-                            <td className="p-3 font-semibold text-[#d4af37]">{item.nama}</td>
+                            <td className="p-3 font-semibold text-[#d4af37]">
+                              <span>{item.nama}</span>
+                              {liveRec && (
+                                <span className="text-[9px] text-emerald-400 font-mono block">
+                                  🟢 Presensi Terkoneksi
+                                </span>
+                              )}
+                            </td>
                             <td className="p-3 text-center">
                               <span className={`inline-block px-3 py-1.5 rounded-lg text-xs font-bold border shadow ${
                                 current.status === 'Hadir'
                                   ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50'
                                   : current.status === 'Terlambat'
-                                  ? 'bg-orange-950 text-orange-300 border-orange-500/50'
+                                  ? 'bg-orange-950 text-orange-300 border-orange-500/50 animate-pulse'
                                   : current.status === 'Izin'
                                   ? 'bg-amber-950 text-amber-300 border-amber-500/50'
                                   : 'bg-red-950 text-red-300 border-red-500/50'
@@ -3163,7 +3544,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </p>
                 </div>
                 <span className="text-xs text-emerald-300 font-mono">
-                  {rekapGuruLog.length} Rekor Presensi
+                  {combinedGuruLog.length} Rekor Presensi (Real-Time Terkoneksi)
                 </span>
               </div>
 
@@ -3181,26 +3562,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10">
-                    {rekapGuruLog.slice(0, 10).map((r, i) => (
-                      <tr key={i} className="hover:bg-[#d4af37]/5 transition">
-                        <td className="p-3 font-mono text-emerald-300">{r.tanggal}</td>
-                        <td className="p-3 font-bold text-white">{r.nama}</td>
-                        <td className="p-3 text-emerald-200">{r.mapel}</td>
-                        <td className="p-3 text-[#d4af37] font-semibold">{r.kelas}</td>
-                        <td className="p-3 text-[11px] text-emerald-300/80">{r.hari} (Jam {r.jamKe})</td>
-                        <td className="p-3 text-center">
-                          <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold ${
-                            r.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40' :
-                            r.status === 'Terlambat' ? 'bg-orange-950 text-orange-300 border border-orange-500/40' :
-                            r.status === 'Izin' ? 'bg-amber-950 text-amber-300 border border-amber-500/40' :
-                            'bg-red-950 text-red-300 border border-red-500/40'
-                          }`}>
-                            {r.status}
-                          </span>
-                        </td>
-                        <td className="p-3 text-emerald-100">{r.catatan || '-'}</td>
-                      </tr>
-                    ))}
+                    {combinedGuruLog.slice(0, 20).map((r, i) => {
+                      const isTodayRecord = r.tanggal === adminPresensiStatus.todayIso;
+                      return (
+                        <tr key={i} className="hover:bg-[#d4af37]/5 transition">
+                          <td className="p-3 font-mono text-emerald-300 font-bold">
+                            <span>{r.tanggal}</span>
+                            {isTodayRecord && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono block w-fit mt-0.5">
+                                • Hari Ini
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 font-bold text-white">
+                            <span>{r.nama}</span>
+                            {isTodayRecord && (
+                              <span className="text-[9px] text-[#d4af37] font-mono block">
+                                🟢 Real-Time Synced
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-emerald-200">{r.mapel}</td>
+                          <td className="p-3 text-[#d4af37] font-semibold">{r.kelas}</td>
+                          <td className="p-3 text-[11px] text-emerald-300/80">{r.hari} (Jam {r.jamKe})</td>
+                          <td className="p-3 text-center">
+                            <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold ${
+                              r.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40' :
+                              r.status === 'Terlambat' ? 'bg-orange-950 text-orange-300 border border-orange-500/40 animate-pulse' :
+                              r.status === 'Izin' ? 'bg-amber-950 text-amber-300 border border-amber-500/40' :
+                              'bg-red-950 text-red-300 border border-red-500/40'
+                            }`}>
+                              {r.status === 'Terlambat' ? '⏱ Terlambat' : r.status === 'Hadir' ? '✓ Hadir' : r.status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-emerald-100">{r.catatan || '-'}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -3208,79 +3606,194 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 4: JADWAL PELAJARAN (MEMANJANG) & KURIKULUM PER ANGKATAN */}
+        {/* TAB 4: JADWAL PELAJARAN (2 TINGKATAN: TSANAWIYAH & ALIYAH) & TABEL SILABUS MEMAKNAI */}
         {activeTab === 'jadwal' && (
-          <div className="space-y-6">
-            {/* 1. TABEL JADWAL PELAJARAN MADRASAH (DIBUAT MEMANJANG SAJA) */}
-            <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-5">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[#d4af37]/20">
-                <div>
-                  <h3 className="text-lg font-bold text-[#d4af37] text-gold-3d flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-[#d4af37]" />
-                    <span>{settings.text_jadwal_title || 'Jadwal Pelajaran Madrasah Diniyah'}</span>
-                  </h3>
-                  <p className="text-xs text-emerald-200/80 mt-0.5">
-                    Tabel alokasi jam mengajar diniyah format memanjang horizontal terstruktur per angkatan.
-                  </p>
+          <div className="space-y-8">
+            {/* 1. KONTROL UTAMA: HEADER JADWAL & TOMBOL AKSI */}
+            <div className="card-3d rounded-3xl p-6 backdrop-blur space-y-4 border-2 border-[#d4af37]/40 shadow-2xl bg-gradient-to-br from-[#031c11] via-[#052919] to-[#02130c]">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-[#0b422a] border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow-xl">
+                    <Calendar className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-white text-gold-3d flex items-center gap-2">
+                      <span>{settings.text_jadwal_title || 'Jadwal Pelajaran Madrasah Diniyah'}</span>
+                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#d4af37] text-black font-extrabold uppercase font-sans">
+                        Salafiyah
+                      </span>
+                    </h3>
+                    <p className="text-xs text-emerald-200 mt-1">
+                      Jadwal terpisah per tingkatan: Tingkatan Tsanawiyah (Sesi Pagi/Siang) dan Tingkatan Aliyah (Sesi Malam), tersinkronisasi dengan silabus memaknai kitab kuning.
+                    </p>
+                  </div>
                 </div>
 
-                {/* Filter Angkatan Jadwal */}
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap items-center gap-2.5">
                   <button
-                    onClick={() => setJadwalActiveAngkatan('SEMUA')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                      jadwalActiveAngkatan === 'SEMUA' ? 'btn-3d-gold text-black shadow' : 'btn-3d-dark text-white'
-                    }`}
+                    onClick={() => {
+                      setJadwalForm({
+                        id: `JAD-${Date.now()}`,
+                        hari: 'SABTU',
+                        jamKe: 1,
+                        waktu: '13.30 - 14.15 WIB',
+                        kelas: '1 TSANAWIYAH',
+                        mapel: '',
+                        nama: guruList[0]?.nama || '',
+                        tingkatan: 'Tsanawiyah'
+                      });
+                      setEditingJadwal(null);
+                      setShowAddJadwalModal(true);
+                    }}
+                    className="btn-pill-gold-3d text-xs font-black shadow-lg"
                   >
-                    Semua Angkatan
+                    + Tambah Jadwal Baru
                   </button>
-                  {classList.map(kls => (
-                    <button
-                      key={kls}
-                      onClick={() => setJadwalActiveAngkatan(kls)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                        jadwalActiveAngkatan === kls ? 'btn-3d-gold text-black shadow' : 'btn-3d-dark text-white'
-                      }`}
-                    >
-                      {kls}
-                    </button>
-                  ))}
+
+                  <button
+                    onClick={() => {
+                      setSilabusForm({
+                        id: `SLB-${Date.now()}`,
+                        namaKitab: '',
+                        kelas: '1 TSANAWIYAH',
+                        tingkatan: 'Tsanawiyah',
+                        semester: silabusSemesterTab,
+                        mulai: '',
+                        batasAkhir: '',
+                        materiSaatIni: '',
+                        ustadzPengampu: guruList[0]?.nama || 'Ustazah Fina Nikmatul Kamelia',
+                        targetMateri: '',
+                        status: 'Sesuai Target',
+                        keterangan: ''
+                      });
+                      setEditingSilabus(null);
+                      setShowAddSilabusModal(true);
+                    }}
+                    className="btn-pill-gold-3d text-xs font-black shadow-lg"
+                  >
+                    + Tambah Silabus Memaknai
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* ========================================================================= */}
+            {/* 2 TABEL JADWAL: TABEL TINGKATAN TSANAWIYAH & TABEL TINGKATAN ALIYAH       */}
+            {/* ========================================================================= */}
+
+            {/* TABEL 1: TINGKATAN TSANAWIYAH (KELAS 1 - 3 TSANAWIYAH | SABTU S/D KAMIS) */}
+            <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-5 border-2 border-emerald-500/40 shadow-xl bg-[#02160d]">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-emerald-500/30">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-950 border border-emerald-400 flex items-center justify-center text-emerald-300 font-bold shadow">
+                    <GraduationCap className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-base sm:text-lg font-black text-white text-gold-3d flex items-center gap-2">
+                      <span>Tabel 1: Tingkatan Tsanawiyah (Kelas 1 s/d 3 Tsanawiyah)</span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 text-[10px] font-bold">
+                        Hari: Sabtu – Kamis
+                      </span>
+                    </h4>
+                    <p className="text-xs text-emerald-200">
+                      Jadwal pembelajaran pagi & siang madrasah diniyah salafiyah tingkat dasar (Ula).
+                    </p>
+                  </div>
+                </div>
+
+                <span className="text-xs text-emerald-300 font-mono font-bold">
+                  {jadwalList.filter(j => 
+                    j.kelas.includes('TSANAWIYAH') &&
+                    (jadwalTsAngkatan === 'SEMUA' || j.kelas === jadwalTsAngkatan) &&
+                    (jadwalTsDay === 'SEMUA' || j.hari.toUpperCase() === jadwalTsDay.toUpperCase())
+                  ).length} Sesi Terjadwal
+                </span>
+              </div>
+
+              {/* KONTROL FILTER KHUSUS TINGKATAN TSANAWIYAH */}
+              <div className="p-4 rounded-2xl bg-[#011008] border border-emerald-500/30 space-y-3">
+                {/* 1. Filter Angkatan Tsanawiyah */}
+                <div className="space-y-1.5">
+                  <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider block">
+                    Pilih Angkatan Tsanawiyah:
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {['SEMUA', '1 TSANAWIYAH', '2 TSANAWIYAH', '3 TSANAWIYAH'].map(cls => (
+                      <button
+                        key={cls}
+                        onClick={() => setJadwalTsAngkatan(cls)}
+                        className={`text-xs font-black transition shadow-md ${
+                          jadwalTsAngkatan === cls
+                            ? 'btn-pill-gold-3d scale-102'
+                            : 'btn-pill-dark-3d'
+                        }`}
+                      >
+                        {cls === 'SEMUA' ? 'SEMUA TSANAWIYAH' : cls}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Filter Hari Tsanawiyah */}
+                <div className="space-y-1.5 pt-2 border-t border-emerald-500/20">
+                  <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider block">
+                    Pilih Hari (Sabtu s/d Kamis):
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {['SEMUA', 'SABTU', 'AHAD', 'SENIN', 'SELASA', 'RABU', 'KAMIS'].map(day => (
+                      <button
+                        key={day}
+                        onClick={() => setJadwalTsDay(day)}
+                        className={`text-xs font-black transition shadow-md ${
+                          jadwalTsDay === day
+                            ? 'btn-pill-gold-3d scale-102'
+                            : 'btn-pill-dark-3d'
+                        }`}
+                      >
+                        {day === 'SEMUA' ? 'SEMUA HARI' : day}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Tabel Memanjang Jadwal Pelajaran */}
-              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-xl">
+              {/* Tabel Tsanawiyah */}
+              <div className="overflow-x-auto rounded-2xl border border-emerald-500/30 shadow-xl">
                 <table className="w-full min-w-[950px] text-left text-xs">
-                  <thead className="bg-[#052216] text-[#d4af37] uppercase tracking-wider font-semibold border-b border-[#d4af37]/30">
+                  <thead className="bg-[#031d11] text-[#d4af37] uppercase tracking-wider font-semibold border-b border-emerald-500/30">
                     <tr>
                       <th className="p-3.5 w-12 text-center">NO</th>
-                      <th className="p-3.5 w-36">HARI</th>
+                      <th className="p-3.5 w-32">HARI</th>
                       <th className="p-3.5 w-20 text-center">JAM KE</th>
-                      <th className="p-3.5 w-32">WAKTU</th>
+                      <th className="p-3.5 w-36">WAKTU (WIB)</th>
                       <th className="p-3.5 w-36">ANGKATAN / KELAS</th>
                       <th className="p-3.5 font-bold">MATA PELAJARAN / FAN</th>
                       <th className="p-3.5">USTADZ / USTADZAH PENGAJAR</th>
                       <th className="p-3.5 text-center w-28">STATUS</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/60">
+                  <tbody className="divide-y divide-emerald-500/15 bg-[#011008]/80">
                     {jadwalList
-                      .filter(j => jadwalActiveAngkatan === 'SEMUA' || j.kelas === jadwalActiveAngkatan)
+                      .filter(j => 
+                        j.kelas.includes('TSANAWIYAH') &&
+                        (jadwalTsAngkatan === 'SEMUA' || j.kelas === jadwalTsAngkatan) &&
+                        (jadwalTsDay === 'SEMUA' || j.hari.toUpperCase() === jadwalTsDay.toUpperCase())
+                      )
                       .map((item, idx) => (
-                        <tr key={idx} className="hover:bg-[#d4af37]/5 transition">
-                          <td className="p-3.5 font-mono text-center text-emerald-400/80 font-bold">{idx + 1}</td>
+                        <tr key={idx} className="hover:bg-emerald-500/10 transition">
+                          <td className="p-3.5 font-mono text-center text-emerald-400 font-bold">{idx + 1}</td>
                           <td className="p-3.5 font-bold text-white whitespace-nowrap flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-[#d4af37]"></span>
+                            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
                             <span>{item.hari}</span>
                           </td>
                           <td className="p-3.5 text-center">
-                            <span className="inline-block w-7 h-7 rounded-lg bg-[#0b422a] border border-[#d4af37]/40 text-[#d4af37] font-bold leading-7">
+                            <span className="inline-block w-7 h-7 rounded-lg bg-[#0b422a] border border-emerald-400/40 text-emerald-300 font-bold leading-7">
                               {item.jamKe}
                             </span>
                           </td>
-                          <td className="p-3.5 font-mono text-emerald-300 font-medium whitespace-nowrap">{item.waktu}</td>
+                          <td className="p-3.5 font-mono text-emerald-200 font-medium whitespace-nowrap">{item.waktu}</td>
                           <td className="p-3.5">
-                            <span className="px-2.5 py-1 rounded-md bg-[#052216] border border-[#d4af37]/30 text-[#d4af37] font-bold text-[11px] whitespace-nowrap">
+                            <span className="px-2.5 py-1 rounded-md bg-[#052216] border border-emerald-500/40 text-emerald-300 font-bold text-[11px] whitespace-nowrap">
                               {item.kelas}
                             </span>
                           </td>
@@ -3288,15 +3801,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <td className="p-3.5 text-emerald-200 font-medium">{item.nama}</td>
                           <td className="p-3.5 text-center">
                             <span className="px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
-                              Aktif
+                              Aktif (Pagi/Siang)
                             </span>
                           </td>
                         </tr>
                       ))}
-                    {jadwalList.filter(j => jadwalActiveAngkatan === 'SEMUA' || j.kelas === jadwalActiveAngkatan).length === 0 && (
+                    {jadwalList.filter(j => 
+                      j.kelas.includes('TSANAWIYAH') &&
+                      (jadwalTsAngkatan === 'SEMUA' || j.kelas === jadwalTsAngkatan) &&
+                      (jadwalTsDay === 'SEMUA' || j.hari.toUpperCase() === jadwalTsDay.toUpperCase())
+                    ).length === 0 && (
                       <tr>
                         <td colSpan={8} className="p-8 text-center text-emerald-300">
-                          Tidak ada jadwal yang terdaftar untuk filter ini.
+                          Tidak ada jadwal Tsanawiyah yang cocok dengan kombinasi kelas dan hari yang dipilih.
                         </td>
                       </tr>
                     )}
@@ -3305,215 +3822,139 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* 2. TABEL KURIKULUM PER ANGKATAN & KITAB YANG DIGUNAKAN (DIBAWAH TABEL JADWAL) */}
-            <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-5 border-2 border-[#d4af37]/30">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[#d4af37]/20">
+            {/* TABEL 2: TINGKATAN ALIYAH (KELAS 1 - 3 ALIYAH | MALAM SABTU S/D MALAM KAMIS) */}
+            <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-5 border-2 border-amber-500/50 shadow-xl bg-[#140b02]">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-amber-500/30">
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-2xl bg-[#0b422a] border border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow">
+                  <div className="w-10 h-10 rounded-xl bg-amber-950 border border-[#d4af37] flex items-center justify-center text-[#d4af37] font-bold shadow">
                     <BookOpen className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-white text-gold-3d">
-                      Kurikulum per Angkatan & Kitab yang Digunakan
-                    </h3>
-                    <p className="text-xs text-emerald-200/80 mt-0.5">
-                      Rincian kurikulum kutubut turots, pengarang (mu'allif), target capaian semester, dan ustadz pengampu.
+                    <h4 className="text-base sm:text-lg font-black text-white text-gold-3d flex items-center gap-2">
+                      <span>Tabel 2: Tingkatan Aliyah (Kelas 1 s/d 3 Aliyah)</span>
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/50 text-[10px] font-bold font-mono">
+                        Hari: Malam Sabtu – Malam Kamis
+                      </span>
+                    </h4>
+                    <p className="text-xs text-amber-200">
+                      Jadwal pembelajaran malam hari santri jenjang tingkat atas (Wustha/Ulya) ba&apos;da Maghrib & Isya&apos;.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowAddKurikulumInline(!showAddKurikulumInline)}
-                    className="btn-3d-gold px-4 py-2 text-black font-extrabold text-xs rounded-xl flex items-center gap-2 shadow"
-                  >
-                    <PlusCircle className="w-4 h-4 text-black" />
-                    <span>{showAddKurikulumInline ? 'Tutup Form Input' : '+ Masukkan Kurikulum & Kitab'}</span>
-                  </button>
+                <span className="text-xs text-amber-300 font-mono font-bold">
+                  {jadwalList.filter(j => 
+                    j.kelas.includes('ALIYAH') &&
+                    (jadwalAlAngkatan === 'SEMUA' || j.kelas === jadwalAlAngkatan) &&
+                    (jadwalAlDay === 'SEMUA' || j.hari.toUpperCase() === jadwalAlDay.toUpperCase())
+                  ).length} Sesi Terjadwal
+                </span>
+              </div>
+
+              {/* KONTROL FILTER KHUSUS TINGKATAN ALIYAH */}
+              <div className="p-4 rounded-2xl bg-[#090501] border border-amber-500/30 space-y-3">
+                {/* 1. Filter Angkatan Aliyah */}
+                <div className="space-y-1.5">
+                  <span className="text-xs font-bold text-amber-300 uppercase tracking-wider block">
+                    Pilih Angkatan Aliyah:
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {['SEMUA', '1 ALIYAH', '2 ALIYAH', '3 ALIYAH'].map(cls => (
+                      <button
+                        key={cls}
+                        onClick={() => setJadwalAlAngkatan(cls)}
+                        className={`text-xs font-black transition shadow-md ${
+                          jadwalAlAngkatan === cls
+                            ? 'btn-pill-gold-3d scale-102'
+                            : 'btn-pill-dark-3d'
+                        }`}
+                      >
+                        {cls === 'SEMUA' ? 'SEMUA ALIYAH' : cls}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Filter Hari Aliyah (Malam) */}
+                <div className="space-y-1.5 pt-2 border-t border-amber-500/20">
+                  <span className="text-xs font-bold text-amber-300 uppercase tracking-wider block">
+                    Pilih Hari Malam (Malam Sabtu s/d Malam Kamis):
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {['SEMUA', 'MALAM SABTU', 'MALAM AHAD', 'MALAM SENIN', 'MALAM SELASA', 'MALAM RABU', 'MALAM KAMIS'].map(malam => (
+                      <button
+                        key={malam}
+                        onClick={() => setJadwalAlDay(malam)}
+                        className={`text-xs font-black transition shadow-md ${
+                          jadwalAlDay === malam
+                            ? 'btn-pill-gold-3d scale-102'
+                            : 'btn-pill-dark-3d'
+                        }`}
+                      >
+                        {malam === 'SEMUA' ? 'SEMUA HARI' : malam}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Form Input Kurikulum & Kitab Baru (Inline jika dibuka) */}
-              {showAddKurikulumInline && (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!inputKurikulumForm.mapel || !inputKurikulumForm.kitab) {
-                      alert('Mata pelajaran dan nama kitab wajib diisi!');
-                      return;
-                    }
-                    const newRec: KurikulumKitabRecord = {
-                      id: `KUR-${Date.now()}`,
-                      ...inputKurikulumForm
-                    };
-                    if (onSaveKurikulum) {
-                      onSaveKurikulum(newRec);
-                    }
-                    setInputKurikulumForm({
-                      kelas: inputKurikulumForm.kelas,
-                      mapel: '',
-                      kitab: '',
-                      muallif: '',
-                      targetSemester: '',
-                      ustadzPengampu: 'Ustazah Fina Nikmatul Kamelia'
-                    });
-                    setShowAddKurikulumInline(false);
-                    alert('Kurikulum dan Kitab baru berhasil ditambahkan!');
-                  }}
-                  className="p-5 rounded-2xl bg-gradient-to-br from-[#06291b] to-[#02130c] border border-[#d4af37]/40 shadow-xl space-y-4"
-                >
-                  <div className="flex items-center justify-between pb-2 border-b border-[#d4af37]/20">
-                    <span className="text-xs font-bold text-[#d4af37] uppercase tracking-wider flex items-center gap-1.5">
-                      <Sparkles className="w-4 h-4 text-[#d4af37]" /> Input Kurikulum Perangkatan & Kitab Baru
-                    </span>
-                    <span className="text-[11px] text-emerald-300">Tersimpan otomatis ke database</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-                    <div>
-                      <label className="block text-emerald-300 font-semibold mb-1">Angkatan / Kelas</label>
-                      <select
-                        value={inputKurikulumForm.kelas}
-                        onChange={(e) => setInputKurikulumForm({ ...inputKurikulumForm, kelas: e.target.value })}
-                        className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
-                      >
-                        {classList.map(kls => (
-                          <option key={kls} value={kls}>{kls}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-emerald-300 font-semibold mb-1">Mata Pelajaran (Fan Ilmu)</label>
-                      <input
-                        type="text"
-                        value={inputKurikulumForm.mapel}
-                        onChange={(e) => setInputKurikulumForm({ ...inputKurikulumForm, mapel: e.target.value })}
-                        placeholder="Contoh: Nahwu, Fiqih, Shorof..."
-                        required
-                        className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-emerald-300 font-semibold mb-1">Kitab yang Digunakan</label>
-                      <input
-                        type="text"
-                        value={inputKurikulumForm.kitab}
-                        onChange={(e) => setInputKurikulumForm({ ...inputKurikulumForm, kitab: e.target.value })}
-                        placeholder="Contoh: Al-Jurumiyyah, Fathul Qorib..."
-                        required
-                        className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-emerald-300 font-semibold mb-1">Pengarang (Muallif)</label>
-                      <input
-                        type="text"
-                        value={inputKurikulumForm.muallif}
-                        onChange={(e) => setInputKurikulumForm({ ...inputKurikulumForm, muallif: e.target.value })}
-                        placeholder="Contoh: Syaikh Ibnu Ajurrum..."
-                        className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-emerald-300 font-semibold mb-1">Target Capaian Semester</label>
-                      <input
-                        type="text"
-                        value={inputKurikulumForm.targetSemester}
-                        onChange={(e) => setInputKurikulumForm({ ...inputKurikulumForm, targetSemester: e.target.value })}
-                        placeholder="Contoh: Bab Kalam s/d Bab Al-Af'al..."
-                        className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-emerald-300 font-semibold mb-1">Ustadz Pengampu</label>
-                      <select
-                        value={inputKurikulumForm.ustadzPengampu}
-                        onChange={(e) => setInputKurikulumForm({ ...inputKurikulumForm, ustadzPengampu: e.target.value })}
-                        className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
-                      >
-                        {guruList.map(g => (
-                          <option key={g.id} value={g.nama}>{g.nama} ({g.mapel})</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowAddKurikulumInline(false)}
-                      className="px-4 py-2 rounded-xl btn-3d-dark text-emerald-300 text-xs font-bold"
-                    >
-                      Batal
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-6 py-2 rounded-xl btn-3d-gold text-black text-xs font-extrabold flex items-center gap-1.5 shadow-lg"
-                    >
-                      <Save className="w-4 h-4 text-black" />
-                      <span>Simpan Kurikulum & Kitab</span>
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {/* Tabel Memanjang Kurikulum & Kitab */}
-              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-xl">
-                <table className="w-full min-w-[1000px] text-left text-xs">
-                  <thead className="bg-[#052216] text-[#d4af37] uppercase tracking-wider font-semibold border-b border-[#d4af37]/30">
+              {/* Tabel Aliyah */}
+              <div className="overflow-x-auto rounded-2xl border border-amber-500/30 shadow-xl">
+                <table className="w-full min-w-[950px] text-left text-xs">
+                  <thead className="bg-[#1f1103] text-[#d4af37] uppercase tracking-wider font-semibold border-b border-amber-500/30">
                     <tr>
                       <th className="p-3.5 w-12 text-center">NO</th>
+                      <th className="p-3.5 w-36">HARI (MALAM)</th>
+                      <th className="p-3.5 w-20 text-center">JAM KE</th>
+                      <th className="p-3.5 w-36">WAKTU (MALAM)</th>
                       <th className="p-3.5 w-36">ANGKATAN / KELAS</th>
-                      <th className="p-3.5 w-36">FAN ILMU</th>
-                      <th className="p-3.5 font-bold">KITAB YANG DIGUNAKAN</th>
-                      <th className="p-3.5">MUALLIF (PENGARANG)</th>
-                      <th className="p-3.5">TARGET CAPAIAN SEMESTER</th>
-                      <th className="p-3.5">USTADZ PENGAMPU</th>
-                      <th className="p-3.5 text-center w-20">AKSI</th>
+                      <th className="p-3.5 font-bold">MATA PELAJARAN / FAN</th>
+                      <th className="p-3.5">USTADZ / USTADZAH PENGAJAR</th>
+                      <th className="p-3.5 text-center w-28">STATUS</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/60">
-                    {kurikulumList
-                      .filter(k => jadwalActiveAngkatan === 'SEMUA' || k.kelas === jadwalActiveAngkatan)
+                  <tbody className="divide-y divide-amber-500/15 bg-[#0e0701]/80">
+                    {jadwalList
+                      .filter(j => 
+                        j.kelas.includes('ALIYAH') &&
+                        (jadwalAlAngkatan === 'SEMUA' || j.kelas === jadwalAlAngkatan) &&
+                        (jadwalAlDay === 'SEMUA' || j.hari.toUpperCase() === jadwalAlDay.toUpperCase())
+                      )
                       .map((item, idx) => (
-                        <tr key={item.id || idx} className="hover:bg-[#d4af37]/5 transition">
-                          <td className="p-3.5 font-mono text-center text-emerald-400/80 font-bold">{idx + 1}</td>
+                        <tr key={idx} className="hover:bg-amber-500/10 transition">
+                          <td className="p-3.5 font-mono text-center text-amber-400 font-bold">{idx + 1}</td>
+                          <td className="p-3.5 font-bold text-amber-200 whitespace-nowrap flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-[#d4af37]"></span>
+                            <span>{item.hari}</span>
+                          </td>
+                          <td className="p-3.5 text-center">
+                            <span className="inline-block w-7 h-7 rounded-lg bg-[#3d2508] border border-amber-400/40 text-[#f5e298] font-bold leading-7">
+                              {item.jamKe}
+                            </span>
+                          </td>
+                          <td className="p-3.5 font-mono text-amber-300 font-medium whitespace-nowrap">{item.waktu}</td>
                           <td className="p-3.5">
-                            <span className="px-2.5 py-1 rounded-md bg-[#052216] border border-[#d4af37]/30 text-[#d4af37] font-bold text-[11px] whitespace-nowrap">
+                            <span className="px-2.5 py-1 rounded-md bg-[#2d1b06] border border-amber-500/40 text-[#faebaa] font-bold text-[11px] whitespace-nowrap">
                               {item.kelas}
                             </span>
                           </td>
-                          <td className="p-3.5 font-bold text-white">{item.mapel}</td>
-                          <td className="p-3.5 font-extrabold text-[#d4af37] text-sm">{item.kitab}</td>
-                          <td className="p-3.5 text-emerald-200/90 italic">{item.muallif || '-'}</td>
-                          <td className="p-3.5 text-white font-medium">{item.targetSemester || '-'}</td>
-                          <td className="p-3.5 text-emerald-300 font-semibold">{item.ustadzPengampu}</td>
+                          <td className="p-3.5 font-bold text-white text-sm">{item.mapel}</td>
+                          <td className="p-3.5 text-amber-100 font-medium">{item.nama}</td>
                           <td className="p-3.5 text-center">
-                            {onDeleteKurikulum && (
-                              <button
-                                onClick={() => {
-                                  if (window.confirm(`Hapus kurikulum kitab "${item.kitab}"?`)) {
-                                    onDeleteKurikulum(item.id);
-                                  }
-                                }}
-                                className="p-1.5 rounded-lg bg-red-950/60 hover:bg-red-900 border border-red-500/30 text-red-300 transition"
-                                title="Hapus Kurikulum"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
+                            <span className="px-2.5 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-500/40 text-[10px] font-bold">
+                              Sekolah Malam
+                            </span>
                           </td>
                         </tr>
                       ))}
-                    {kurikulumList.filter(k => jadwalActiveAngkatan === 'SEMUA' || k.kelas === jadwalActiveAngkatan).length === 0 && (
+                    {jadwalList.filter(j => 
+                      j.kelas.includes('ALIYAH') &&
+                      (jadwalAlAngkatan === 'SEMUA' || j.kelas === jadwalAlAngkatan) &&
+                      (jadwalAlDay === 'SEMUA' || j.hari.toUpperCase() === jadwalAlDay.toUpperCase())
+                    ).length === 0 && (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-emerald-300">
-                          Belum ada data kurikulum dan kitab untuk angkatan yang dipilih. Klik tombol "+ Masukkan Kurikulum & Kitab" di atas untuk menambahkan.
+                        <td colSpan={8} className="p-8 text-center text-amber-300">
+                          Tidak ada jadwal Aliyah yang cocok dengan kombinasi kelas dan hari malam yang dipilih.
                         </td>
                       </tr>
                     )}
@@ -3521,57 +3962,714 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </table>
               </div>
             </div>
+
+            {/* ========================================================================= */}
+            {/* 3. TABEL SILABUS MEMAKNAI (DI BAWAH TABEL JADWAL DENGAN SEMESTER 1 & 2)    */}
+            {/* ========================================================================= */}
+            <div className="card-3d rounded-3xl p-6 backdrop-blur space-y-5 border-2 border-[#d4af37]/50 shadow-2xl bg-gradient-to-r from-[#031d12] via-[#062c1b] to-[#031d12]">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-[#d4af37]/25">
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-[#0b422a] border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow-xl">
+                    <BookOpen className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg sm:text-xl font-black text-white text-gold-3d">
+                        Tabel Silabus Memaknai Kitab Kuning
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                        Live Auto-Sync Guru & Pengurus
+                      </span>
+                    </div>
+                    <p className="text-xs text-emerald-200/90 mt-0.5">
+                      Target materi ngaji bandongan & sorogan pegon. Data dapat di-input dan diedit secara manual, langsung update otomatis ke profil ustadz yang bersangkutan.
+                    </p>
+                  </div>
+                </div>
+
+                {/* TOMBOL SEMESTER 1 & SEMESTER 2 */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="inline-flex gap-2 p-1.5 bg-[#020e08] rounded-2xl border border-[#d4af37]/40 shadow-inner">
+                    <button
+                      onClick={() => setSilabusSemesterTab('Semester 1')}
+                      className={`text-xs font-black transition flex items-center gap-1.5 shadow-md ${
+                        silabusSemesterTab === 'Semester 1'
+                          ? 'btn-pill-gold-3d scale-102'
+                          : 'btn-pill-dark-3d'
+                      }`}
+                    >
+                      <span>SEMESTER 1 (GANJIL)</span>
+                    </button>
+
+                    <button
+                      onClick={() => setSilabusSemesterTab('Semester 2')}
+                      className={`text-xs font-black transition flex items-center gap-1.5 shadow-md ${
+                        silabusSemesterTab === 'Semester 2'
+                          ? 'btn-pill-gold-3d scale-102'
+                          : 'btn-pill-dark-3d'
+                      }`}
+                    >
+                      <span>SEMESTER 2 (GENAP)</span>
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setSilabusForm({
+                        id: `SLB-${Date.now()}`,
+                        namaKitab: '',
+                        kelas: silabusAngkatanFilter === 'SEMUA' ? '1 TSANAWIYAH' : silabusAngkatanFilter,
+                        tingkatan: (silabusAngkatanFilter.includes('ALIYAH') ? 'Aliyah' : 'Tsanawiyah') as any,
+                        semester: silabusSemesterTab,
+                        mulai: '',
+                        batasAkhir: '',
+                        materiSaatIni: '',
+                        ustadzPengampu: guruList[0]?.nama || 'Ustazah Fina Nikmatul Kamelia',
+                        targetMateri: '',
+                        status: 'Sesuai Target',
+                        keterangan: ''
+                      });
+                      setEditingSilabus(null);
+                      setShowAddSilabusModal(true);
+                    }}
+                    className="btn-pill-gold-3d text-xs font-black shadow-lg"
+                  >
+                    + Input Silabus Baru
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter Angkatan Silabus */}
+              <div className="flex flex-wrap gap-2 items-center p-3 rounded-2xl bg-[#011008] border border-[#d4af37]/30">
+                <span className="text-xs font-bold text-[#d4af37] uppercase tracking-wider mr-1">
+                  Filter Angkatan:
+                </span>
+                {['SEMUA', '1 TSANAWIYAH', '2 TSANAWIYAH', '3 TSANAWIYAH', '1 ALIYAH', '2 ALIYAH', '3 ALIYAH'].map(cls => (
+                  <button
+                    key={cls}
+                    onClick={() => setSilabusAngkatanFilter(cls)}
+                    className={`text-xs font-black transition shadow-md ${
+                      silabusAngkatanFilter === cls
+                        ? 'btn-pill-gold-3d scale-102'
+                        : 'btn-pill-dark-3d'
+                    }`}
+                  >
+                    {cls === 'SEMUA' ? 'SEMUA ANGKATAN' : cls}
+                  </button>
+                ))}
+              </div>
+
+              {/* Tabel Silabus Memaknai */}
+              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-2xl">
+                <table className="w-full min-w-[1100px] text-left text-xs">
+                  <thead className="bg-[#031d11] text-[#d4af37] uppercase tracking-wider font-bold border-b border-[#d4af37]/30">
+                    <tr>
+                      <th className="p-3.5 w-12 text-center">NO</th>
+                      <th className="p-3.5 min-w-[190px]">NAMA USTADZ PENGAMPU</th>
+                      <th className="p-3.5 min-w-[170px]">KITAB KUNING</th>
+                      <th className="p-3.5 w-32">KELAS / ANGKATAN</th>
+                      <th className="p-3.5 w-24 text-center">SEMESTER</th>
+                      <th className="p-3.5 min-w-[150px]">MULAI MEMAKNAI (MATERI AWAL)</th>
+                      <th className="p-3.5 min-w-[150px]">BATAS AKHIR (TARGET KHATAM)</th>
+                      <th className="p-3.5 min-w-[150px]">MATERI SAAT INI</th>
+                      <th className="p-3.5 min-w-[140px] text-center">STATUS PENCOCOKAN</th>
+                      <th className="p-3.5 min-w-[160px]">KETERANGAN</th>
+                      <th className="p-3.5 text-center w-24">AKSI</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#d4af37]/15 bg-[#020e08]/90">
+                    {silabusList
+                      .filter(s => 
+                        (silabusAngkatanFilter === 'SEMUA' || s.kelas === silabusAngkatanFilter) &&
+                        (!s.semester || s.semester === silabusSemesterTab)
+                      )
+                      .map((item, idx) => {
+                        const statusColor = 
+                          item.status === 'Sesuai Target' ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/50' :
+                          item.status === 'Khatam / Tercapai' ? 'bg-amber-950/90 text-amber-300 border-amber-500/50' :
+                          item.status === 'Belum Tercapai / Tertinggal' ? 'bg-red-950/90 text-red-300 border-red-500/50' :
+                          'bg-blue-950/90 text-blue-300 border-blue-500/50';
+
+                        return (
+                          <tr key={item.id || idx} className="hover:bg-[#d4af37]/5 transition">
+                            <td className="p-3.5 font-mono text-center text-[#d4af37] font-bold">{idx + 1}</td>
+                            <td className="p-3.5">
+                              <span className="font-bold text-white text-sm block">{item.ustadzPengampu}</span>
+                              <span className="text-[10px] text-emerald-300 font-mono">
+                                Auto-Sync Guru & Pengurus
+                              </span>
+                            </td>
+                            <td className="p-3.5 font-black text-[#f3e5ab] text-sm font-serif">
+                              {item.namaKitab}
+                            </td>
+                            <td className="p-3.5">
+                              <span className="px-2.5 py-1 rounded-md bg-[#052216] border border-[#d4af37]/30 text-[#d4af37] font-bold text-[11px] whitespace-nowrap">
+                                {item.kelas}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-center">
+                              <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-bold">
+                                {item.semester || silabusSemesterTab}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-emerald-300 font-medium">
+                              <span className="px-2.5 py-1 rounded-lg bg-[#031c10] border border-emerald-500/30 inline-block font-semibold">
+                                {item.mulai || '-'}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-amber-300 font-medium">
+                              <span className="px-2.5 py-1 rounded-lg bg-[#1c1403] border border-amber-500/30 inline-block font-semibold">
+                                {item.batasAkhir || '-'}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-teal-200 font-medium">
+                              <span className="px-2.5 py-1 rounded-lg bg-[#031818] border border-teal-500/30 inline-block font-bold">
+                                {item.materiSaatIni || 'Bab Awal'}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-center">
+                              <span className={`px-2.5 py-1 rounded-full border text-[10px] font-bold whitespace-nowrap ${statusColor}`}>
+                                {item.status || 'Sesuai Target'}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-slate-300 max-w-xs">{item.keterangan || item.targetMateri || '-'}</td>
+                            <td className="p-3.5 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingSilabus(item);
+                                    setSilabusForm({
+                                      id: item.id,
+                                      namaKitab: item.namaKitab,
+                                      kelas: item.kelas,
+                                      tingkatan: item.tingkatan,
+                                      semester: (item.semester as any) || silabusSemesterTab,
+                                      mulai: item.mulai,
+                                      batasAkhir: item.batasAkhir,
+                                      materiSaatIni: item.materiSaatIni || '',
+                                      ustadzPengampu: item.ustadzPengampu,
+                                      targetMateri: item.targetMateri || '',
+                                      status: item.status || 'Sesuai Target',
+                                      keterangan: item.keterangan || ''
+                                    });
+                                    setShowAddSilabusModal(true);
+                                  }}
+                                  className="p-1.5 bg-amber-500/20 text-amber-300 hover:bg-amber-500 hover:text-black rounded-lg transition border border-amber-500/40"
+                                  title="Edit Silabus"
+                                >
+                                  <Sliders className="w-3.5 h-3.5" />
+                                </button>
+                                {onDeleteSilabus && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (confirm(`Hapus silabus kitab "${item.namaKitab}" (${item.kelas})?`)) {
+                                        onDeleteSilabus(item.id);
+                                      }
+                                    }}
+                                    className="p-1.5 bg-red-500/20 text-red-300 hover:bg-red-500 hover:text-white rounded-lg transition border border-red-500/40"
+                                    title="Hapus Silabus"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    {silabusList.filter(s => 
+                      (silabusAngkatanFilter === 'SEMUA' || s.kelas === silabusAngkatanFilter) &&
+                      (!s.semester || s.semester === silabusSemesterTab)
+                    ).length === 0 && (
+                      <tr>
+                        <td colSpan={11} className="p-8 text-center text-slate-400">
+                          Belum ada data silabus kitab kuning yang cocok dengan filter angkatan dan semester yang dipilih.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* MODAL INPUT & EDIT JADWAL PELAJARAN SECARA MANUAL */}
+            {showAddJadwalModal && (
+              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="card-3d rounded-3xl p-6 max-w-xl w-full border-2 border-[#d4af37] bg-gradient-to-b from-[#062d1c] to-[#02140c] space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+                  <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/30">
+                    <div className="flex items-center space-x-3">
+                      <Calendar className="w-6 h-6 text-[#d4af37]" />
+                      <div>
+                        <h4 className="text-base font-extrabold text-white text-gold-3d">
+                          {editingJadwal ? 'Edit Jadwal Pelajaran' : 'Tambah Jadwal Pelajaran Baru'}
+                        </h4>
+                        <p className="text-[11px] text-emerald-300">
+                          Tingkatan Tsanawiyah (Siang) atau Aliyah (Malam)
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowAddJadwalModal(false)}
+                      className="text-stone-400 hover:text-white text-lg font-bold"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (onSaveNewJadwal) {
+                        onSaveNewJadwal({
+                          id: editingJadwal?.id || `JAD-${Date.now()}`,
+                          hari: jadwalForm.hari,
+                          jamKe: Number(jadwalForm.jamKe),
+                          waktu: jadwalForm.waktu,
+                          kelas: jadwalForm.kelas,
+                          mapel: jadwalForm.mapel,
+                          nama: jadwalForm.nama,
+                          tingkatan: jadwalForm.tingkatan
+                        });
+                      }
+                      setShowAddJadwalModal(false);
+                      setEditingJadwal(null);
+                    }}
+                    className="space-y-4 text-xs"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-emerald-300 font-semibold mb-1">Tingkatan</label>
+                        <select
+                          value={jadwalForm.tingkatan}
+                          onChange={(e) => {
+                            const ting = e.target.value as 'Tsanawiyah' | 'Aliyah';
+                            setJadwalForm({
+                              ...jadwalForm,
+                              tingkatan: ting,
+                              kelas: ting === 'Tsanawiyah' ? '1 TSANAWIYAH' : '1 ALIYAH',
+                              hari: ting === 'Tsanawiyah' ? 'SABTU' : 'MALAM SABTU'
+                            });
+                          }}
+                          className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
+                        >
+                          <option value="Tsanawiyah">Tsanawiyah (Siang)</option>
+                          <option value="Aliyah">Aliyah (Malam)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-emerald-300 font-semibold mb-1">Kelas / Angkatan</label>
+                        <select
+                          value={jadwalForm.kelas}
+                          onChange={(e) => setJadwalForm({ ...jadwalForm, kelas: e.target.value })}
+                          className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl p-2.5 text-white font-bold"
+                        >
+                          {jadwalForm.tingkatan === 'Tsanawiyah' ? (
+                            <>
+                              <option value="1 TSANAWIYAH">1 TSANAWIYAH</option>
+                              <option value="2 TSANAWIYAH">2 TSANAWIYAH</option>
+                              <option value="3 TSANAWIYAH">3 TSANAWIYAH</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="1 ALIYAH">1 ALIYAH</option>
+                              <option value="2 ALIYAH">2 ALIYAH</option>
+                              <option value="3 ALIYAH">3 ALIYAH</option>
+                            </>
+                          )}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-emerald-300 font-semibold mb-1">Hari</label>
+                        <select
+                          value={jadwalForm.hari}
+                          onChange={(e) => setJadwalForm({ ...jadwalForm, hari: e.target.value })}
+                          className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl p-2.5 text-white font-bold"
+                        >
+                          {jadwalForm.tingkatan === 'Tsanawiyah' ? (
+                            <>
+                              <option value="SABTU">SABTU</option>
+                              <option value="AHAD">AHAD</option>
+                              <option value="SENIN">SENIN</option>
+                              <option value="SELASA">SELASA</option>
+                              <option value="RABU">RABU</option>
+                              <option value="KAMIS">KAMIS</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="MALAM SABTU">MALAM SABTU</option>
+                              <option value="MALAM AHAD">MALAM AHAD</option>
+                              <option value="MALAM SENIN">MALAM SENIN</option>
+                              <option value="MALAM SELASA">MALAM SELASA</option>
+                              <option value="MALAM RABU">MALAM RABU</option>
+                              <option value="MALAM KAMIS">MALAM KAMIS</option>
+                            </>
+                          )}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-emerald-300 font-semibold mb-1">Jam Ke-</label>
+                        <select
+                          value={jadwalForm.jamKe}
+                          onChange={(e) => setJadwalForm({ ...jadwalForm, jamKe: Number(e.target.value) })}
+                          className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl p-2.5 text-white font-bold"
+                        >
+                          <option value={1}>Jam ke-1</option>
+                          <option value={2}>Jam ke-2</option>
+                          <option value={3}>Jam ke-3</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-emerald-300 font-semibold mb-1">Waktu</label>
+                        <input
+                          type="text"
+                          value={jadwalForm.waktu}
+                          onChange={(e) => setJadwalForm({ ...jadwalForm, waktu: e.target.value })}
+                          placeholder="13.30 - 14.15 WIB"
+                          className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-emerald-300 font-semibold mb-1">Mata Pelajaran / Kitab</label>
+                        <input
+                          type="text"
+                          value={jadwalForm.mapel}
+                          onChange={(e) => setJadwalForm({ ...jadwalForm, mapel: e.target.value })}
+                          placeholder="Contoh: Nahwu, Fathul Qorib..."
+                          required
+                          className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl p-2.5 text-white font-bold"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-emerald-300 font-semibold mb-1">Nama Guru / Ustadz</label>
+                        <input
+                          type="text"
+                          value={jadwalForm.nama}
+                          onChange={(e) => setJadwalForm({ ...jadwalForm, nama: e.target.value })}
+                          placeholder="Ketik nama ustadz..."
+                          list="guruListJadwalOptions"
+                          required
+                          className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl p-2.5 text-white font-bold"
+                        />
+                        <datalist id="guruListJadwalOptions">
+                          {guruList.map(g => (
+                            <option key={g.id || g.nama} value={g.nama}>{g.nama} ({g.mapel})</option>
+                          ))}
+                        </datalist>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-3 border-t border-[#d4af37]/20">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddJadwalModal(false)}
+                        className="px-4 py-2 rounded-xl bg-stone-900 border border-stone-700 text-stone-300 font-bold"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn-3d-gold px-6 py-2 rounded-xl text-black font-extrabold flex items-center gap-1.5 shadow-xl"
+                      >
+                        <Save className="w-4 h-4 text-black" />
+                        <span>Simpan Jadwal</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+            {showAddSilabusModal && (
+              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="card-3d rounded-3xl p-6 max-w-2xl w-full border-2 border-[#d4af37] bg-gradient-to-b from-[#062d1c] to-[#02140c] space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+                  <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/30">
+                    <div className="flex items-center space-x-3">
+                      <BookOpen className="w-6 h-6 text-[#d4af37]" />
+                      <div>
+                        <h4 className="text-base font-extrabold text-white text-gold-3d">
+                          {editingSilabus ? 'Edit Silabus Memaknai Manual' : 'Input Silabus Memaknai Baru'}
+                        </h4>
+                        <p className="text-[11px] text-emerald-300">
+                          Data otomatis terhubung langsung ke Dasbor Pengurus & Ustadz Pengampu yang bersangkutan.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowAddSilabusModal(false)}
+                      className="text-stone-400 hover:text-white text-lg font-bold"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!silabusForm.namaKitab || !silabusForm.ustadzPengampu) {
+                        alert('Nama kitab dan nama ustadz pengampu wajib diisi!');
+                        return;
+                      }
+                      const recordToSave: SilabusMemaknaiRecord = {
+                        id: silabusForm.id || `SLB-${Date.now()}`,
+                        namaKitab: silabusForm.namaKitab,
+                        kelas: silabusForm.kelas,
+                        tingkatan: silabusForm.kelas.includes('ALIYAH') ? 'Aliyah' : 'Tsanawiyah',
+                        semester: silabusForm.semester,
+                        mulai: silabusForm.mulai,
+                        batasAkhir: silabusForm.batasAkhir,
+                        materiSaatIni: silabusForm.materiSaatIni,
+                        ustadzPengampu: silabusForm.ustadzPengampu,
+                        targetMateri: silabusForm.targetMateri || `${silabusForm.mulai} s/d ${silabusForm.batasAkhir}`,
+                        status: silabusForm.status,
+                        keterangan: silabusForm.keterangan
+                      };
+
+                      if (onSaveSilabus) {
+                        onSaveSilabus(recordToSave);
+                      }
+                      setShowAddSilabusModal(false);
+                      setEditingSilabus(null);
+                      alert('Silabus Memaknai berhasil disimpan dan otomatis terhubung ke ustadz & dashboard pengurus!');
+                    }}
+                    className="space-y-4 text-xs"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-emerald-300 font-semibold mb-1">Angkatan / Kelas</label>
+                        <select
+                          value={silabusForm.kelas}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSilabusForm({
+                              ...silabusForm,
+                              kelas: val,
+                              tingkatan: val.includes('ALIYAH') ? 'Aliyah' : 'Tsanawiyah'
+                            });
+                          }}
+                          className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
+                        >
+                          {classList.map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-emerald-300 font-semibold mb-1">Semester</label>
+                        <select
+                          value={silabusForm.semester}
+                          onChange={(e) => setSilabusForm({ ...silabusForm, semester: e.target.value as any })}
+                          className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
+                        >
+                          <option value="Semester 1">Semester 1 (Ganjil)</option>
+                          <option value="Semester 2">Semester 2 (Genap)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-emerald-300 font-semibold mb-1">Nama Ustadz / Ustadzah Pengampu</label>
+                        <input
+                          type="text"
+                          value={silabusForm.ustadzPengampu}
+                          onChange={(e) => setSilabusForm({ ...silabusForm, ustadzPengampu: e.target.value })}
+                          placeholder="Ketik atau pilih nama ustadz..."
+                          list="ustadzListOptions"
+                          required
+                          className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl p-2.5 text-white font-bold"
+                        />
+                        <datalist id="ustadzListOptions">
+                          {guruList.map(g => (
+                            <option key={g.id || g.nama} value={g.nama}>{g.nama} ({g.mapel})</option>
+                          ))}
+                        </datalist>
+                      </div>
+
+                      <div>
+                        <label className="block text-emerald-300 font-semibold mb-1">Nama Kitab Kuning</label>
+                        <input
+                          type="text"
+                          value={silabusForm.namaKitab}
+                          onChange={(e) => setSilabusForm({ ...silabusForm, namaKitab: e.target.value })}
+                          placeholder="Contoh: Matan Al-Jurumiyyah, Fathul Qorib, Alfiyah..."
+                          required
+                          className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl p-2.5 text-white font-serif font-bold text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-emerald-300 font-semibold mb-1">
+                          Mulai Memaknai <span className="text-[#d4af37] font-normal">(Isinya materi/bab awal, bukan tanggal)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={silabusForm.mulai}
+                          onChange={(e) => setSilabusForm({ ...silabusForm, mulai: e.target.value })}
+                          placeholder="Contoh: Fasal 1: Bab Muqaddimah & Kalam / Bait 1 - 50"
+                          required
+                          className="w-full bg-[#03150d] border border-emerald-500/50 rounded-xl p-2.5 text-emerald-300"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-amber-300 font-semibold mb-1">
+                          Batas Akhir <span className="text-[#d4af37] font-normal">(Target materi khatam, bukan tanggal)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={silabusForm.batasAkhir}
+                          onChange={(e) => setSilabusForm({ ...silabusForm, batasAkhir: e.target.value })}
+                          placeholder="Contoh: Khatam Bab Al-Af'al / Bab Tawabi' / Hal. 120"
+                          required
+                          className="w-full bg-[#03150d] border border-amber-500/50 rounded-xl p-2.5 text-amber-300"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-teal-300 font-semibold mb-1">
+                          Materi Saat Ini <span className="text-slate-400 font-normal">(Posisi makna terakhir)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={silabusForm.materiSaatIni}
+                          onChange={(e) => setSilabusForm({ ...silabusForm, materiSaatIni: e.target.value })}
+                          placeholder="Contoh: Bab Na'at & Athaf (Hal. 38) / Bait 142"
+                          className="w-full bg-[#03150d] border border-teal-500/50 rounded-xl p-2.5 text-teal-200"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-emerald-300 font-semibold mb-1">
+                          Status <span className="text-[#d4af37] font-normal">(Target & Pencocokan Sesuai Materi)</span>
+                        </label>
+                        <select
+                          value={silabusForm.status}
+                          onChange={(e) => setSilabusForm({ ...silabusForm, status: e.target.value })}
+                          className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl p-2.5 text-white font-bold"
+                        >
+                          <option value="Sesuai Target">Sesuai Target</option>
+                          <option value="Belum Tercapai / Tertinggal">Belum Tercapai / Tertinggal</option>
+                          <option value="Khatam / Tercapai">Khatam / Tercapai</option>
+                          <option value="Sedang Berjalan">Sedang Berjalan</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-emerald-300 font-semibold mb-1">Keterangan / Catatan Tambahan</label>
+                      <input
+                        type="text"
+                        value={silabusForm.keterangan}
+                        onChange={(e) => setSilabusForm({ ...silabusForm, keterangan: e.target.value })}
+                        placeholder="Contoh: Ngaji bandongan ba'da Shubuh / Ba'da Isya'..."
+                        className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-3 border-t border-[#d4af37]/20">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddSilabusModal(false)}
+                        className="px-4 py-2 rounded-xl bg-stone-900 border border-stone-700 text-stone-300 font-bold"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn-3d-gold px-6 py-2 rounded-xl text-black font-extrabold flex items-center gap-1.5 shadow-xl"
+                      >
+                        <Save className="w-4 h-4 text-black" />
+                        <span>Simpan Silabus Memaknai</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* TAB 5: DATA GURU PENGAJAR PER ANGKATAN */}
+        {/* TAB 5: DATA GURU PENGAJAR PER ANGKATAN DENGAN FITUR HAPUS MANUAL */}
         {activeTab === 'guru' && (
           <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[#d4af37]/20">
               <div>
-                <h3 className="text-lg font-bold text-[#d4af37] text-gold-3d">
-                  {settings.text_guru_title || 'Data Guru Pengajar & Wali Kelas per Angkatan'}
+                <h3 className="text-lg font-bold text-[#d4af37] text-gold-3d flex items-center gap-2">
+                  <Users className="w-5 h-5 text-[#d4af37]" />
+                  <span>{settings.text_guru_title || 'Data Guru Pengajar & Wali Kelas per Angkatan'}</span>
                 </h3>
-                <p className="text-xs text-emerald-200/80 mt-0.5">Tampilan data khusus per angkatan santri yang dipilih (Data Only).</p>
+                <p className="text-xs text-emerald-200/80 mt-0.5">
+                  Tampilan data ustadz / ustadzah pengampu per angkatan dengan fitur hapus secara manual.
+                </p>
               </div>
 
-              <button
-                onClick={() => {
-                  setActiveTab('pengaturan');
-                  setActiveControlSection('input_guru');
-                }}
-                className="btn-3d-gold px-4 py-2 text-black font-extrabold text-xs rounded-xl flex items-center gap-2"
-              >
-                <PlusCircle className="w-3.5 h-3.5 text-black" />
-                <span>Input Guru via Option Panel</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setActiveTab('pengaturan');
+                    setActiveControlSection('input_guru');
+                  }}
+                  className="btn-3d-gold px-4 py-2 text-black font-extrabold text-xs rounded-xl flex items-center gap-2 shadow"
+                >
+                  <PlusCircle className="w-3.5 h-3.5 text-black" />
+                  <span>Input Guru via Option Panel</span>
+                </button>
+              </div>
             </div>
 
             {/* TAB ANGKATAN UNTUK DATA GURU */}
             <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedAngkatanGuru('SEMUA')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+                  selectedAngkatanGuru === 'SEMUA'
+                    ? 'btn-3d-gold text-black shadow-lg scale-102 font-black'
+                    : 'btn-3d-dark text-[#f3e5ab]'
+                }`}
+              >
+                Semua Guru ({guruList.length})
+              </button>
               {classList.map(kls => (
                 <button
                   key={kls}
                   onClick={() => setSelectedAngkatanGuru(kls)}
                   className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
                     selectedAngkatanGuru === kls
-                      ? 'btn-3d-gold text-black shadow-lg scale-102'
+                      ? 'btn-3d-gold text-black shadow-lg scale-102 font-black'
                       : 'btn-3d-dark text-[#f3e5ab]'
                   }`}
                 >
-                  {kls}
+                  {kls} ({guruList.filter(g => g.kelas === kls).length})
                 </button>
               ))}
             </div>
 
-            {/* Tabel Data Guru Pengajar Khusus Angkatan Terpilih */}
+            {/* Tabel Data Guru Pengajar dengan Tombol Hapus Manual */}
             <div className="space-y-3">
               <div className="flex justify-between items-center p-3.5 rounded-xl card-3d-deep">
                 <span className="text-xs font-bold text-white">
                   Daftar Pengajar & Mata Pelajaran: <span className="text-[#d4af37]">{selectedAngkatanGuru}</span>
                 </span>
                 <span className="text-xs text-emerald-300 font-mono font-semibold">
-                  {guruList.filter(g => g.kelas === selectedAngkatanGuru).length} Ustadz Pengampu
+                  {selectedAngkatanGuru === 'SEMUA' 
+                    ? `${guruList.length} Total Ustadz` 
+                    : `${guruList.filter(g => g.kelas === selectedAngkatanGuru).length} Ustadz Pengampu`}
                 </span>
               </div>
 
@@ -3582,23 +4680,58 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3 w-12 text-center font-bold">NO</th>
                       <th className="p-3 font-bold">NAMA USTADZ / USTADZAH</th>
                       <th className="p-3 font-bold">MATA PELAJARAN DIAMPUS</th>
+                      <th className="p-3 font-bold">KITAB PEGON</th>
                       <th className="p-3 font-bold">ANGKATAN / KELAS</th>
+                      <th className="p-3 text-center w-28 font-bold">AKSI / HAPUS</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10 bg-[#052216]/60">
                     {guruList
-                      .filter(g => g.kelas === selectedAngkatanGuru)
+                      .filter(g => selectedAngkatanGuru === 'SEMUA' || g.kelas === selectedAngkatanGuru)
                       .map((g, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10 transition">
+                        <tr key={g.id || `${g.nama}-${i}`} className="hover:bg-[#d4af37]/10 transition">
                           <td className="p-3 text-center font-bold text-[#d4af37]">{i + 1}</td>
-                          <td className="p-3 font-bold text-white text-sm">{g.nama}</td>
+                          <td className="p-3">
+                            <div className="flex items-center space-x-2.5">
+                              {g.foto && (
+                                <img
+                                  src={g.foto}
+                                  alt={g.nama}
+                                  className="w-8 h-8 rounded-full object-cover border border-[#d4af37]/40 shrink-0"
+                                />
+                              )}
+                              <span className="font-bold text-white text-sm">{g.nama}</span>
+                            </div>
+                          </td>
                           <td className="p-3 text-emerald-300 font-medium">{g.mapel}</td>
-                          <td className="p-3 text-[#d4af37] font-semibold">{g.kelas}</td>
+                          <td className="p-3 text-white font-serif italic">{g.kitab || '-'}</td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded bg-[#03140c] border border-[#d4af37]/30 text-[#d4af37] font-semibold">
+                              {g.kelas}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`Konfirmasi Penghapusan Guru / Ustadz:\n\nApakah Anda yakin ingin menghapus data pengajar:\nNama: ${g.nama}\nMapel: ${g.mapel}\nKelas: ${g.kelas}?\n\nData akan dihapus secara manual dari database.`)) {
+                                  if (onDeleteGuru) {
+                                    onDeleteGuru(g.id || g.nama);
+                                  }
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-800 border border-red-500/50 text-red-200 text-xs font-bold inline-flex items-center gap-1.5 transition shadow active:scale-95"
+                              title="Hapus data ustadz ini secara manual"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                              <span>Hapus</span>
+                            </button>
+                          </td>
                         </tr>
                       ))}
-                    {guruList.filter(g => g.kelas === selectedAngkatanGuru).length === 0 && (
+                    {guruList.filter(g => selectedAngkatanGuru === 'SEMUA' || g.kelas === selectedAngkatanGuru).length === 0 && (
                       <tr>
-                        <td colSpan={4} className="p-8 text-center text-emerald-300">
+                        <td colSpan={6} className="p-8 text-center text-emerald-300">
                           Belum ada data guru pengajar yang tercatat untuk angkatan {selectedAngkatanGuru}.
                         </td>
                       </tr>
@@ -3820,6 +4953,695 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* TAB 8.5: INTEGRASI GOOGLE SHEETS & DRIVE CLOUD DATABASE */}
+        {activeTab === 'google-sheets' && (
+          <div className="space-y-6">
+            {/* Header Google Sheets Command Center */}
+            <div className="card-3d-glass rounded-3xl p-6 border border-[#d4af37]/40 shadow-2xl relative overflow-hidden">
+              <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#f5e298]/80 to-transparent pointer-events-none" />
+              
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-[#d4af37]/20">
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-[#093d25] border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow-xl">
+                    <FileSpreadsheet className="w-7 h-7 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold font-serif text-[#d4af37] text-gold-3d flex items-center gap-2">
+                      Pusat Integrasi Google Sheets & Drive
+                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-sans font-bold">
+                        Cloud Sync Master
+                      </span>
+                    </h3>
+                    <p className="text-xs text-emerald-200/90 mt-1">
+                      Koneksi dua arah: Sinkronkan data kehadiran ustadz, santri, kurikulum, dan nilai raport ke Google Spreadsheet.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => onOpenSheetsModal ? onOpenSheetsModal() : null}
+                    className="px-4 py-2 bg-gradient-to-r from-[#d4af37] to-[#b8972e] text-black font-extrabold text-xs rounded-xl shadow-lg hover:brightness-110 transition flex items-center gap-2"
+                  >
+                    <Sliders className="w-3.5 h-3.5" />
+                    <span>Buka Panel Modal Drive</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Status Message Notification */}
+              {sheetsStatusMsg && (
+                <div className={`mt-4 p-3.5 rounded-xl border flex items-center gap-3 text-xs font-semibold animate-fadeIn ${
+                  sheetsStatusMsg.type === 'success'
+                    ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-200'
+                    : sheetsStatusMsg.type === 'error'
+                    ? 'bg-red-950/80 border-red-500/50 text-red-200'
+                    : 'bg-blue-950/80 border-blue-500/50 text-blue-200'
+                }`}>
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span className="flex-1">{sheetsStatusMsg.text}</span>
+                  <button onClick={() => setSheetsStatusMsg(null)} className="text-stone-400 hover:text-white">✕</button>
+                </div>
+              )}
+
+              {/* Grid 2 Kolom: Status Akun & File Spreadsheet Aktif */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                {/* 1. Status Akun Google */}
+                <div className="bg-[#02130a]/90 p-4 rounded-2xl border border-[#d4af37]/30 flex flex-col justify-between space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#d4af37] uppercase tracking-wider flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      Status Akun Google Workspace
+                    </span>
+                    <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full border ${
+                      isGoogleConnected 
+                        ? 'bg-emerald-900/60 text-emerald-300 border-emerald-500/50' 
+                        : 'bg-stone-800 text-stone-400 border-stone-700'
+                    }`}>
+                      {isGoogleConnected ? '● Terhubung' : '○ Offline'}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-stone-300 leading-relaxed">
+                    {isGoogleConnected
+                      ? 'Akun Google Anda terhubung aktif. Izin Google Sheets & Google Drive telah diberikan untuk sinkronisasi data.'
+                      : 'Hubungkan akun Google Anda untuk mengaktifkan sinkronisasi otomatis ke Google Spreadsheet.'}
+                  </p>
+
+                  <div className="pt-2">
+                    {isGoogleConnected ? (
+                      <button
+                        onClick={async () => {
+                          if (window.confirm('Keluar dari sambungan akun Google?')) {
+                            if (setIsGoogleConnected) setIsGoogleConnected(false);
+                            setSheetsStatusMsg({ type: 'info', text: 'Telah memutuskan sambungan dari akun Google.' });
+                          }
+                        }}
+                        className="px-3.5 py-1.5 text-xs bg-stone-900 hover:bg-stone-800 border border-stone-700 text-stone-300 rounded-lg transition"
+                      >
+                        Keluar Akun Google
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          if (onOpenSheetsModal) onOpenSheetsModal();
+                        }}
+                        className="px-4 py-2 bg-white text-gray-800 font-bold text-xs rounded-lg shadow hover:bg-gray-100 transition flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24">
+                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                        </svg>
+                        <span>Sign in with Google</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. File Spreadsheet Terhubung */}
+                <div className="bg-[#02130a]/90 p-4 rounded-2xl border border-[#d4af37]/30 flex flex-col justify-between space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#d4af37] uppercase tracking-wider flex items-center gap-1.5">
+                      <Database className="w-4 h-4 text-emerald-400" />
+                      Spreadsheet ID Terhubung
+                    </span>
+                    {spreadsheetId && (
+                      <a
+                        href={`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-emerald-400 hover:underline flex items-center gap-1 font-bold"
+                      >
+                        <span>Buka Sheets</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={sheetsInputId}
+                        onChange={(e) => setSheetsInputId(e.target.value)}
+                        placeholder="Masukkan ID Spreadsheet atau Link..."
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-[#010a05] border border-[#d4af37]/40 text-white font-mono text-xs focus:outline-none"
+                      />
+                      <button
+                        onClick={() => {
+                          let clean = sheetsInputId.trim();
+                          if (clean.includes('/d/')) {
+                            const match = clean.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                            if (match && match[1]) clean = match[1];
+                          }
+                          setSpreadsheetId(clean);
+                          setSheetsStatusMsg({ type: 'success', text: `Spreadsheet ID berhasil diperbarui: ${clean}` });
+                        }}
+                        className="px-3 py-1.5 bg-[#d4af37] text-black font-bold text-xs rounded-lg hover:brightness-110 transition"
+                      >
+                        Terapkan
+                      </button>
+                    </div>
+                    <span className="text-[10px] text-stone-400 block font-mono truncate">
+                      ID Aktif: {spreadsheetId || 'Belum diatur'}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      onClick={() => {
+                        setSheetsConfirmModal({
+                          isOpen: true,
+                          action: 'createSheet',
+                          title: 'Buat Spreadsheet Baru di Google Drive?',
+                          desc: 'Sistem akan membuat Google Spreadsheet baru di Google Drive Anda dengan judul "SIM Pontren Salaf - Database Master" dan mengonfigurasi 10 sheet tab otomatis.'
+                        });
+                      }}
+                      className="px-3 py-1.5 bg-emerald-900/60 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Buat Spreadsheet Baru di Drive</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (onOpenSheetsModal) onOpenSheetsModal();
+                      }}
+                      className="px-3 py-1.5 bg-stone-900 hover:bg-stone-800 border border-stone-700 text-stone-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5 text-[#d4af37]" />
+                      <span>Pilih dari Drive</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Master Sync Action Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                {/* Export Card */}
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-[#031d12] to-[#01140b] border border-emerald-500/40 flex flex-col justify-between space-y-3">
+                  <div>
+                    <div className="flex items-center gap-2 text-emerald-300 font-bold text-xs uppercase tracking-wider">
+                      <ArrowUpFromLine className="w-4 h-4 text-emerald-400" />
+                      Kirim Seluruh Data ke Google Sheets (Export)
+                    </div>
+                    <p className="text-xs text-stone-300 mt-1 leading-relaxed">
+                      Kirim data lokal aplikasi ({santriList.length} Santri, {guruList.length} Guru, {absensiGuruList.length} Presensi Ustadz, {absensiSantriList.length} Presensi Santri, Jadwal, Nilai) ke Google Spreadsheet terhubung.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSheetsConfirmModal({
+                        isOpen: true,
+                        action: 'exportAll',
+                        title: 'Kirim / Ekspor Seluruh Data ke Google Sheets?',
+                        desc: `Tindakan ini akan menimpa seluruh lembar kerja pada Google Spreadsheet (${spreadsheetId}) dengan data terbaru yang ada di aplikasi saat ini.`
+                      });
+                    }}
+                    disabled={isSheetsBusy}
+                    className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition disabled:opacity-50"
+                  >
+                    <ArrowUpFromLine className="w-4 h-4" />
+                    <span>{isSheetsBusy ? 'Sedang Memproses...' : 'Ekspor Semua Data ke Google Sheets'}</span>
+                  </button>
+                </div>
+
+                {/* Import Card */}
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-[#171203] to-[#0f0c02] border border-[#d4af37]/40 flex flex-col justify-between space-y-3">
+                  <div>
+                    <div className="flex items-center gap-2 text-[#d4af37] font-bold text-xs uppercase tracking-wider">
+                      <ArrowDownToLine className="w-4 h-4 text-[#d4af37]" />
+                      Tarik Data dari Google Sheets (Import)
+                    </div>
+                    <p className="text-xs text-stone-300 mt-1 leading-relaxed">
+                      Ambil data santri, guru, jadwal pelajaran, nadzhom, dan nilai ujian dari Google Spreadsheet master untuk disinkronkan ke aplikasi.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSheetsConfirmModal({
+                        isOpen: true,
+                        action: 'importAll',
+                        title: 'Tarik / Impor Data dari Google Sheets?',
+                        desc: `Tindakan ini akan membaca Google Spreadsheet (${spreadsheetId}) dan memperbarui data lokal aplikasi dengan baris data dari spreadsheet.`
+                      });
+                    }}
+                    disabled={isSheetsBusy}
+                    className="w-full py-2.5 bg-gradient-to-r from-[#d4af37] to-[#b8972e] text-black font-extrabold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition disabled:opacity-50 hover:brightness-110"
+                  >
+                    <ArrowDownToLine className="w-4 h-4" />
+                    <span>{isSheetsBusy ? 'Sedang Memproses...' : 'Tarik Data dari Google Sheets'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* TAB PREVIEW DATA SHEET */}
+            <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur-md space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[#d4af37]/20">
+                <div>
+                  <h4 className="text-sm sm:text-base font-bold text-white text-gold-3d flex items-center gap-2">
+                    Pratinjau Lembar Kerja (Sheet Tabs)
+                  </h4>
+                  <p className="text-xs text-emerald-300">
+                    Pilih lembar kerja di bawah untuk meninjau data yang disinkronkan ke Google Spreadsheet.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setSheetsConfirmModal({
+                      isOpen: true,
+                      action: 'exportTab',
+                      tabName: sheetsPreviewTab,
+                      title: `Ekspor Tab ${sheetsPreviewTab.toUpperCase()} ke Google Sheets?`,
+                      desc: `Tindakan ini akan menyinkronkan data kategori "${sheetsPreviewTab}" saja ke tab terkait di Google Spreadsheet.`
+                    });
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl btn-3d-gold text-black font-extrabold text-xs flex items-center gap-1.5 shadow"
+                >
+                  <ArrowUpFromLine className="w-3.5 h-3.5" />
+                  <span>Ekspor Tab Ini Saja</span>
+                </button>
+              </div>
+
+              {/* Subtab Selector */}
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { id: 'absensi-guru', label: `Presensi Ustadz (${combinedGuruLog.length})` },
+                  { id: 'absensi-santri', label: `Presensi Santri (${absensiSantriList.length})` },
+                  { id: 'santri', label: `Data Santri (${santriList.length})` },
+                  { id: 'guru', label: `Data Guru (${guruList.length})` },
+                  { id: 'jadwal', label: `Jadwal (${jadwalList.length})` },
+                  { id: 'nadzhom', label: `Nadzhom (${nadzhomList.length})` },
+                  { id: 'nilai', label: `Nilai Raport (${nilaiList.length})` },
+                  { id: 'syahriyah', label: `Syahriyah (${syahriyahList.length})` }
+                ].map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setSheetsPreviewTab(t.id as any)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                      sheetsPreviewTab === t.id
+                        ? 'bg-[#d4af37] text-black font-extrabold shadow-md'
+                        : 'bg-[#03150d] text-emerald-200 hover:bg-[#072a1a] border border-[#d4af37]/25'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Table Render based on sheetsPreviewTab */}
+              <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25 max-h-96 overflow-y-auto">
+                {sheetsPreviewTab === 'absensi-guru' && (
+                  <table className="w-full text-left text-xs min-w-[650px]">
+                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
+                      <tr>
+                        <th className="p-3">TANGGAL</th>
+                        <th className="p-3">NAMA USTADZ</th>
+                        <th className="p-3">MAPEL & KELAS</th>
+                        <th className="p-3">STATUS</th>
+                        <th className="p-3">CATATAN / MATERI</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
+                      {combinedGuruLog.slice(0, 50).map((g, i) => (
+                        <tr key={i} className="hover:bg-[#d4af37]/10">
+                          <td className="p-3 font-mono text-emerald-300">{g.tanggal}</td>
+                          <td className="p-3 font-bold text-white">{g.nama}</td>
+                          <td className="p-3 text-stone-300">{g.mapel} ({g.kelas})</td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              g.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border border-emerald-600' :
+                              g.status === 'Terlambat' ? 'bg-amber-950 text-amber-300 border border-amber-600' :
+                              g.status === 'Izin' ? 'bg-blue-950 text-blue-300 border border-blue-600' :
+                              'bg-red-950 text-red-300 border border-red-600'
+                            }`}>
+                              {g.status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-stone-300">{g.catatan || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {sheetsPreviewTab === 'absensi-santri' && (
+                  <table className="w-full text-left text-xs min-w-[650px]">
+                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
+                      <tr>
+                        <th className="p-3">TANGGAL</th>
+                        <th className="p-3">NIS</th>
+                        <th className="p-3">NAMA SANTRI</th>
+                        <th className="p-3">KELAS</th>
+                        <th className="p-3">STATUS</th>
+                        <th className="p-3">KETERANGAN</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
+                      {absensiSantriList.slice(0, 50).map((s, i) => (
+                        <tr key={i} className="hover:bg-[#d4af37]/10">
+                          <td className="p-3 font-mono text-emerald-300">{s.tanggal}</td>
+                          <td className="p-3 font-mono text-[#d4af37]">{s.idSantri}</td>
+                          <td className="p-3 font-bold text-white">{s.nama}</td>
+                          <td className="p-3 text-stone-300">{s.kelas}</td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              s.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border border-emerald-600' :
+                              s.status === 'Izin' ? 'bg-blue-950 text-blue-300 border border-blue-600' :
+                              s.status === 'Sakit' ? 'bg-amber-950 text-amber-300 border border-amber-600' :
+                              'bg-red-950 text-red-300 border border-red-600'
+                            }`}>
+                              {s.status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-stone-300">{s.keterangan || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {sheetsPreviewTab === 'santri' && (
+                  <table className="w-full text-left text-xs min-w-[650px]">
+                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
+                      <tr>
+                        <th className="p-3">NIS</th>
+                        <th className="p-3">NAMA SANTRI</th>
+                        <th className="p-3">KELAS</th>
+                        <th className="p-3">KAMAR</th>
+                        <th className="p-3">ALAMAT ASAL</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
+                      {santriList.slice(0, 50).map((s, i) => (
+                        <tr key={i} className="hover:bg-[#d4af37]/10">
+                          <td className="p-3 font-mono text-[#d4af37]">{s.id}</td>
+                          <td className="p-3 font-bold text-white">{s.nama}</td>
+                          <td className="p-3 text-emerald-300">{s.kelas}</td>
+                          <td className="p-3 text-stone-300">{s.kamar}</td>
+                          <td className="p-3 text-stone-400">{s.alamat}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {sheetsPreviewTab === 'guru' && (
+                  <table className="w-full text-left text-xs min-w-[650px]">
+                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
+                      <tr>
+                        <th className="p-3">ID</th>
+                        <th className="p-3">NAMA USTADZ / PENGANJAR</th>
+                        <th className="p-3">MATA PELAJARAN / KITAB</th>
+                        <th className="p-3">KELAS AMPU</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
+                      {guruList.map((g, i) => (
+                        <tr key={i} className="hover:bg-[#d4af37]/10">
+                          <td className="p-3 font-mono text-[#d4af37]">{g.id}</td>
+                          <td className="p-3 font-bold text-white">{g.nama}</td>
+                          <td className="p-3 text-emerald-300">{g.mapel}</td>
+                          <td className="p-3 text-stone-300">{g.kelas}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {sheetsPreviewTab === 'jadwal' && (
+                  <table className="w-full text-left text-xs min-w-[650px]">
+                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
+                      <tr>
+                        <th className="p-3">KELAS</th>
+                        <th className="p-3">HARI</th>
+                        <th className="p-3">JAM KE</th>
+                        <th className="p-3">WAKTU</th>
+                        <th className="p-3">MATA PELAJARAN</th>
+                        <th className="p-3">USTADZ PENGAJAR</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
+                      {jadwalList.slice(0, 50).map((j, i) => (
+                        <tr key={i} className="hover:bg-[#d4af37]/10">
+                          <td className="p-3 font-bold text-[#d4af37]">{j.kelas}</td>
+                          <td className="p-3 text-emerald-300">{j.hari}</td>
+                          <td className="p-3 font-mono text-center">{j.jamKe}</td>
+                          <td className="p-3 text-stone-300">{j.waktu}</td>
+                          <td className="p-3 text-white font-semibold">{j.mapel}</td>
+                          <td className="p-3 text-stone-300">{j.nama}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {sheetsPreviewTab === 'nadzhom' && (
+                  <table className="w-full text-left text-xs min-w-[650px]">
+                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
+                      <tr>
+                        <th className="p-3">NIS</th>
+                        <th className="p-3">NAMA SANTRI</th>
+                        <th className="p-3">KITAB</th>
+                        <th className="p-3 text-center">BAIT</th>
+                        <th className="p-3">TANGGAL</th>
+                        <th className="p-3">PREDIKAT</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
+                      {nadzhomList.slice(0, 50).map((n, i) => (
+                        <tr key={i} className="hover:bg-[#d4af37]/10">
+                          <td className="p-3 font-mono text-[#d4af37]">{n.idSantri}</td>
+                          <td className="p-3 font-bold text-white">{n.nama}</td>
+                          <td className="p-3 text-emerald-300">{n.kitab}</td>
+                          <td className="p-3 font-mono text-center font-bold text-emerald-400">{n.bait}</td>
+                          <td className="p-3 font-mono text-stone-300">{n.tanggal}</td>
+                          <td className="p-3 text-amber-300">{n.nilai}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {sheetsPreviewTab === 'nilai' && (
+                  <table className="w-full text-left text-xs min-w-[650px]">
+                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
+                      <tr>
+                        <th className="p-3">NIS</th>
+                        <th className="p-3">NAMA SANTRI</th>
+                        <th className="p-3">KELAS</th>
+                        <th className="p-3">MATA PELAJARAN</th>
+                        <th className="p-3 text-center">NILAI</th>
+                        <th className="p-3">SEMESTER</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
+                      {nilaiList.slice(0, 50).map((nl, i) => (
+                        <tr key={i} className="hover:bg-[#d4af37]/10">
+                          <td className="p-3 font-mono text-[#d4af37]">{nl.idSantri}</td>
+                          <td className="p-3 font-bold text-white">{nl.nama}</td>
+                          <td className="p-3 text-emerald-300">{nl.kelas}</td>
+                          <td className="p-3 text-white">{nl.pelajaran}</td>
+                          <td className="p-3 font-mono text-center font-bold text-emerald-400">{nl.nilai}</td>
+                          <td className="p-3 text-stone-300">{nl.semester}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {sheetsPreviewTab === 'syahriyah' && (
+                  <table className="w-full text-left text-xs min-w-[650px]">
+                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
+                      <tr>
+                        <th className="p-3">ID TAGIHAN</th>
+                        <th className="p-3">NIS</th>
+                        <th className="p-3">NAMA SANTRI</th>
+                        <th className="p-3">BULAN</th>
+                        <th className="p-3">NOMINAL</th>
+                        <th className="p-3">STATUS</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
+                      {syahriyahList.slice(0, 50).map((s, i) => (
+                        <tr key={i} className="hover:bg-[#d4af37]/10">
+                          <td className="p-3 font-mono text-[#d4af37]">{s.id}</td>
+                          <td className="p-3 font-mono text-stone-300">{s.idSantri}</td>
+                          <td className="p-3 font-bold text-white">{s.namaSantri || (s as any).nama || 'Santri'}</td>
+                          <td className="p-3 text-emerald-300">{s.bulan}</td>
+                          <td className="p-3 font-mono text-stone-200">Rp {s.nominal.toLocaleString('id-ID')}</td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              s.status === 'Lunas' ? 'bg-emerald-950 text-emerald-300 border border-emerald-600' : 'bg-red-950 text-red-300 border border-red-600'
+                            }`}>
+                              {s.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            {/* MANDATORY USER CONFIRMATION DIALOG FOR WORKSPACE MUTATIONS */}
+            {sheetsConfirmModal.isOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+                <div className="w-full max-w-md bg-[#041a10] border-2 border-[#d4af37] rounded-2xl p-6 shadow-2xl space-y-4">
+                  <div className="flex items-center gap-3 text-[#f3e5ab]">
+                    <div className="w-10 h-10 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 shrink-0">
+                      <AlertTriangle className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-white">{sheetsConfirmModal.title}</h3>
+                      <span className="text-xs text-stone-400">Konfirmasi Sinkronisasi Google Sheets</span>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-stone-300 leading-relaxed bg-[#010a05] p-3 rounded-lg border border-stone-800">
+                    {sheetsConfirmModal.desc}
+                  </p>
+
+                  <div className="flex items-center justify-end gap-3 pt-2">
+                    <button
+                      onClick={() => setSheetsConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                      className="px-4 py-2 text-xs font-semibold text-stone-300 hover:text-white bg-stone-800 hover:bg-stone-700 rounded-lg transition"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const act = sheetsConfirmModal.action;
+                        setSheetsConfirmModal(prev => ({ ...prev, isOpen: false }));
+                        setIsSheetsBusy(true);
+                        setSheetsStatusMsg(null);
+                        try {
+                          if (act === 'createSheet') {
+                            if (sheetsService) {
+                              const newSheet = await sheetsService.createNewSpreadsheet('SIM Pontren Salaf - Database Master');
+                              setSpreadsheetId(newSheet.id);
+                              setSheetsInputId(newSheet.id);
+                              await sheetsService.exportFullDatabaseToSheets({
+                                santriList,
+                                guruList,
+                                jadwalList,
+                                nadzhomList,
+                                nilaiList,
+                                absensiSantriList,
+                                absensiGuruList,
+                                syahriyahList,
+                                settings
+                              });
+                              setSheetsStatusMsg({
+                                type: 'success',
+                                text: `Spreadsheet baru "${newSheet.title}" berhasil dibuat di Google Drive Anda!`
+                              });
+                            } else {
+                              if (onOpenSheetsModal) onOpenSheetsModal();
+                            }
+                          } else if (act === 'exportAll') {
+                            if (sheetsService) {
+                              await sheetsService.exportFullDatabaseToSheets({
+                                santriList,
+                                guruList,
+                                jadwalList,
+                                nadzhomList,
+                                nilaiList,
+                                absensiSantriList,
+                                absensiGuruList,
+                                syahriyahList,
+                                settings
+                              });
+                              setSheetsStatusMsg({
+                                type: 'success',
+                                text: `Seluruh data (${santriList.length} Santri, ${guruList.length} Guru, Presensi, Nilai) berhasil disinkronkan ke Google Sheets!`
+                              });
+                            } else {
+                              onSyncWithSheets();
+                            }
+                          } else if (act === 'importAll') {
+                            if (sheetsService && onDataImported) {
+                              const [
+                                rSantri, rGuru, rJadwal, rNadzhom, rNilai,
+                                rAbsensiSantri, rAbsensiGuru, rSyahriyah, rSettings
+                              ] = await Promise.all([
+                                sheetsService.loadSantriFromSheet(),
+                                sheetsService.loadGuruFromSheet(),
+                                sheetsService.loadJadwalFromSheet(),
+                                sheetsService.loadNadzhomFromSheet(),
+                                sheetsService.loadNilaiFromSheet(),
+                                sheetsService.loadAbsensiSantriFromSheet(),
+                                sheetsService.loadAbsensiGuruFromSheet(),
+                                sheetsService.loadSyahriyahFromSheet(),
+                                sheetsService.loadSettingsFromSheet()
+                              ]);
+
+                              onDataImported({
+                                santriList: rSantri.length ? rSantri : undefined,
+                                guruList: rGuru.length ? rGuru : undefined,
+                                jadwalList: rJadwal.length ? rJadwal : undefined,
+                                nadzhomList: rNadzhom.length ? rNadzhom : undefined,
+                                nilaiList: rNilai.length ? rNilai : undefined,
+                                absensiSantriList: rAbsensiSantri.length ? rAbsensiSantri : undefined,
+                                absensiGuruList: rAbsensiGuru.length ? rAbsensiGuru : undefined,
+                                syahriyahList: rSyahriyah.length ? rSyahriyah : undefined,
+                                settings: Object.keys(rSettings).length ? rSettings : undefined
+                              });
+
+                              setSheetsStatusMsg({
+                                type: 'success',
+                                text: `Berhasil mengimpor data dari Google Sheets (${rSantri.length} Santri, ${rGuru.length} Guru termuat).`
+                              });
+                            } else {
+                              onSyncWithSheets();
+                            }
+                          } else if (act === 'exportTab') {
+                            if (sheetsService) {
+                              await sheetsService.initSpreadsheetSchema();
+                              const tab = sheetsConfirmModal.tabName;
+                              if (tab === 'absensi-guru') {
+                                const rows = combinedGuruLog.map(g => [g.tanggal, g.nama, g.mapel, g.kelas, g.status, g.catatan || '-', g.hari || '-', g.jamKe || '-', g.waktu || '-']);
+                                await sheetsService.overwriteSheet('Absensi_Guru', ['Tanggal', 'Nama Ustadz', 'Mata Pelajaran', 'Kelas', 'Status', 'Catatan', 'Hari', 'Jam Ke', 'Waktu'], rows);
+                              } else if (tab === 'absensi-santri') {
+                                const rows = absensiSantriList.map(a => [a.tanggal, a.idSantri, a.nama, a.kelas, a.status, a.keterangan || '-', a.waktu || '']);
+                                await sheetsService.overwriteSheet('Absensi_Santri', ['Tanggal', 'NIS', 'Nama Santri', 'Kelas', 'Status', 'Keterangan', 'Waktu'], rows);
+                              } else if (tab === 'santri') {
+                                const rows = santriList.map(s => [s.id, s.nama, s.kelas, s.kamar, s.alamat, s.foto || '']);
+                                await sheetsService.overwriteSheet('Santri', ['NIS / ID', 'Nama Santri', 'Kelas', 'Kamar', 'Alamat', 'Foto URL'], rows);
+                              }
+                              setSheetsStatusMsg({
+                                type: 'success',
+                                text: `Tab "${tab}" berhasil disinkronkan ke Google Sheets!`
+                              });
+                            }
+                          }
+                        } catch (e: any) {
+                          console.error(e);
+                          setSheetsStatusMsg({
+                            type: 'error',
+                            text: `Operasi gagal: ${e?.message || 'Pastikan izin Google Sheets aktif'}`
+                          });
+                        } finally {
+                          setIsSheetsBusy(false);
+                        }
+                      }}
+                      className="px-5 py-2 text-xs font-bold text-black bg-gradient-to-r from-[#d4af37] to-[#e6ca65] hover:brightness-110 rounded-lg shadow transition flex items-center gap-1.5"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Ya, Lanjutkan</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -4533,17 +6355,154 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              if (window.confirm('Simpan rekap kehadiran hari ini dan reset formulir untuk hari baru?')) {
+                              if (window.confirm('Simpan rekapitulasi kehadiran hari ini dan reset formulir serta dashboard utama ke nol (0)?')) {
+                                setGuruAbsensiState({});
+                                setSantriAbsensiState({});
                                 onSaveDashboardAndReset();
+                                try {
+                                  const savedG = localStorage.getItem('sim_rekap_guru_harian_history');
+                                  if (savedG) setRekapGuruLog(JSON.parse(savedG));
+                                  const savedS = localStorage.getItem('sim_rekap_santri_harian_history');
+                                  if (savedS) setRekapSantriLog(JSON.parse(savedS));
+                                } catch {}
                               }
                             }}
                             style={{ color: settings.btn_reset_harian_color || '#ffffff' }}
-                            className="btn-3d-emerald px-5 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 whitespace-nowrap shadow-lg"
+                            className="btn-3d-emerald px-5 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 whitespace-nowrap shadow-lg hover:scale-102 transition"
                           >
                             <RotateCcw className="w-4 h-4" />
-                            <span>{settings.btn_reset_harian_text || 'Simpan Rekap & Reset Harian'}</span>
+                            <span>{settings.btn_reset_harian_text || 'Simpan Rekap & Reset Harian ke Nol (0)'}</span>
                           </button>
                         </div>
+                      </div>
+
+                      {/* TABEL REKAPAN ABSENSI DI BAWAHNYA (RIWAYAT TERARSIP USTADZ & SANTRI) */}
+                      <div className="card-3d rounded-2xl p-4 border border-[#d4af37]/30 space-y-3 mt-4 bg-[#020e08]/90">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#d4af37]/20">
+                          <div className="flex items-center space-x-2">
+                            <Database className="w-4 h-4 text-[#d4af37]" />
+                            <h5 className="text-xs sm:text-sm font-bold text-white text-gold-3d">
+                              Tabel Riwayat Rekapan Absensi (Hasil Simpan Rekap & Ganti Hari)
+                            </h5>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 p-0.5 bg-[#052216] rounded-xl border border-[#d4af37]/30 text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedBulanGuru('rekap_guru')}
+                              className={`px-3 py-1 rounded-lg font-bold transition ${
+                                selectedBulanGuru === 'rekap_guru' || selectedBulanGuru !== 'rekap_santri'
+                                  ? 'bg-[#d4af37] text-black font-extrabold shadow'
+                                  : 'text-emerald-300 hover:text-white'
+                              }`}
+                            >
+                              Riwayat Ustadz ({rekapGuruLog.length})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedBulanGuru('rekap_santri')}
+                              className={`px-3 py-1 rounded-lg font-bold transition ${
+                                selectedBulanGuru === 'rekap_santri'
+                                  ? 'bg-[#d4af37] text-black font-extrabold shadow'
+                                  : 'text-emerald-300 hover:text-white'
+                              }`}
+                            >
+                              Riwayat Santri ({rekapSantriLog.length})
+                            </button>
+                          </div>
+                        </div>
+
+                        {selectedBulanGuru !== 'rekap_santri' ? (
+                          <div className="overflow-x-auto rounded-xl border border-[#d4af37]/20">
+                            <table className="w-full text-left text-xs min-w-[750px]">
+                              <thead className="bg-[#03180f] text-[#d4af37]">
+                                <tr>
+                                  <th className="p-2.5 w-10 text-center">NO</th>
+                                  <th className="p-2.5 w-28">TANGGAL</th>
+                                  <th className="p-2.5">NAMA USTADZ</th>
+                                  <th className="p-2.5">MAPEL / KITAB</th>
+                                  <th className="p-2.5">KELAS</th>
+                                  <th className="p-2.5 w-24">STATUS</th>
+                                  <th className="p-2.5">CATATAN MATERI</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-[#d4af37]/10 bg-[#052216]/60">
+                                {rekapGuruLog.slice(0, 50).map((g, idx) => (
+                                  <tr key={idx} className="hover:bg-[#d4af37]/5">
+                                    <td className="p-2.5 text-center font-mono text-[#d4af37]">{idx + 1}</td>
+                                    <td className="p-2.5 font-mono text-stone-300">{g.tanggal}</td>
+                                    <td className="p-2.5 font-bold text-white">{g.nama}</td>
+                                    <td className="p-2.5 text-emerald-300 font-serif">{g.mapel}</td>
+                                    <td className="p-2.5 text-slate-300">{g.kelas}</td>
+                                    <td className="p-2.5">
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                        g.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40' :
+                                        g.status === 'Terlambat' ? 'bg-amber-950 text-amber-300 border border-amber-500/40' :
+                                        g.status === 'Izin' ? 'bg-blue-950 text-blue-300 border border-blue-500/40' :
+                                        'bg-red-950 text-red-300 border border-red-500/40'
+                                      }`}>
+                                        {g.status}
+                                      </span>
+                                    </td>
+                                    <td className="p-2.5 text-slate-300">{g.catatan || '-'}</td>
+                                  </tr>
+                                ))}
+                                {rekapGuruLog.length === 0 && (
+                                  <tr>
+                                    <td colSpan={7} className="p-6 text-center text-emerald-300">
+                                      Belum ada riwayat rekapan absensi ustadz. Klik tombol "Simpan Rekap & Reset Harian ke Nol (0)" di atas untuk mengarsipkan sesi hari ini.
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto rounded-xl border border-[#d4af37]/20">
+                            <table className="w-full text-left text-xs min-w-[750px]">
+                              <thead className="bg-[#03180f] text-[#d4af37]">
+                                <tr>
+                                  <th className="p-2.5 w-10 text-center">NO</th>
+                                  <th className="p-2.5 w-28">TANGGAL</th>
+                                  <th className="p-2.5">NIS</th>
+                                  <th className="p-2.5">NAMA SANTRI</th>
+                                  <th className="p-2.5">KELAS</th>
+                                  <th className="p-2.5 w-24">STATUS</th>
+                                  <th className="p-2.5">KETERANGAN</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-[#d4af37]/10 bg-[#052216]/60">
+                                {rekapSantriLog.slice(0, 50).map((s, idx) => (
+                                  <tr key={idx} className="hover:bg-[#d4af37]/5">
+                                    <td className="p-2.5 text-center font-mono text-[#d4af37]">{idx + 1}</td>
+                                    <td className="p-2.5 font-mono text-stone-300">{s.tanggal}</td>
+                                    <td className="p-2.5 font-mono text-amber-300">{s.idSantri}</td>
+                                    <td className="p-2.5 font-bold text-white">{s.nama}</td>
+                                    <td className="p-2.5 text-slate-300">{s.kelas}</td>
+                                    <td className="p-2.5">
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                        s.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40' :
+                                        s.status === 'Izin' ? 'bg-amber-950 text-amber-300 border border-amber-500/40' :
+                                        s.status === 'Sakit' ? 'bg-blue-950 text-blue-300 border border-blue-500/40' :
+                                        'bg-red-950 text-red-300 border border-red-500/40'
+                                      }`}>
+                                        {s.status}
+                                      </span>
+                                    </td>
+                                    <td className="p-2.5 text-slate-300">{s.keterangan || '-'}</td>
+                                  </tr>
+                                ))}
+                                {rekapSantriLog.length === 0 && (
+                                  <tr>
+                                    <td colSpan={7} className="p-6 text-center text-emerald-300">
+                                      Belum ada riwayat rekapan absensi santri. Klik tombol "Simpan Rekap & Reset Harian ke Nol (0)" di atas untuk mengarsipkan sesi hari ini.
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -6565,29 +8524,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                       <div className="space-y-3">
                         <label className="block text-xs font-semibold text-[#d4af37]">
-                          Link URL Logo Madrasah Diniyah (Bingkai Bulat)
+                          Link URL Logo Utama Pesantren & Madrasah (1 Bingkai Bulat Selaras)
                         </label>
                         <input
                           type="text"
                           data-testid="logo-madrasah-input"
-                          value={visualForm.logo_madrasah || ''}
-                          onChange={(e) => setVisualForm({ ...visualForm, logo_madrasah: e.target.value })}
+                          value={visualForm.logo_madrasah || visualForm.logo_pondok || ''}
+                          onChange={(e) => setVisualForm({ ...visualForm, logo_madrasah: e.target.value, logo_pondok: e.target.value })}
                           className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
-                          placeholder="https://... URL logo bulat madrasah (kosongkan = logo bawaan)"
-                        />
-                        <label className="block text-xs font-semibold text-[#d4af37] pt-1">
-                          Link URL Logo Pondok Pesantren (Bingkai Persegi Panjang)
-                        </label>
-                        <input
-                          type="text"
-                          data-testid="logo-pondok-input"
-                          value={visualForm.logo_pondok || ''}
-                          onChange={(e) => setVisualForm({ ...visualForm, logo_pondok: e.target.value })}
-                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
-                          placeholder="https://... URL logo persegi pondok (kosongkan = logo bawaan)"
+                          placeholder="https://... URL logo bulat pesantren (kosongkan = logo bawaan)"
                         />
                         <p className="text-[10px] text-emerald-300/80">
-                          Kedua logo tampil berbingkai emas pada halaman login, animasi pintu, serta header dashboard Admin, Pengurus, dan Wali Santri.
+                          Logo bulat ini diselaraskan berbingkai emas melingkar pada seluruh header: Dashboard Admin, Dashboard Pengurus, Portal Wali Santri, dan Layar Masuk.
                         </p>
                       </div>
 

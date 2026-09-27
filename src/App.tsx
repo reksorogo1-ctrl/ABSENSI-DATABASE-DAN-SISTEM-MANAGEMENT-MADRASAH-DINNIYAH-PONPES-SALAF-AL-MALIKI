@@ -3,7 +3,8 @@ import {
   Santri, AbsensiSantriRecord, AbsensiGuruRecord, JadwalPelajaran, 
   GuruPengajar, NadzhomRecord, NilaiUjianRecord, AppSettings, DashboardStats, AuthSession,
   SyahriyahRecord, UangSakuRecord, KurikulumKitabRecord,
-  Pengurus, KalenderAkademikEvent, UjianSantriRecord, IzinMengajarRequest
+  Pengurus, KalenderAkademikEvent, UjianSantriRecord, IzinMengajarRequest,
+  SilabusMemaknaiRecord
 } from './types';
 import { 
   DEFAULT_SPREADSHEET_ID, DEFAULT_SETTINGS, INITIAL_SANTRI_LIST, 
@@ -11,10 +12,11 @@ import {
   INITIAL_NILAI_LIST, INITIAL_ABSENSI_SANTRI, INITIAL_ABSENSI_GURU,
   INITIAL_SYAHRIYAH_LIST, INITIAL_UANG_SAKU_LIST, INITIAL_KURIKULUM_LIST,
   INITIAL_PENGURUS_LIST, INITIAL_KALENDER_AKADEMIK, INITIAL_UJIAN_SANTRI_LIST,
-  INITIAL_IZIN_MENGAJAR_LIST
+  INITIAL_IZIN_MENGAJAR_LIST, INITIAL_SILABUS_MEMAKNAI
 } from './data';
 import { GoogleSheetsService } from './sheetsService';
 import { googleSignIn, initAuth, getAccessToken, logoutGoogle } from './googleAuth';
+import { broadcastAttendanceUpdate, subscribeAttendanceUpdates } from './serverTime';
 import { AdminDashboard } from './components/AdminDashboard';
 import { WaliSantriPortal } from './components/WaliSantriPortal';
 import { PengurusDashboard } from './components/PengurusDashboard';
@@ -22,6 +24,7 @@ import { IntroOpening } from './components/IntroOpening';
 import { CinematicIntro } from './components/CinematicIntro';
 import { DoorTransition } from './components/DoorTransition';
 import { LoginScreen } from './components/LoginScreen';
+import { GoogleSheetsModal } from './components/GoogleSheetsModal';
 
 export default function App() {
   // Intro Video State
@@ -45,6 +48,7 @@ export default function App() {
   const [sheetsService] = useState<GoogleSheetsService>(() => new GoogleSheetsService(spreadsheetId));
   const [isGoogleConnected, setIsGoogleConnected] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [showSheetsModal, setShowSheetsModal] = useState<boolean>(false);
 
   // App Data (Local + Sheets Cache)
   const [settings, setSettings] = useState<AppSettings>(() => {
@@ -71,8 +75,14 @@ export default function App() {
     const saved = localStorage.getItem('sim_nilai');
     return saved ? JSON.parse(saved) : INITIAL_NILAI_LIST;
   });
-  const [absensiSantriList, setAbsensiSantriList] = useState<AbsensiSantriRecord[]>(INITIAL_ABSENSI_SANTRI);
-  const [absensiGuruList, setAbsensiGuruList] = useState<AbsensiGuruRecord[]>(INITIAL_ABSENSI_GURU);
+  const [absensiSantriList, setAbsensiSantriList] = useState<AbsensiSantriRecord[]>(() => {
+    const saved = localStorage.getItem('sim_absensi_santri');
+    return saved ? JSON.parse(saved) : INITIAL_ABSENSI_SANTRI;
+  });
+  const [absensiGuruList, setAbsensiGuruList] = useState<AbsensiGuruRecord[]>(() => {
+    const saved = localStorage.getItem('sim_absensi_guru');
+    return saved ? JSON.parse(saved) : INITIAL_ABSENSI_GURU;
+  });
 
   // New features data states (Syahriyah, Uang Saku, Kurikulum)
   const [syahriyahList, setSyahriyahList] = useState<SyahriyahRecord[]>(() => {
@@ -86,6 +96,10 @@ export default function App() {
   const [kurikulumList, setKurikulumList] = useState<KurikulumKitabRecord[]>(() => {
     const saved = localStorage.getItem('sim_kurikulum');
     return saved ? JSON.parse(saved) : INITIAL_KURIKULUM_LIST;
+  });
+  const [silabusList, setSilabusList] = useState<SilabusMemaknaiRecord[]>(() => {
+    const saved = localStorage.getItem('sim_silabus');
+    return saved ? JSON.parse(saved) : INITIAL_SILABUS_MEMAKNAI;
   });
 
   // Pengurus, Kalender Akademik, & Ujian Santri Data States
@@ -121,17 +135,42 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_IZIN_MENGAJAR_LIST;
   });
 
-  // Otomatis restart sesi harian dari nol saat berganti hari kalender
+  // Otomatis simpan rekap saat berganti hari dan reset harian ke nol (System Otomatis)
   useEffect(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const lastDate = localStorage.getItem('sim_last_active_date');
-    if (lastDate && lastDate !== todayStr) {
-      // Tanggal berganti: perbarui tanggal aktif
-      localStorage.setItem('sim_last_active_date', todayStr);
-      // Sesi presensi hari baru dimulai dari nol
-    } else if (!lastDate) {
-      localStorage.setItem('sim_last_active_date', todayStr);
-    }
+    const checkDayChange = () => {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const lastActiveDate = localStorage.getItem('sim_active_dashboard_date');
+
+      if (!lastActiveDate) {
+        localStorage.setItem('sim_active_dashboard_date', todayStr);
+      } else if (lastActiveDate !== todayStr) {
+        // Hari telah berganti! Otomatis arsipkan data sebelumnya dan restart sesi harian aktif ke nol
+        try {
+          const currentGuru = JSON.parse(localStorage.getItem('sim_absensi_guru') || '[]');
+          const currentSantri = JSON.parse(localStorage.getItem('sim_absensi_santri') || '[]');
+          if (currentGuru.length > 0) {
+            const prevHistory = JSON.parse(localStorage.getItem('sim_rekap_guru_harian_history') || '[]');
+            localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify([...currentGuru, ...prevHistory]));
+          }
+          if (currentSantri.length > 0) {
+            const prevHistoryS = JSON.parse(localStorage.getItem('sim_rekap_santri_harian_history') || '[]');
+            localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify([...currentSantri, ...prevHistoryS]));
+          }
+        } catch {}
+
+        // Sesi absensi harian di-reset ke nol untuk hari baru
+        setAbsensiSantriList([]);
+        setAbsensiGuruList([]);
+        localStorage.setItem('sim_absensi_santri', JSON.stringify([]));
+        localStorage.setItem('sim_absensi_guru', JSON.stringify([]));
+        localStorage.setItem('sim_active_dashboard_date', todayStr);
+        localStorage.setItem('sim_last_active_date', todayStr);
+      }
+    };
+
+    checkDayChange();
+    const timer = setInterval(checkDayChange, 10000);
+    return () => clearInterval(timer);
   }, []);
 
   // Login Form State
@@ -157,23 +196,6 @@ export default function App() {
     localStorage.setItem('sim_spreadsheet_id', spreadsheetId);
   }, [spreadsheetId, sheetsService]);
 
-  // Otomatis restart dan mulai dari nol setelah berganti hari
-  useEffect(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const lastActiveDate = localStorage.getItem('sim_active_dashboard_date');
-
-    if (!lastActiveDate) {
-      localStorage.setItem('sim_active_dashboard_date', todayStr);
-    } else if (lastActiveDate !== todayStr) {
-      // Hari telah berganti! Otomatis restart sesi harian ke nol
-      console.log(`Pergantian hari terdeteksi (${lastActiveDate} -> ${todayStr}). Mereset sesi harian aktif ke nol.`);
-      // Sesi absensi harian di-reset ke nol untuk hari baru
-      setAbsensiSantriList([]);
-      setAbsensiGuruList([]);
-      localStorage.setItem('sim_active_dashboard_date', todayStr);
-    }
-  }, []);
-
   useEffect(() => {
     initAuth(
       (_user, token) => {
@@ -188,7 +210,9 @@ export default function App() {
   // Compute Dashboard Stats dynamically
   const stats: DashboardStats = React.useMemo(() => {
     const totalSantri = santriList.length;
-    const totalGuru = guruList.length;
+    // Kolom data ustadz: menghitung ketika ada nama yang sama dihitung satu orang!
+    const uniqueGuruNames = new Set(guruList.map(g => g.nama.trim().toLowerCase()));
+    const totalGuru = uniqueGuruNames.size;
 
     const hadirSantri = absensiSantriList.filter(a => a.status === 'Hadir').length;
     const izinSantri = absensiSantriList.filter(a => a.status === 'Izin').length;
@@ -203,10 +227,10 @@ export default function App() {
     const totalAbsensiSantri = absensiSantriList.length;
     const totalAbsensiGuru = absensiGuruList.length;
 
-    const percentSantri = totalAbsensiSantri ? Math.round((hadirSantri / totalAbsensiSantri) * 100) : 95;
-    const percentGuru = totalAbsensiGuru ? Math.round((hadirGuru / totalAbsensiGuru) * 100) : 92;
-    const percentKeterlambatanGuru = totalAbsensiGuru ? Math.round((terlambatGuru / totalAbsensiGuru) * 100) : 4;
-    const percentIzinGuru = totalAbsensiGuru ? Math.round((izinGuru / totalAbsensiGuru) * 100) : 4;
+    const percentSantri = totalAbsensiSantri ? Math.round((hadirSantri / totalAbsensiSantri) * 100) : 0;
+    const percentGuru = totalAbsensiGuru ? Math.round((hadirGuru / totalAbsensiGuru) * 100) : 0;
+    const percentKeterlambatanGuru = totalAbsensiGuru ? Math.round((terlambatGuru / totalAbsensiGuru) * 100) : 0;
+    const percentIzinGuru = totalAbsensiGuru ? Math.round((izinGuru / totalAbsensiGuru) * 100) : 0;
 
     return {
       totalSantri,
@@ -218,28 +242,28 @@ export default function App() {
       percentKeterlambatanGuru,
       percentIzinGuru,
       percentAlphaGuru: totalAbsensiGuru ? Math.round((alphaGuru / totalAbsensiGuru) * 100) : 0,
-      hadirSantri: hadirSantri || 84,
-      izinSantri: izinSantri || 3,
-      sakitSantri: sakitSantri || 2,
-      alphaSantri: alphaSantri || 1,
-      hadirGuru: hadirGuru || 24,
-      terlambatGuru: terlambatGuru || 1,
-      izinGuru: izinGuru || 1,
-      alphaGuru: alphaGuru || 0,
+      hadirSantri,
+      izinSantri,
+      sakitSantri,
+      alphaSantri,
+      hadirGuru,
+      terlambatGuru,
+      izinGuru,
+      alphaGuru,
       kehadiranSantriHariIni: percentSantri,
       kehadiranGuruHariIni: percentGuru,
       keterlambatanGuru: percentKeterlambatanGuru,
       rekapSantri: {
-        hadir: hadirSantri || 84,
-        izin: izinSantri || 3,
-        sakit: sakitSantri || 2,
-        alpha: alphaSantri || 1
+        hadir: hadirSantri,
+        izin: izinSantri,
+        sakit: sakitSantri,
+        alpha: alphaSantri
       },
       rekapGuru: {
-        hadir: hadirGuru || 24,
-        terlambat: terlambatGuru || 1,
-        izin: izinGuru || 1,
-        alpha: alphaGuru || 0
+        hadir: hadirGuru,
+        terlambat: terlambatGuru,
+        izin: izinGuru,
+        alpha: alphaGuru
       },
       history: [
         { tanggal: '16/09', hadirSantri: 86, hadirGuru: 24, percentSantri: 94, percentGuru: 92 },
@@ -305,6 +329,75 @@ export default function App() {
       alert('Koneksi lokal aktif. Jika ingin menyinkronkan ke Google Sheets pusat, pastikan izin Google Workspace aktif.');
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleDataImported = (imported: {
+    santriList?: Santri[];
+    guruList?: GuruPengajar[];
+    jadwalList?: JadwalPelajaran[];
+    nadzhomList?: NadzhomRecord[];
+    nilaiList?: NilaiUjianRecord[];
+    absensiSantriList?: AbsensiSantriRecord[];
+    absensiGuruList?: AbsensiGuruRecord[];
+    syahriyahList?: SyahriyahRecord[];
+    settings?: Partial<AppSettings>;
+  }) => {
+    if (imported.santriList && imported.santriList.length > 0) {
+      setSantriList(imported.santriList);
+      localStorage.setItem('sim_santri', JSON.stringify(imported.santriList));
+    }
+    if (imported.guruList && imported.guruList.length > 0) {
+      setGuruList(imported.guruList);
+      localStorage.setItem('sim_guru', JSON.stringify(imported.guruList));
+    }
+    if (imported.jadwalList && imported.jadwalList.length > 0) {
+      setJadwalList(imported.jadwalList);
+      localStorage.setItem('sim_jadwal', JSON.stringify(imported.jadwalList));
+    }
+    if (imported.nadzhomList && imported.nadzhomList.length > 0) {
+      setNadzhomList(imported.nadzhomList);
+      localStorage.setItem('sim_nadzhom', JSON.stringify(imported.nadzhomList));
+    }
+    if (imported.nilaiList && imported.nilaiList.length > 0) {
+      setNilaiList(imported.nilaiList);
+      localStorage.setItem('sim_nilai', JSON.stringify(imported.nilaiList));
+    }
+    if (imported.absensiSantriList && imported.absensiSantriList.length > 0) {
+      setAbsensiSantriList(imported.absensiSantriList);
+      localStorage.setItem('sim_absensi_santri', JSON.stringify(imported.absensiSantriList));
+    }
+    if (imported.absensiGuruList && imported.absensiGuruList.length > 0) {
+      setAbsensiGuruList(imported.absensiGuruList);
+      localStorage.setItem('sim_absensi_guru', JSON.stringify(imported.absensiGuruList));
+    }
+    if (imported.syahriyahList && imported.syahriyahList.length > 0) {
+      setSyahriyahList(imported.syahriyahList);
+      localStorage.setItem('sim_syahriyah', JSON.stringify(imported.syahriyahList));
+    }
+    if (imported.settings) {
+      setSettings(prev => {
+        const updated = { ...prev, ...imported.settings };
+        localStorage.setItem('sim_settings', JSON.stringify(updated));
+        return updated;
+      });
+    }
+  };
+
+  const handleGoogleLoginFlow = async () => {
+    try {
+      const res = await googleSignIn();
+      if (res?.user) {
+        setIsGoogleConnected(true);
+        setShowDoors(true);
+        setSession({
+          role: 'admin',
+          identifier: res.user.email || res.user.displayName || 'admin_google'
+        });
+      }
+    } catch (e: any) {
+      console.error('Google sign in error:', e);
+      alert(e?.message || 'Gagal login dengan akun Google.');
     }
   };
 
@@ -402,7 +495,19 @@ export default function App() {
 
   // Mutator actions
   const handleSaveAbsensiSantri = async (records: AbsensiSantriRecord[]) => {
-    setAbsensiSantriList(prev => [...records, ...prev]);
+    setAbsensiSantriList(prev => {
+      const keys = new Set(records.map(r => `${r.tanggal}_${r.idSantri || r.nama}`));
+      const filtered = prev.filter(p => !keys.has(`${p.tanggal}_${p.idSantri || p.nama}`));
+      const updated = [...records, ...filtered];
+      try {
+        localStorage.setItem('sim_absensi_santri', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // Broadcast update secara real-time ke Dashboard Admin
+    broadcastAttendanceUpdate('santri', records, session?.pengurusData?.nama || 'Pengurus');
+
     if (isGoogleConnected) {
       try {
         await sheetsService.saveAbsensiSantriToSheet(records);
@@ -413,7 +518,19 @@ export default function App() {
   };
 
   const handleSaveAbsensiGuru = async (records: AbsensiGuruRecord[]) => {
-    setAbsensiGuruList(prev => [...records, ...prev]);
+    setAbsensiGuruList(prev => {
+      const keys = new Set(records.map(r => `${r.tanggal}_${r.nama}_${r.kelas}_${r.jamKe}`));
+      const filtered = prev.filter(p => !keys.has(`${p.tanggal}_${p.nama}_${p.kelas}_${p.jamKe}`));
+      const updated = [...records, ...filtered];
+      try {
+        localStorage.setItem('sim_absensi_guru', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    // Broadcast update secara real-time ke Dashboard Admin
+    broadcastAttendanceUpdate('guru', records, session?.pengurusData?.nama || 'Ustadz / Pengurus');
+
     if (isGoogleConnected) {
       try {
         await sheetsService.saveAbsensiGuruToSheet(records);
@@ -422,6 +539,26 @@ export default function App() {
       }
     }
   };
+
+  // Sinkronisasi data presensi real-time lintas tab & komponen
+  useEffect(() => {
+    const unsub = subscribeAttendanceUpdates((payload) => {
+      if (payload.type === 'guru' && payload.records?.length) {
+        setAbsensiGuruList(prev => {
+          const keys = new Set(payload.records.map((r: any) => `${r.tanggal}_${r.nama}_${r.kelas}_${r.jamKe}`));
+          const filtered = prev.filter(p => !keys.has(`${p.tanggal}_${p.nama}_${p.kelas}_${p.jamKe}`));
+          return [...payload.records, ...filtered];
+        });
+      } else if (payload.type === 'santri' && payload.records?.length) {
+        setAbsensiSantriList(prev => {
+          const keys = new Set(payload.records.map((r: any) => `${r.tanggal}_${r.idSantri || r.nama}`));
+          const filtered = prev.filter(p => !keys.has(`${p.tanggal}_${p.idSantri || p.nama}`));
+          return [...payload.records, ...filtered];
+        });
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const handleSaveNewSantri = (newSantri: Santri) => {
     const updated = [newSantri, ...santriList];
@@ -458,6 +595,44 @@ export default function App() {
     const updated = [newGuru, ...guruList];
     setGuruList(updated);
     localStorage.setItem('sim_guru', JSON.stringify(updated));
+  };
+
+  const handleDeleteGuru = (idOrName: string) => {
+    const target = guruList.find(g => (g.id && g.id === idOrName) || g.nama === idOrName);
+    const updated = guruList.filter(g => (g.id ? g.id !== idOrName : true) && g.nama !== idOrName);
+    setGuruList(updated);
+    localStorage.setItem('sim_guru', JSON.stringify(updated));
+    alert(`Data ustadz / guru pengajar "${target?.nama || idOrName}" telah berhasil dihapus secara manual.`);
+  };
+
+  const handleSaveSilabus = (rec: SilabusMemaknaiRecord) => {
+    const existingIdx = silabusList.findIndex(s => s.id === rec.id || (s.namaKitab.toLowerCase() === rec.namaKitab.toLowerCase() && s.kelas === rec.kelas && s.semester === rec.semester));
+    let updated: SilabusMemaknaiRecord[];
+    if (existingIdx >= 0) {
+      updated = [...silabusList];
+      updated[existingIdx] = rec;
+    } else {
+      updated = [rec, ...silabusList];
+    }
+    setSilabusList(updated);
+    localStorage.setItem('sim_silabus', JSON.stringify(updated));
+
+    // Update ustadz / guru mapping if needed
+    if (rec.ustadzPengampu) {
+      const guruIdx = guruList.findIndex(g => g.nama.toLowerCase().trim() === rec.ustadzPengampu.toLowerCase().trim() && g.kelas === rec.kelas);
+      if (guruIdx >= 0) {
+        const upGuru = [...guruList];
+        upGuru[guruIdx] = { ...upGuru[guruIdx], kitab: rec.namaKitab };
+        setGuruList(upGuru);
+        localStorage.setItem('sim_guru', JSON.stringify(upGuru));
+      }
+    }
+  };
+
+  const handleDeleteSilabus = (id: string) => {
+    const updated = silabusList.filter(s => s.id !== id);
+    setSilabusList(updated);
+    localStorage.setItem('sim_silabus', JSON.stringify(updated));
   };
 
   const handleSaveNewJadwal = (newJadwal: JadwalPelajaran) => {
@@ -605,12 +780,25 @@ export default function App() {
 
   const handleSaveDashboardAndReset = () => {
     const confirmed = window.confirm(
-      'Apakah Anda yakin ingin mengarsipkan data rekap harian ke Sheet Dashboard_Harian dan mereset sesi perhitungan ke nol?'
+      'Simpan rekapitulasi kehadiran hari ini dan reset formulir serta dashboard ke nol?'
     );
     if (!confirmed) return;
+    try {
+      if (absensiGuruList.length > 0) {
+        const prevH = JSON.parse(localStorage.getItem('sim_rekap_guru_harian_history') || '[]');
+        localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify([...absensiGuruList, ...prevH]));
+      }
+      if (absensiSantriList.length > 0) {
+        const prevHS = JSON.parse(localStorage.getItem('sim_rekap_santri_harian_history') || '[]');
+        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify([...absensiSantriList, ...prevHS]));
+      }
+    } catch {}
+
     setAbsensiSantriList([]);
     setAbsensiGuruList([]);
-    alert('Rekap dashboard telah diarsipkan dan sesi perhitungan aktif telah direset ke nol.');
+    localStorage.setItem('sim_absensi_santri', JSON.stringify([]));
+    localStorage.setItem('sim_absensi_guru', JSON.stringify([]));
+    alert('Rekap dashboard telah disimpan ke riwayat rekapan dan seluruh sesi absensi harian berhasil direset ke nol (0).');
   };
 
   // Handlers Izin Tidak Mengajar Ustadz & Pengganti
@@ -729,6 +917,7 @@ export default function App() {
             syahriyahList={syahriyahList}
             uangSakuList={uangSakuList}
             kurikulumList={kurikulumList}
+            silabusList={silabusList}
             kalenderList={kalenderList}
             ujianList={ujianList}
             izinList={izinMengajarList}
@@ -737,6 +926,7 @@ export default function App() {
             onSaveAbsensiSantri={handleSaveAbsensiSantri}
             onSaveAbsensiGuru={handleSaveAbsensiGuru}
             onSubmitIzinMengajar={handleAddIzinMengajar}
+            onSaveSilabus={handleSaveSilabus}
           />
         </div>
         {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} settings={settings} />}
@@ -762,6 +952,7 @@ export default function App() {
             syahriyahList={syahriyahList}
             uangSakuList={uangSakuList}
             kurikulumList={kurikulumList}
+            silabusList={silabusList}
             pengurusList={pengurusList}
             kalenderList={kalenderList}
             ujianList={ujianList}
@@ -773,10 +964,16 @@ export default function App() {
             isSyncing={isSyncing}
             onSyncWithSheets={syncWithGoogleSheets}
             onLogout={handleLogout}
+            sheetsService={sheetsService}
+            isGoogleConnected={isGoogleConnected}
+            setIsGoogleConnected={setIsGoogleConnected}
+            onOpenSheetsModal={() => setShowSheetsModal(true)}
+            onDataImported={handleDataImported}
             onSaveAbsensiSantri={handleSaveAbsensiSantri}
             onSaveAbsensiGuru={handleSaveAbsensiGuru}
             onSaveNewSantri={handleSaveNewSantri}
             onSaveNewGuru={handleSaveNewGuru}
+            onDeleteGuru={handleDeleteGuru}
             onSaveNewJadwal={handleSaveNewJadwal}
             onSaveNadzhom={handleSaveNadzhom}
             onSaveNilai={handleSaveNilai}
@@ -787,6 +984,8 @@ export default function App() {
             onSaveUangSaku={handleSaveUangSaku}
             onSaveKurikulum={handleSaveKurikulum}
             onDeleteKurikulum={handleDeleteKurikulum}
+            onSaveSilabus={handleSaveSilabus}
+            onDeleteSilabus={handleDeleteSilabus}
             onSavePengurus={handleSavePengurus}
             onUpdatePengurus={handleUpdatePengurus}
             onSaveKalender={handleSaveKalender}
@@ -797,6 +996,29 @@ export default function App() {
             onTestIntro={() => setShowIntro(true)}
           />
         </div>
+        {showSheetsModal && (
+          <GoogleSheetsModal
+            isOpen={showSheetsModal}
+            onClose={() => setShowSheetsModal(false)}
+            sheetsService={sheetsService}
+            spreadsheetId={spreadsheetId}
+            setSpreadsheetId={setSpreadsheetId}
+            isGoogleConnected={isGoogleConnected}
+            setIsGoogleConnected={setIsGoogleConnected}
+            appData={{
+              settings,
+              santriList,
+              guruList,
+              jadwalList,
+              nadzhomList,
+              nilaiList,
+              absensiSantriList,
+              absensiGuruList,
+              syahriyahList
+            }}
+            onDataImported={handleDataImported}
+          />
+        )}
         {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} settings={settings} />}
       </>
     );
@@ -823,10 +1045,34 @@ export default function App() {
         rememberMe={rememberMe} setRememberMe={setRememberMe}
         showForgotPasswordModal={showForgotPasswordModal} setShowForgotPasswordModal={setShowForgotPasswordModal}
         onSubmit={handleLoginSubmit}
-        onGoogleSignIn={googleSignIn}
-        onSyncSheets={syncWithGoogleSheets}
+        onGoogleSignIn={handleGoogleLoginFlow}
+        onSyncSheets={() => setShowSheetsModal(true)}
         onReplayIntro={() => setShowIntro(true)}
       />
+
+      {showSheetsModal && (
+        <GoogleSheetsModal
+          isOpen={showSheetsModal}
+          onClose={() => setShowSheetsModal(false)}
+          sheetsService={sheetsService}
+          spreadsheetId={spreadsheetId}
+          setSpreadsheetId={setSpreadsheetId}
+          isGoogleConnected={isGoogleConnected}
+          setIsGoogleConnected={setIsGoogleConnected}
+          appData={{
+            settings,
+            santriList,
+            guruList,
+            jadwalList,
+            nadzhomList,
+            nilaiList,
+            absensiSantriList,
+            absensiGuruList,
+            syahriyahList
+          }}
+          onDataImported={handleDataImported}
+        />
+      )}
 
       {/* 4. Video Sinematik Intro Opening dengan Transisi Halus (Smooth Cross-fade) */}
       {showIntro && (

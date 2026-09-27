@@ -143,9 +143,66 @@
     transform: translateY(1px) scale(0.985);
   }
 
-  /* 1. AKSI UTAMA / SIMPAN -> EMAS / GOLD */
+  /* ==========================================================
+     AUTHENTIC 3D GOLD EMBOSSED PILL BUTTON (MATCHING USER SPEC)
+     Brighter warm sunny-gold gradient, illuminated crisp satin edge,
+     soft golden rim, crisp dark typography, and realistic drop shadow.
+     ========================================================== */
   .btn-3d-gold,
-  .btn-luxury-gold {
+  .btn-luxury-gold,
+  .btn-gold-3d,
+  .btn-pill-gold-3d {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-radius: 0.875rem; /* rounded pill cushion */
+    padding: 0.55rem 1.25rem;
+    background: linear-gradient(180deg, #fff385 0%, #fde047 18%, #facc15 50%, #eab308 82%, #ca8a04 100%);
+    color: #150e02;
+    border: 1.5px solid rgba(255, 255, 255, 0.75);
+    box-shadow: 
+      0 5px 12px -2px rgba(0, 0, 0, 0.8),
+      0 2px 4px 0 rgba(0, 0, 0, 0.5),
+      inset 0 2px 2.5px 0 rgba(255, 255, 255, 0.7),
+      inset 0 -2.5px 3px 0 rgba(161, 98, 7, 0.55);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+  }
+  .btn-3d-gold:hover,
+  .btn-luxury-gold:hover,
+  .btn-gold-3d:hover,
+  .btn-pill-gold-3d:hover {
+    background: linear-gradient(180deg, #fffbeb 0%, #fef08a 20%, #fde047 52%, #facc15 80%, #d97706 100%);
+    border-color: #ffffff;
+    box-shadow: 
+      0 7px 16px -2px rgba(0, 0, 0, 0.88),
+      0 3px 6px rgba(234, 179, 8, 0.45),
+      inset 0 2px 3px 0 rgba(255, 255, 255, 0.85),
+      inset 0 -2.5px 4px 0 rgba(161, 98, 7, 0.65);
+    transform: translateY(-2px);
+    filter: brightness(1.04);
+  }
+  .btn-3d-gold:active,
+  .btn-luxury-gold:active,
+  .btn-gold-3d:active,
+  .btn-pill-gold-3d:active {
+    transform: translateY(2px) scale(0.985);
+    box-shadow: 
+      0 2px 4px rgba(0, 0, 0, 0.9),
+      inset 0 2.5px 4px rgba(161, 98, 7, 0.75),
+      inset 0 -1px 2px rgba(255, 255, 255, 0.3);
+  }
+
+  /* Inactive 3D Pill State */
+  .btn-pill-dark-3d {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -153,37 +210,29 @@
     font-size: 0.75rem;
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border-radius: 0.75rem;
-    padding: 0.625rem 1.25rem;
-    background: linear-gradient(180deg, #fae9a4 0%, #d4af37 45%, #a47d12 100%);
-    color: #120d02;
-    border: 1px solid #faebaa;
+    letter-spacing: 0.04em;
+    border-radius: 0.875rem;
+    padding: 0.55rem 1.15rem;
+    background: linear-gradient(180deg, #092c1c 0%, #03170e 100%);
+    color: #f3e5ab;
+    border: 1.5px solid rgba(212, 175, 55, 0.35);
     box-shadow: 
-      0 6px 18px -2px rgba(0, 0, 0, 0.7),
-      0 3px 8px rgba(212, 175, 55, 0.4),
-      inset 0 1.5px 1.5px rgba(255, 255, 255, 0.8),
-      inset 0 -2.5px 3px rgba(115, 85, 8, 0.7);
-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+      0 4px 10px -2px rgba(0, 0, 0, 0.7),
+      inset 0 1px 1.5px 0 rgba(212, 175, 55, 0.35),
+      inset 0 -2px 3px 0 rgba(0, 0, 0, 0.8);
     cursor: pointer;
-    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    user-select: none;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .btn-3d-gold:hover,
-  .btn-luxury-gold:hover {
-    background: linear-gradient(180deg, #fff2be 0%, #dfbd49 45%, #b58d19 100%);
+  .btn-pill-dark-3d:hover {
+    border-color: rgba(250, 204, 21, 0.8);
+    color: #ffffff;
+    background: linear-gradient(180deg, #0d3d27 0%, #052215 100%);
     box-shadow: 
-      0 10px 24px -2px rgba(0, 0, 0, 0.8),
-      0 4px 14px rgba(212, 175, 55, 0.6),
-      inset 0 2px 2px rgba(255, 255, 255, 0.9);
-    transform: translateY(-2px);
-    filter: brightness(1.05);
-  }
-  .btn-3d-gold:active,
-  .btn-luxury-gold:active {
-    transform: translateY(1px) scale(0.985);
-    box-shadow: 
-      0 2px 6px rgba(0, 0, 0, 0.7),
-      inset 0 2.5px 4px rgba(80, 55, 5, 0.6);
+      0 6px 14px -2px rgba(0, 0, 0, 0.8),
+      0 0 10px rgba(212, 175, 55, 0.3),
+      inset 0 1.5px 2px 0 rgba(255, 245, 205, 0.5);
+    transform: translateY(-1.5px);
   }
 
   /* 2. BERHASIL / HADIR / AKTIF -> HIJAU EMERALD */

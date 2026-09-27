@@ -142,9 +142,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
 
           {/* center brand */}
           <div className="flex flex-col items-center text-center gap-6 lg:gap-7 py-4">
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-8 login-reveal" style={{ animationDelay: '0.25s' }}>
-              <LogoFrame src={logos.madrasah} alt="Logo Madrasah Diniyah Almaliki" shape="round" size="lg" testId="login-logo-madrasah" className="login-logo-slot" />
-              <LogoFrame src={logos.pondok} alt="Logo Pondok Pesantren Almaliki" shape="wide" size="lg" testId="login-logo-pondok" className="login-logo-slot" />
+            <div className="flex items-center justify-center login-reveal" style={{ animationDelay: '0.25s' }}>
+              <LogoFrame src={logos.madrasah || logos.pondok} alt="Logo Pesantren & Madrasah" shape="round" size="lg" testId="login-logo-round" className="login-logo-slot shadow-2xl" />
             </div>
 
             <div className="login-reveal" style={{ animationDelay: '0.4s' }}>

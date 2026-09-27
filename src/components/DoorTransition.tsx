@@ -43,7 +43,7 @@ export const DoorTransition: React.FC<DoorTransitionProps> = ({ onComplete, sett
           transition={{ duration: 0.5, ease: 'easeOut' }}
           className="absolute top-1/2 right-8 sm:right-14 -translate-y-1/2"
         >
-          <LogoFrame src={logos.madrasah} alt="Logo Madrasah Diniyah" shape="round" size="xl" testId="door-logo-madrasah" />
+          <LogoFrame src={logos.madrasah || logos.pondok} alt="Logo Pesantren" shape="round" size="xl" testId="door-logo-madrasah" />
         </motion.div>
       </motion.div>
 
@@ -62,7 +62,7 @@ export const DoorTransition: React.FC<DoorTransitionProps> = ({ onComplete, sett
           transition={{ duration: 0.5, ease: 'easeOut', delay: 0.08 }}
           className="absolute top-1/2 left-8 sm:left-14 -translate-y-1/2"
         >
-          <LogoFrame src={logos.pondok} alt="Logo Pondok Pesantren" shape="wide" size="xl" testId="door-logo-pondok" />
+          <LogoFrame src={logos.madrasah || logos.pondok} alt="Logo Pesantren" shape="round" size="xl" testId="door-logo-pondok" />
         </motion.div>
       </motion.div>
 

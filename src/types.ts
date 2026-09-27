@@ -124,6 +124,7 @@ export interface AbsensiSantriRecord {
   kelas: string;
   status: 'Hadir' | 'Izin' | 'Sakit' | 'Alpha';
   keterangan: string;
+  waktu?: string;
 }
 
 export interface AbsensiGuruRecord {
@@ -163,6 +164,8 @@ export interface JadwalPelajaran {
   waktu: string;
   mapel: string;
   nama: string;
+  tingkatan?: string;
+  ustadz?: string; // alias for nama ustadz
   status?: string;
   keterangan?: string;
 }
@@ -172,6 +175,25 @@ export interface GuruPengajar {
   kelas: string;
   nama: string;
   mapel: string;
+  foto?: string;
+  kitab?: string;
+  noWa?: string;
+  keterangan?: string;
+}
+
+export interface SilabusMemaknaiRecord {
+  id: string;
+  namaKitab: string;
+  kelas: string; // 1 TSANAWIYAH, 2 TSANAWIYAH, 3 TSANAWIYAH, 1 ALIYAH, 2 ALIYAH, 3 ALIYAH
+  tingkatan: 'Tsanawiyah' | 'Aliyah';
+  semester?: 'Semester 1' | 'Semester 2' | string;
+  mulai: string; // Materi Awal Memaknai (Bukan tanggal, misal: "Fasal 1: Bab Muqaddimah & Kalam", "Hal. 1 - 15")
+  batasAkhir: string; // Batas Akhir Target Khatam (Bukan tanggal, misal: "Bab Tawabi' & I'rab Asma'", "Hal. 120 (Khatam)")
+  materiSaatIni?: string; // Materi / Halaman / Bab yang sedang dimaknai saat ini
+  ustadzPengampu: string;
+  targetMateri?: string;
+  status?: 'Sesuai Target' | 'Belum Tercapai / Tertinggal' | 'Khatam / Tercapai' | 'Sedang Berjalan' | string; // Status target & pencocokan sesuai materi
+  keterangan?: string;
 }
 
 export interface WaliKelas {

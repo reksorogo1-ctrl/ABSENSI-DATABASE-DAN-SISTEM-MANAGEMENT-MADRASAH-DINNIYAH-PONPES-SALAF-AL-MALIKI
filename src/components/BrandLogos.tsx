@@ -4,7 +4,6 @@ import { resolveLogos } from '../brand';
 
 type Size = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
-// Frame dimensions follow each logo's own aspect: round 1:1 (madrasah), wide ~2.2:1 (pondok).
 const ROUND: Record<Size, string> = {
   xs: 'w-9 h-9', sm: 'w-11 h-11', md: 'w-16 h-16', lg: 'w-32 h-32 sm:w-40 sm:h-40', xl: 'w-40 h-40 sm:w-52 sm:h-52',
 };
@@ -14,9 +13,9 @@ const WIDE: Record<Size, string> = {
 const PAD: Record<Size, string> = { xs: 'p-[2px]', sm: 'p-[2px]', md: 'p-[3px]', lg: 'p-[3px]', xl: 'p-[4px]' };
 const RADIUS: Record<Size, string> = { xs: 'rounded-lg', sm: 'rounded-xl', md: 'rounded-2xl', lg: 'rounded-2xl', xl: 'rounded-3xl' };
 
-interface LogoFrameProps { src: string; alt: string; shape: 'round' | 'wide'; size?: Size; testId?: string; className?: string; }
+interface LogoFrameProps { src: string; alt?: string; shape?: 'round' | 'wide'; size?: Size; testId?: string; className?: string; }
 
-export const LogoFrame: React.FC<LogoFrameProps> = ({ src, alt, shape, size = 'sm', testId, className = '' }) => {
+export const LogoFrame: React.FC<LogoFrameProps> = ({ src, alt = "Logo Pondok Pesantren", shape = 'round', size = 'sm', testId, className = '' }) => {
   const round = shape === 'round';
   const outer = round ? 'rounded-full' : RADIUS[size];
   const inner = round ? 'rounded-full' : 'rounded-[inherit]';
@@ -34,12 +33,13 @@ export const LogoFrame: React.FC<LogoFrameProps> = ({ src, alt, shape, size = 's
 
 interface BrandLogosProps { settings?: Partial<AppSettings> | null; size?: Size; gap?: string; className?: string; idPrefix?: string; }
 
-export const BrandLogos: React.FC<BrandLogosProps> = ({ settings, size = 'sm', gap = 'gap-2.5', className = '', idPrefix = 'brand' }) => {
+export const BrandLogos: React.FC<BrandLogosProps> = ({ settings, size = 'sm', className = '', idPrefix = 'brand' }) => {
   const logos = resolveLogos(settings);
+  // Selaras di seluruh dashboard: Admin, Pengurus, Wali Santri hanya pakai 1 logo bulat saja
+  const singleLogo = logos.madrasah || logos.pondok;
   return (
-    <div className={`flex items-center ${gap} ${className}`} data-testid={`${idPrefix}-logos`}>
-      <LogoFrame src={logos.madrasah} alt="Logo Madrasah Diniyah" shape="round" size={size} testId={`${idPrefix}-logo-madrasah`} />
-      <LogoFrame src={logos.pondok} alt="Logo Pondok Pesantren" shape="wide" size={size} testId={`${idPrefix}-logo-pondok`} />
+    <div className={`flex items-center shrink-0 ${className}`} data-testid={`${idPrefix}-logos`}>
+      <LogoFrame src={singleLogo} alt="Logo Pesantren & Madrasah" shape="round" size={size} testId={`${idPrefix}-logo-round`} />
     </div>
   );
 };

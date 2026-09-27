@@ -3,16 +3,20 @@ import {
   Pengurus, KalenderAkademikEvent, AppSettings, Santri, GuruPengajar, JadwalPelajaran, 
   NadzhomRecord, NilaiUjianRecord, AbsensiSantriRecord, AbsensiGuruRecord, 
   SyahriyahRecord, UangSakuRecord, KurikulumKitabRecord, UjianSantriRecord, DashboardStats,
-  IzinMengajarRequest
+  IzinMengajarRequest, SilabusMemaknaiRecord
 } from '../types';
 import { 
   UserCheck, Calendar, BookOpen, Award, LogOut, Clock, 
   CheckCircle2, AlertTriangle, Phone, MessageCircle, 
   Users, Newspaper, ShieldAlert, Sparkles, Sliders, CheckCheck,
-  Send, FileText, UserX, ChevronRight, Check, X, Shield, PlusCircle,
+  Send, FileText, UserX, ChevronRight, Check, X, Shield, PlusCircle, Plus,
   BookmarkCheck, CheckSquare, RefreshCw, GraduationCap
 } from 'lucide-react';
 import { BrandLogos } from './BrandLogos';
+import { 
+  checkPresensiSchedule, getServerTime, setSimulatedServerTime, isSimulationActive,
+  PresensiCheckResult, OFFICIAL_SCHEDULES 
+} from '../serverTime';
 
 interface PengurusDashboardProps {
   pengurus: Pengurus;
@@ -28,6 +32,7 @@ interface PengurusDashboardProps {
   syahriyahList: SyahriyahRecord[];
   uangSakuList: UangSakuRecord[];
   kurikulumList: KurikulumKitabRecord[];
+  silabusList?: SilabusMemaknaiRecord[];
   kalenderList: KalenderAkademikEvent[];
   ujianList?: UjianSantriRecord[];
   izinList?: IzinMengajarRequest[];
@@ -35,6 +40,7 @@ interface PengurusDashboardProps {
   onUpdatePengurusProfile?: (updated: Pengurus) => void;
   onSaveAbsensiSantri?: (records: AbsensiSantriRecord[]) => void;
   onSaveAbsensiGuru?: (records: AbsensiGuruRecord[]) => void;
+  onSaveSilabus?: (rec: SilabusMemaknaiRecord) => void;
   onSubmitIzinMengajar?: (req: IzinMengajarRequest) => void;
   onDeleteKalenderEvent?: (id: string) => void;
 }
@@ -53,6 +59,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   syahriyahList = [],
   uangSakuList = [],
   kurikulumList = [],
+  silabusList = [],
   kalenderList = [],
   ujianList = [],
   izinList = [],
@@ -60,6 +67,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   onUpdatePengurusProfile,
   onSaveAbsensiSantri,
   onSaveAbsensiGuru,
+  onSaveSilabus,
   onSubmitIzinMengajar,
   onDeleteKalenderEvent
 }) => {
@@ -108,6 +116,40 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     jamKe: 1,
     alasan: '',
     ustadzPengganti: guruList[0]?.nama || 'Ust. M. Rizqi Fadlillah, S.Pd.'
+  });
+
+  // Filter untuk Jadwal & Silabus Pengurus - Terpisah per Tingkatan Tsanawiyah & Aliyah
+  const [jadwalTsAngkatan, setJadwalTsAngkatan] = useState<string>('SEMUA');
+  const [jadwalTsDay, setJadwalTsDay] = useState<string>('SEMUA');
+  const [jadwalAlAngkatan, setJadwalAlAngkatan] = useState<string>('SEMUA');
+  const [jadwalAlDay, setJadwalAlDay] = useState<string>('SEMUA');
+  const [silabusAngkatanFilter, setSilabusAngkatanFilter] = useState<string>('SEMUA');
+  const [silabusSemester, setSilabusSemester] = useState<'Semester 1' | 'Semester 2'>('Semester 1');
+  const [showAddSilabusModal, setShowAddSilabusModal] = useState(false);
+  const [editingSilabus, setEditingSilabus] = useState<SilabusMemaknaiRecord | null>(null);
+  const [silabusForm, setSilabusForm] = useState<{
+    id?: string;
+    namaKitab: string;
+    kelas: string;
+    tingkatan: 'Tsanawiyah' | 'Aliyah';
+    semester: 'Semester 1' | 'Semester 2';
+    mulai: string;
+    batasAkhir: string;
+    materiSaatIni: string;
+    status: 'Sesuai Target' | 'Belum Tercapai / Tertinggal' | 'Khatam / Tercapai' | 'Proses';
+    keterangan: string;
+    ustadzPengampu: string;
+  }>({
+    namaKitab: '',
+    kelas: '1 TSANAWIYAH',
+    tingkatan: 'Tsanawiyah',
+    semester: 'Semester 1',
+    mulai: 'Fasal 1: Bab Muqaddimah & Kalam',
+    batasAkhir: 'Khatam Bab Akhir Kitab',
+    materiSaatIni: 'Fasal 1: Bab Kalam',
+    status: 'Sesuai Target',
+    keterangan: 'Kajian Rutin Pengajian Kitab',
+    ustadzPengampu: pengurus.nama || ''
   });
 
   // Filter personal attendance for this pengurus
@@ -162,6 +204,48 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       !k.judul.toLowerCase().includes('rapat pleno dewan pengurus')
     );
   }, [kalenderList, dismissedEvents]);
+
+  // ==========================================
+  // FITUR NOTIFIKASI REAL-TIME UPDATE SILABUS GURU
+  // ==========================================
+  const mySilabusList = useMemo(() => {
+    const pengurusNameNorm = pengurus.nama?.toLowerCase().trim() || '';
+    const mapelNorm = pengurus.mapel?.toLowerCase().trim() || '';
+    return silabusList.filter(s => {
+      const ustadzNorm = s.ustadzPengampu?.toLowerCase().trim() || '';
+      const kitabNorm = s.namaKitab?.toLowerCase().trim() || '';
+      return (
+        (ustadzNorm && (ustadzNorm.includes(pengurusNameNorm) || pengurusNameNorm.includes(ustadzNorm))) ||
+        (mapelNorm && (kitabNorm.includes(mapelNorm) || mapelNorm.includes(kitabNorm)))
+      );
+    });
+  }, [silabusList, pengurus]);
+
+  const [dismissedSilabusKeys, setDismissedSilabusKeys] = useState<string[]>(() => {
+    const saved = localStorage.getItem(`sim_dismissed_silabus_${pengurus.id}`);
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const unreadSilabusUpdates = useMemo(() => {
+    return mySilabusList.filter(s => {
+      const key = `${s.id}_${s.materiSaatIni || ''}_${s.status || ''}_${s.mulai || ''}_${s.batasAkhir || ''}`;
+      return !dismissedSilabusKeys.includes(key);
+    });
+  }, [mySilabusList, dismissedSilabusKeys]);
+
+  const handleDismissSilabusAlert = (s: SilabusMemaknaiRecord) => {
+    const key = `${s.id}_${s.materiSaatIni || ''}_${s.status || ''}_${s.mulai || ''}_${s.batasAkhir || ''}`;
+    const updated = [...dismissedSilabusKeys, key];
+    setDismissedSilabusKeys(updated);
+    localStorage.setItem(`sim_dismissed_silabus_${pengurus.id}`, JSON.stringify(updated));
+  };
+
+  const handleDismissAllSilabusAlerts = () => {
+    const newKeys = mySilabusList.map(s => `${s.id}_${s.materiSaatIni || ''}_${s.status || ''}_${s.mulai || ''}_${s.batasAkhir || ''}`);
+    const updated = Array.from(new Set([...dismissedSilabusKeys, ...newKeys]));
+    setDismissedSilabusKeys(updated);
+    localStorage.setItem(`sim_dismissed_silabus_${pengurus.id}`, JSON.stringify(updated));
+  };
 
   // Santri anak didik untuk Wali Kelas
   const myStudents = useMemo(() => {
@@ -230,146 +314,55 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     alert('Pengajuan izin tidak mengajar berhasil dikirim ke Dashboard Admin! Ketika Admin menyetujui, status kehadiran pada absensi ustadz/ustadzah langsung otomatis menjadi IZIN dan tercantum nama ustadz penggantinya.');
   };
 
-  // Konversi waktu 'HH:mm' ke menit dari tengah malam
-  const parseTimeToMinutes = (tStr?: string, fallback = '08:00') => {
-    const val = tStr && tStr.includes(':') ? tStr : fallback;
-    const [h, m] = val.split(':').map(Number);
-    return (h || 0) * 60 + (m || 0);
-  };
+  // State Jam Server Real-Time (update setiap 1 detik)
+  const [serverClock, setServerClock] = useState<Date>(getServerTime());
+  const [simulationActive, setSimulationActive] = useState<boolean>(isSimulationActive());
+  const [showSimulasiBar, setShowSimulasiBar] = useState<boolean>(false);
 
-  // State jam saat ini agar mendeteksi perubahan waktu secara real-time
-  const [currentDate, setCurrentDate] = useState<Date>(new Date());
   useEffect(() => {
-    const timer = setInterval(() => setCurrentDate(new Date()), 10000);
+    const timer = setInterval(() => {
+      setServerClock(getServerTime());
+      setSimulationActive(isSimulationActive());
+    }, 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Logika Waktu Presensi Otomatis:
+  // Logika Evaluasi Jam Server Real-Time:
   // TSANAWIYAH:
-  //   Jam 1: 08.00 - 08.30 (Hadir). Lewat 08.30 s.d 09.30 otomatis dihitung TERLAMBAT.
-  //   Jam 2: 09.45 - 10.15 (Hadir). Lewat 10.15 s.d 11.45 otomatis dihitung TERLAMBAT.
+  //   08.00 - 08.30 WIB (Batas awal 08.00 WIB)
+  //   * Tepat 08.00 WIB -> 'Hadir'
+  //   * Melewati 08.00 (08.01 - 08.30) -> Otomatis 'Terlambat'
   // ALIYAH:
-  //   Jam 1: 19.00 - 19.30 (Hadir). Lewat 19.30 s.d 20.45 otomatis dihitung TERLAMBAT.
-  //   Jam 2: 21.00 - 21.30 (Hadir). Lewat 21.30 s.d 22.30 otomatis dihitung TERLAMBAT.
-  // Di luar jam tersebut tombol tidak berfungsi. Pengaturan jam diatur di Option Panel.
-  const activeSession = useMemo(() => {
-    if (settings.bypass_jam_presensi_testing) {
-      return {
-        isActive: true,
-        tingkat: 'TSANAWIYAH & ALIYAH',
-        jamKe: 1,
-        status: 'Hadir' as const,
-        keterangan: 'Mode Pengujian Bebas Aktif di Option Panel'
-      };
-    }
-
-    const currentMins = currentDate.getHours() * 60 + currentDate.getMinutes();
-
-    // Jam Tsanawiyah
-    const tsan1Mulai = parseTimeToMinutes(settings.jam_tsanawiyah_1_mulai, '08:00');
-    const tsan1Batas = parseTimeToMinutes(settings.jam_tsanawiyah_1_batas_hadir, '08:30');
-    const tsan1Selesai = parseTimeToMinutes(settings.jam_tsanawiyah_1_selesai, '09:30');
-
-    const tsan2Mulai = parseTimeToMinutes(settings.jam_tsanawiyah_2_mulai, '09:45');
-    const tsan2Batas = parseTimeToMinutes(settings.jam_tsanawiyah_2_batas_hadir, '10:15');
-    const tsan2Selesai = parseTimeToMinutes(settings.jam_tsanawiyah_2_selesai, '11:45');
-
-    // Jam Aliyah
-    const aliyah1Mulai = parseTimeToMinutes(settings.jam_aliyah_1_mulai, '19:00');
-    const aliyah1Batas = parseTimeToMinutes(settings.jam_aliyah_1_batas_hadir, '19:30');
-    const aliyah1Selesai = parseTimeToMinutes(settings.jam_aliyah_1_selesai, '20:45');
-
-    const aliyah2Mulai = parseTimeToMinutes(settings.jam_aliyah_2_mulai, '21:00');
-    const aliyah2Batas = parseTimeToMinutes(settings.jam_aliyah_2_batas_hadir, '21:30');
-    const aliyah2Selesai = parseTimeToMinutes(settings.jam_aliyah_2_selesai, '22:30');
-
-    // Cek Tsanawiyah Jam 1
-    if (currentMins >= tsan1Mulai && currentMins <= tsan1Selesai) {
-      const isLate = currentMins > tsan1Batas;
-      return {
-        isActive: true,
-        tingkat: 'TSANAWIYAH',
-        jamKe: 1,
-        status: (isLate ? 'Terlambat' : 'Hadir') as 'Hadir' | 'Terlambat',
-        keterangan: isLate 
-          ? `Terlambat (Masuk setelah pukul ${settings.jam_tsanawiyah_1_batas_hadir || '08:30'} WIB)` 
-          : `Hadir Tepat Waktu (s.d pukul ${settings.jam_tsanawiyah_1_batas_hadir || '08:30'} WIB)`
-      };
-    }
-
-    // Cek Tsanawiyah Jam 2
-    if (currentMins >= tsan2Mulai && currentMins <= tsan2Selesai) {
-      const isLate = currentMins > tsan2Batas;
-      return {
-        isActive: true,
-        tingkat: 'TSANAWIYAH',
-        jamKe: 2,
-        status: (isLate ? 'Terlambat' : 'Hadir') as 'Hadir' | 'Terlambat',
-        keterangan: isLate 
-          ? `Terlambat (Masuk setelah pukul ${settings.jam_tsanawiyah_2_batas_hadir || '10:15'} WIB)` 
-          : `Hadir Tepat Waktu (s.d pukul ${settings.jam_tsanawiyah_2_batas_hadir || '10:15'} WIB)`
-      };
-    }
-
-    // Cek Aliyah Jam 1
-    if (currentMins >= aliyah1Mulai && currentMins <= aliyah1Selesai) {
-      const isLate = currentMins > aliyah1Batas;
-      return {
-        isActive: true,
-        tingkat: 'ALIYAH',
-        jamKe: 1,
-        status: (isLate ? 'Terlambat' : 'Hadir') as 'Hadir' | 'Terlambat',
-        keterangan: isLate 
-          ? `Terlambat (Masuk setelah pukul ${settings.jam_aliyah_1_batas_hadir || '19:30'} WIB)` 
-          : `Hadir Tepat Waktu (s.d pukul ${settings.jam_aliyah_1_batas_hadir || '19:30'} WIB)`
-      };
-    }
-
-    // Cek Aliyah Jam 2
-    if (currentMins >= aliyah2Mulai && currentMins <= aliyah2Selesai) {
-      const isLate = currentMins > aliyah2Batas;
-      return {
-        isActive: true,
-        tingkat: 'ALIYAH',
-        jamKe: 2,
-        status: (isLate ? 'Terlambat' : 'Hadir') as 'Hadir' | 'Terlambat',
-        keterangan: isLate 
-          ? `Terlambat (Masuk setelah pukul ${settings.jam_aliyah_2_batas_hadir || '21:30'} WIB)` 
-          : `Hadir Tepat Waktu (s.d pukul ${settings.jam_aliyah_2_batas_hadir || '21:30'} WIB)`
-      };
-    }
-
-    return {
-      isActive: false,
-      tingkat: '-',
-      jamKe: 0,
-      status: 'Hadir' as const,
-      keterangan: 'Di luar jam jadwal presensi'
-    };
-  }, [currentDate, settings]);
+  //   * Sesi 1: 19.00 - 19.30 WIB (Batas awal 19.00 WIB, lewat -> 'Terlambat')
+  //   * Sesi 2: 21.00 - 21.30 WIB (Batas awal 21.00 WIB, lewat -> 'Terlambat')
+  // Di luar jadwal tersebut -> Tombol dinonaktifkan (santri & ustadz tidak bisa presensi)
+  const activeSession: PresensiCheckResult = useMemo(() => {
+    return checkPresensiSchedule(serverClock, {
+      bypassActive: settings.bypass_jam_presensi_testing
+    });
+  }, [serverClock, settings.bypass_jam_presensi_testing]);
 
   // Eksekusi Tombol HADIR SAJA (Terkoneksi langsung ke absensi ustadz/ustadzah secara real-time)
   const handleHadirSaja = () => {
     if (!activeSession.isActive) {
       alert(
-        '⚠️ Tombol presensi tidak dapat digunakan saat ini karena berada di luar jam pelajaran!\n\n' +
+        '⚠️ Tombol presensi TIDAK DAPAT DIGUNAKAN saat ini karena berada di luar jadwal pelajaran resmi!\n\n' +
         'Jadwal Waktu Presensi yang Ditentukan:\n' +
-        `• Tsanawiyah Jam 1: ${settings.jam_tsanawiyah_1_mulai || '08:00'} - ${settings.jam_tsanawiyah_1_selesai || '09:30'} WIB (Batas Hadir: ${settings.jam_tsanawiyah_1_batas_hadir || '08:30'})\n` +
-        `• Tsanawiyah Jam 2: ${settings.jam_tsanawiyah_2_mulai || '09:45'} - ${settings.jam_tsanawiyah_2_selesai || '11:45'} WIB (Batas Hadir: ${settings.jam_tsanawiyah_2_batas_hadir || '10:15'})\n` +
-        `• Aliyah Jam 1: ${settings.jam_aliyah_1_mulai || '19:00'} - ${settings.jam_aliyah_1_selesai || '20:45'} WIB (Batas Hadir: ${settings.jam_aliyah_1_batas_hadir || '19:30'})\n` +
-        `• Aliyah Jam 2: ${settings.jam_aliyah_2_mulai || '21:00'} - ${settings.jam_aliyah_2_selesai || '22:30'} WIB (Batas Hadir: ${settings.jam_aliyah_2_batas_hadir || '21:30'})\n\n` +
-        'Catatan: Pengaturan jam dapat diatur sewaktu-waktu secara manual di Option Panel.'
+        '• TSANAWIYAH: 08.00 - 08.30 WIB (Batas Awal: 08.00 WIB)\n' +
+        '• ALIYAH Sesi 1: 19.00 - 19.30 WIB (Batas Awal: 19.00 WIB)\n' +
+        '• ALIYAH Sesi 2: 21.00 - 21.30 WIB (Batas Awal: 21.00 WIB)\n\n' +
+        `Waktu Server Saat Ini: ${activeSession.wibTimeStr}\n` +
+        'Status: Di Luar Jadwal (Tombol dinonaktifkan).'
       );
       return;
     }
 
-    const now = new Date();
-    const nowTime = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-    const currentDay = now.toLocaleDateString('id-ID', { weekday: 'long' }).toUpperCase();
+    const nowTime = activeSession.wibClockShort;
+    const currentDay = activeSession.currentDayName;
 
     // Koneksikan langsung ke jadwal mengajar pengurus hari ini
     const todaySchedule = jadwalList.find(j => 
-      j.ustadz?.toLowerCase().trim() === pengurus.nama.toLowerCase().trim() &&
+      (j.ustadz || j.nama)?.toLowerCase().trim() === pengurus.nama.toLowerCase().trim() &&
       j.hari.toUpperCase() === currentDay &&
       (activeSession.jamKe ? j.jamKe === activeSession.jamKe : true)
     );
@@ -378,14 +371,14 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     const targetMapel = todaySchedule?.mapel || pengurus.mapel || 'Pengawasan & Pembinaan Diniyah';
 
     const newRecord: AbsensiGuruRecord = {
-      tanggal: todayIso,
+      tanggal: activeSession.todayIso,
       nama: pengurus.nama,
       mapel: targetMapel,
       kelas: targetKelas,
       status: activeSession.status,
       catatan: activeSession.status === 'Hadir'
-        ? `Presensi Hadir (${nowTime} WIB - ${activeSession.tingkat} Jam Ke-${activeSession.jamKe})`
-        : `Presensi Terlambat Otomatis (${nowTime} WIB - Melewati Batas Waktu)`,
+        ? `Presensi Hadir Tepat Waktu (${nowTime} WIB - ${activeSession.tingkat} ${activeSession.sesi})`
+        : `Presensi Terlambat Otomatis (${nowTime} WIB - Melewati Batas Awal ${activeSession.jadwalAktif?.batasAwal || '08:00'} WIB)`,
       hari: currentDay,
       jamKe: activeSession.jamKe || 1,
       waktu: `${nowTime} WIB`
@@ -398,12 +391,52 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     alert(
       `Presensi Berhasil Dicatat!\n\n` +
       `Ustadz/Ustadzah: ${pengurus.nama}\n` +
-      `Hari & Tanggal: ${currentDay}, ${todayIso}\n` +
-      `Waktu: ${nowTime} WIB\n` +
-      `Sesi: ${activeSession.tingkat} Jam Ke-${activeSession.jamKe}\n` +
+      `Hari & Tanggal: ${currentDay}, ${activeSession.todayIso}\n` +
+      `Waktu Server: ${activeSession.wibTimeStr}\n` +
+      `Sesi Jadwal: ${activeSession.tingkat} (${activeSession.sesi} Jam Ke-${activeSession.jamKe})\n` +
       `Status Terhitung: ${activeSession.status.toUpperCase()} (${activeSession.keterangan})\n\n` +
-      `Data langsung terkoneksi dan disinkronkan ke Database Absensi Ustadz/Ustadzah di Option Panel secara real-time.`
+      `Data langsung terupdate secara real-time ke Dashboard Admin di Fitur Absensi Ustadz/Ustadzah!`
     );
+  };
+
+  // State untuk Tab Presensi Seluruh Santri (Input Manual Pengurus)
+  const [selectedClassSantriTab, setSelectedClassSantriTab] = useState<string>('SEMUA');
+  const [globalSantriAbsensi, setGlobalSantriAbsensi] = useState<Record<string, { status: 'Hadir' | 'Izin' | 'Sakit' | 'Alpha', ket: string }>>({});
+
+  const handleSaveAllSantriAttendance = () => {
+    const targetList = selectedClassSantriTab === 'SEMUA'
+      ? santriList
+      : santriList.filter(s => s.kelas === selectedClassSantriTab);
+
+    if (!targetList.length) return;
+
+    const records: AbsensiSantriRecord[] = targetList.map(s => {
+      const entry = globalSantriAbsensi[s.id] || { status: 'Hadir', ket: 'Input Manual Pengurus' };
+      return {
+        tanggal: activeSession.todayIso,
+        idSantri: s.id,
+        nama: s.nama,
+        kelas: s.kelas,
+        status: entry.status,
+        keterangan: entry.ket || `Presensi Manual oleh Pengurus ${pengurus.nama}`
+      };
+    });
+
+    if (onSaveAbsensiSantri) {
+      onSaveAbsensiSantri(records);
+      alert(`Presensi manual ${records.length} santri (${selectedClassSantriTab}) berhasil disimpan! Data langsung terupdate ke Dashboard Admin di Fitur Absensi Santri secara real-time.`);
+    }
+  };
+
+  const handleMarkAllHadirGlobal = () => {
+    const targetList = selectedClassSantriTab === 'SEMUA'
+      ? santriList
+      : santriList.filter(s => s.kelas === selectedClassSantriTab);
+    const updated = { ...globalSantriAbsensi };
+    targetList.forEach(s => {
+      updated[s.id] = { status: 'Hadir', ket: 'Hadir tepat waktu' };
+    });
+    setGlobalSantriAbsensi(updated);
   };
 
   // Simpan Presensi Santri Kelas Bimbingan (Wali Kelas)
@@ -412,7 +445,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     const records: AbsensiSantriRecord[] = myStudents.map(s => {
       const stat = localSantriAbsensi[s.id] || 'Hadir';
       return {
-        tanggal: todayIso,
+        tanggal: activeSession.todayIso,
         idSantri: s.id,
         nama: s.nama,
         kelas: s.kelas,
@@ -423,7 +456,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
     if (onSaveAbsensiSantri) {
       onSaveAbsensiSantri(records);
-      alert(`Presensi anak didik ${waliKelasKelas} (${records.length} santri) berhasil disimpan ke Database Pusat Admin!`);
+      alert(`Presensi anak didik ${waliKelasKelas} (${records.length} santri) berhasil disimpan ke Database Pusat Admin secara real-time!`);
     }
   };
 
@@ -564,21 +597,26 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
             <button
               onClick={() => setActiveTab('jadwal')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'jadwal'
-                  ? 'bg-[#d4af37] text-black shadow'
+                  ? 'btn-3d-gold text-black shadow-lg font-black'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40'
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" />
               <span>Jadwal & Kitab</span>
+              {unreadSilabusUpdates.length > 0 && (
+                <span className="ml-1 px-2 py-0.5 rounded-full bg-amber-400 text-black font-black text-[9px] animate-pulse border border-yellow-200 shadow-md">
+                  ⚡ {unreadSilabusUpdates.length} Update Silabus
+                </span>
+              )}
             </button>
 
             <button
               onClick={() => setActiveTab('ujian-kitab')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'ujian-kitab'
-                  ? 'bg-[#d4af37] text-black shadow'
+                  ? 'btn-3d-gold text-black shadow-lg font-black'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40'
               }`}
             >
@@ -588,9 +626,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
             <button
               onClick={() => setActiveTab('profil-saya')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'profil-saya'
-                  ? 'bg-[#d4af37] text-black shadow'
+                  ? 'btn-3d-gold text-black shadow-lg font-black'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40'
               }`}
             >
@@ -603,6 +641,80 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
       {/* Main Content Area */}
       <main className={`${building ? 'build-sequence' : ''} flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6`}>
+        {/* ===================== NOTIFIKASI REAL-TIME UPDATE MATERI SILABUS GURU ===================== */}
+        {unreadSilabusUpdates.length > 0 && (
+          <div className="card-3d-glass rounded-3xl p-5 border-2 border-amber-400/80 bg-gradient-to-r from-[#2a1b05] via-[#1a1204] to-[#2a1b05] shadow-2xl relative overflow-hidden">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-amber-500/30">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-b from-amber-300 to-amber-500 text-black flex items-center justify-center font-black shadow-lg animate-pulse shrink-0">
+                  <BookOpen className="w-5 h-5 text-black" />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-extrabold text-white text-gold-3d flex flex-wrap items-center gap-2">
+                    <span>📢 Pemberitahuan Real-Time: Update Materi Silabus Kitab!</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-black text-[10px] font-extrabold uppercase tracking-wider">
+                      Terkini
+                    </span>
+                  </h2>
+                  <p className="text-xs text-amber-200/90">
+                    Terdapat pembaruan kurikulum materi pada kitab yang Anda ampu ({pengurus.nama}).
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
+                <button
+                  onClick={() => setActiveTab('jadwal')}
+                  className="btn-pill-gold-3d px-4 py-2 text-xs font-black shadow-lg"
+                >
+                  📖 Buka Tabel Silabus
+                </button>
+                <button
+                  onClick={handleDismissAllSilabusAlerts}
+                  className="px-3 py-1.5 rounded-xl bg-black/60 hover:bg-black/90 text-slate-300 hover:text-white text-xs font-bold border border-amber-500/30 transition"
+                >
+                  Tutup Semua
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+              {unreadSilabusUpdates.map((s, idx) => (
+                <div key={s.id || idx} className="bg-black/60 border border-amber-500/40 rounded-2xl p-3.5 space-y-2 relative">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-black text-[#d4af37] font-serif">{s.namaKitab}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold border border-blue-500/40">
+                      {s.kelas} • {s.semester || 'Semester 1'}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="text-emerald-300 font-medium">
+                      <span className="text-slate-400 text-[11px]">📖 Mulai:</span> {s.mulai || '-'}
+                    </div>
+                    <div className="text-amber-300 font-medium">
+                      <span className="text-slate-400 text-[11px]">🎯 Target:</span> {s.batasAkhir || '-'}
+                    </div>
+                    <div className="text-teal-200 font-bold bg-[#031818] p-2 rounded-xl border border-teal-500/30">
+                      <span className="text-teal-400 text-[11px] block">📌 Materi Saat Ini:</span>
+                      <span className="text-xs text-white">{s.materiSaatIni || '-'}</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[10px] text-slate-300 font-medium">
+                        Status: <b className="text-white">{s.status || 'Sesuai Target'}</b>
+                      </span>
+                      <button
+                        onClick={() => handleDismissSilabusAlert(s)}
+                        className="text-[11px] text-amber-300 hover:text-white underline font-bold"
+                      >
+                        Tandai Dibaca ✓
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ===================== TAB 1: DASBOR UTAMA PENGURUS ===================== */}
         {activeTab === 'dashboard' && (
           <div className={`${building ? 'build-sequence' : ''} space-y-6`}>
@@ -654,26 +766,58 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               </div>
             )}
 
-            {/* 2. PRESENSI MANDIRI HARI INI & PERIZINAN CEPAT */}
-            <div className="card-3d rounded-3xl p-5 border border-[#d4af37]/40 bg-gradient-to-r from-[#031c12] via-[#05281b] to-[#031c12] shadow-xl">
+            {/* 2. PRESENSI MANDIRI HARI INI & LOGIKA JAM SERVER REAL-TIME */}
+            <div className="card-3d rounded-3xl p-5 border border-[#d4af37]/40 bg-gradient-to-r from-[#031c12] via-[#05281b] to-[#031c12] shadow-xl space-y-4">
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 rounded-2xl bg-[#0b3824] border border-[#d4af37]/60 flex items-center justify-center text-[#d4af37] shadow">
+                  <div className="w-12 h-12 rounded-2xl bg-[#0b3824] border border-[#d4af37]/60 flex items-center justify-center text-[#d4af37] shadow shrink-0">
                     <CheckSquare className="w-6 h-6" />
                   </div>
                   <div>
-                    <h2 className="text-sm sm:text-base font-extrabold text-white text-gold-3d flex items-center gap-2">
-                      <span>Presensi Kehadiran Mandiri Ustadz / Pengurus</span>
-                      <span className="text-xs font-mono font-normal text-emerald-300">({todayStr})</span>
-                    </h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-sm sm:text-base font-extrabold text-white text-gold-3d flex items-center gap-2">
+                        <span>Presensi Kehadiran Real-Time Ustadz / Pengurus</span>
+                        <span className="text-xs font-mono font-normal text-emerald-300">({activeSession.todayIso})</span>
+                      </h2>
+                      {simulationActive && (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/50 text-[10px] font-mono font-bold animate-pulse">
+                          ⚡ Mode Simulasi Jam: {activeSession.wibClockShort} WIB
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-emerald-200/90 mt-0.5">
-                      Catat kehadiran Anda hari ini secara langsung. Data langsung terhubung ke Database Dashboard Admin secara real time.
+                      Pengecekan jam server: <b>TSANAWIYAH (08.00-08.30)</b> dan <b>ALIYAH (19.00-19.30 & 21.00-21.30)</b>. Lewat batas awal otomatis <b>Terlambat</b>. Di luar jadwal tombol nonaktif.
                     </p>
                   </div>
                 </div>
 
-                {/* Status Kehadiran Hari Ini & Tombol Aksi */}
-                <div className="flex flex-wrap items-center gap-2.5">
+                {/* Jam Server Digital Real-Time & Tombol Toggle Uji Coba */}
+                <div className="flex items-center gap-2 self-stretch md:self-auto justify-between md:justify-end">
+                  <div className="px-3.5 py-1.5 rounded-xl bg-black/70 border border-[#d4af37]/50 shadow-inner flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                    <div>
+                      <span className="text-[9px] text-[#d4af37] font-bold block uppercase leading-none">JAM SERVER (WIB)</span>
+                      <span className="text-sm font-black text-white font-mono tracking-wider leading-none mt-1 block">
+                        {activeSession.wibTimeStr}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowSimulasiBar(!showSimulasiBar)}
+                    className="px-2.5 py-2 rounded-xl bg-[#0b3824] hover:bg-[#104b31] border border-[#d4af37]/40 text-[#f3e5ab] text-xs font-bold transition flex items-center gap-1.5"
+                    title="Buka panel simulasi uji coba jam server"
+                  >
+                    <Sliders className="w-3.5 h-3.5 text-[#d4af37]" />
+                    <span className="hidden sm:inline">Uji Coba Jam</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Status Kehadiran Hari Ini & Tombol Aksi */}
+              <div className="pt-3 border-t border-[#d4af37]/20 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   {todayAttendance ? (
                     <div className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-emerald-950/90 border border-emerald-500/50 text-emerald-300 text-xs font-bold shadow-lg">
                       <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -685,24 +829,35 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                       )}
                     </div>
                   ) : (
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                      {/* Tombol Tunggal: HADIR SAJA (Sesuai Permintaan User) */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5">
+                      {/* Tombol Utama: HADIR SAJA dengan Proteksi Jam Server Real-Time */}
                       <button
                         type="button"
                         onClick={handleHadirSaja}
-                        disabled={!activeSession.isActive}
+                        disabled={activeSession.buttonDisabled}
                         className={`px-5 py-2.5 rounded-xl font-black text-xs flex items-center gap-2 shadow-lg transition active:scale-95 ${
-                          activeSession.isActive
-                            ? activeSession.status === 'Terlambat'
+                          activeSession.buttonDisabled
+                            ? 'bg-slate-800/90 border border-slate-700 text-slate-400 cursor-not-allowed opacity-50 shadow-none'
+                            : activeSession.status === 'Terlambat'
                               ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-950/60 ring-2 ring-amber-400 animate-pulse'
                               : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/60 ring-2 ring-emerald-400'
-                            : 'bg-slate-800/80 border border-slate-700 text-slate-400 cursor-not-allowed opacity-60'
                         }`}
-                        title={activeSession.isActive ? `Klik untuk Hadir Sekarang (${activeSession.keterangan})` : 'Di luar jam jadwal presensi'}
+                        title={activeSession.buttonDisabled ? 'Tombol dinonaktifkan di luar jam presensi' : activeSession.keterangan}
                         data-testid="hadir-saja-btn"
                       >
-                        <Check className="w-4 h-4 stroke-[3]" />
-                        <span>HADIR SAJA</span>
+                        {activeSession.buttonDisabled ? (
+                          <LogOut className="w-4 h-4 text-slate-500 rotate-180" />
+                        ) : (
+                          <Check className="w-4 h-4 stroke-[3]" />
+                        )}
+                        <span>
+                          {activeSession.buttonDisabled 
+                            ? 'PRESENSI DINONAKTIFKAN (DI LUAR JADWAL)' 
+                            : activeSession.status === 'Terlambat'
+                              ? `PRESENSI TERLAMBAT (${activeSession.tingkat})`
+                              : `PRESENSI HADIR (${activeSession.tingkat})`
+                          }
+                        </span>
                       </button>
 
                       {/* Indikator Status Waktu Aktif */}
@@ -716,13 +871,15 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                         <Clock className="w-3.5 h-3.5" />
                         <span>
                           {activeSession.isActive 
-                            ? `${activeSession.tingkat} Jam Ke-${activeSession.jamKe}: ${activeSession.status === 'Terlambat' ? '⚠️ Terlambat' : '🟢 Tepat Waktu'}` 
-                            : '🔒 Di luar jam presensi'}
+                            ? `${activeSession.tingkat} (${activeSession.sesi}): ${activeSession.status === 'Terlambat' ? '⚠️ Terlambat (Lewat Batas Awal)' : '🟢 Tepat Waktu'}` 
+                            : `🔒 Di Luar Jadwal Presensi ${activeSession.jadwalBerikutnya ? `(Jadwal Berikutnya: ${activeSession.jadwalBerikutnya.label} ${activeSession.jadwalBerikutnya.jamMulai})` : ''}`}
                         </span>
                       </span>
                     </div>
                   )}
+                </div>
 
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => setShowIzinModal(true)}
                     className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center gap-1.5 shadow transition"
@@ -732,6 +889,91 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* PANEL SIMULASI UJI COBA JAM SERVER (MEMUDAHKAN PENGUJIAN SESUAI PERMINTAAN USER) */}
+              {showSimulasiBar && (
+                <div className="p-3.5 rounded-2xl bg-black/80 border border-[#d4af37]/40 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#d4af37] flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[#d4af37]" />
+                      <span>Panel Uji Coba Logika Jam Server (Pilih Jam untuk Menguji):</span>
+                    </span>
+                    <span className="text-[10px] text-emerald-300 font-mono">
+                      Real-time test simulator
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSimulatedServerTime('08:00:00')}
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 font-bold text-[11px] transition"
+                    >
+                      Pagi 08:00 (Tsanawiyah Tepat Waktu)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSimulatedServerTime('08:15:00')}
+                      className="px-2.5 py-1.5 rounded-lg bg-amber-950 hover:bg-amber-900 border border-amber-500/50 text-amber-300 font-bold text-[11px] transition"
+                    >
+                      Pagi 08:15 (Tsanawiyah Terlambat)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSimulatedServerTime('08:45:00')}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold text-[11px] transition"
+                    >
+                      Pagi 08:45 (Terkunci / Nonaktif)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSimulatedServerTime('19:00:00')}
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 font-bold text-[11px] transition"
+                    >
+                      Malam 19:00 (Aliyah S1 Tepat Waktu)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSimulatedServerTime('19:15:00')}
+                      className="px-2.5 py-1.5 rounded-lg bg-amber-950 hover:bg-amber-900 border border-amber-500/50 text-amber-300 font-bold text-[11px] transition"
+                    >
+                      Malam 19:15 (Aliyah S1 Terlambat)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSimulatedServerTime('21:00:00')}
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 font-bold text-[11px] transition"
+                    >
+                      Malam 21:00 (Aliyah S2 Tepat Waktu)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSimulatedServerTime('21:15:00')}
+                      className="px-2.5 py-1.5 rounded-lg bg-amber-950 hover:bg-amber-900 border border-amber-500/50 text-amber-300 font-bold text-[11px] transition"
+                    >
+                      Malam 21:15 (Aliyah S2 Terlambat)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSimulatedServerTime('14:00:00')}
+                      className="px-2.5 py-1.5 rounded-lg bg-red-950 hover:bg-red-900 border border-red-500/50 text-red-300 font-bold text-[11px] transition"
+                    >
+                      Siang 14:00 (Di Luar Jadwal - Nonaktif)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSimulatedServerTime(null)}
+                      className="px-3 py-1.5 rounded-lg bg-[#d4af37] text-black font-extrabold text-[11px] hover:bg-[#f5e298] transition shadow"
+                    >
+                      🔄 Reset ke Jam Asli Server
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 3. PROFIL PENGURUS YANG BERSANGKUTAN & REKAPAN ABSENSI PRIBADI */}
@@ -1323,108 +1565,805 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
           </div>
         )}
 
-        {/* ===================== TAB 5: PRESENSI SELURUH SANTRI ===================== */}
+        {/* ===================== TAB 5: PRESENSI MANUAL SELURUH SANTRI ===================== */}
         {activeTab === 'absensi-santri' && (
-          <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 space-y-4">
-            <div className="flex justify-between items-center pb-3 border-b border-[#d4af37]/20">
+          <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 space-y-5">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-3 border-b border-[#d4af37]/20">
               <div>
-                <h3 className="text-base font-bold text-white text-gold-3d">Presensi Seluruh Santri Diniyah</h3>
-                <p className="text-xs text-emerald-300">Data terkoneksi secara langsung ke Database Pusat di Dashboard Admin.</p>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-bold text-white text-gold-3d">
+                    Presensi Manual Seluruh Santri Diniyah
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                    Input Manual Pengurus
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-300 mt-0.5">
+                  Input presensi santri oleh pengurus langsung terupdate secara real-time ke Dashboard Admin di Fitur Absensi Santri.
+                </p>
               </div>
-              <span className="text-xs text-[#d4af37] font-mono">Total: {santriList.length} Santri</span>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleMarkAllHadirGlobal}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 font-bold text-xs flex items-center gap-1.5 transition shadow"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Tandai Hadir Semua</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAllSantriAttendance}
+                  className="btn-3d-gold px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow"
+                >
+                  <CheckCheck className="w-4 h-4 text-black" />
+                  <span>Simpan Presensi Santri Manual ke Admin</span>
+                </button>
+              </div>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-[#d4af37]/20">
-              <table className="w-full text-xs text-left">
+            {/* Filter Angkatan / Kelas Santri */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span className="text-xs text-[#d4af37] font-bold uppercase tracking-wider">Pilih Angkatan:</span>
+              <button
+                type="button"
+                onClick={() => setSelectedClassSantriTab('SEMUA')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                  selectedClassSantriTab === 'SEMUA' ? 'btn-3d-gold text-black shadow' : 'bg-[#03140c] text-slate-300 border border-[#d4af37]/30'
+                }`}
+              >
+                Semua Angkatan ({santriList.length})
+              </button>
+              {['1 TSANAWIYAH', '2 TSANAWIYAH', '3 TSANAWIYAH', '1 ALIYAH', '2 ALIYAH', '3 ALIYAH'].map(cls => (
+                <button
+                  key={cls}
+                  type="button"
+                  onClick={() => setSelectedClassSantriTab(cls)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                    selectedClassSantriTab === cls ? 'btn-3d-gold text-black shadow' : 'bg-[#03140c] text-slate-300 border border-[#d4af37]/30'
+                  }`}
+                >
+                  {cls} ({santriList.filter(s => s.kelas === cls).length})
+                </button>
+              ))}
+            </div>
+
+            {/* Tabel Input Presensi Santri Interaktif */}
+            <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
+              <table className="w-full text-xs text-left min-w-[750px]">
                 <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                   <tr>
-                    <th className="p-3">Santri</th>
-                    <th className="p-3">Kelas / Asrama</th>
-                    <th className="p-3">Wali Santri</th>
-                    <th className="p-3">Wali Kelas</th>
-                    <th className="p-3">Saldo Saku</th>
+                    <th className="p-3 w-12 text-center">NO</th>
+                    <th className="p-3">SANTRI & NIS</th>
+                    <th className="p-3 w-36">ANGKATAN / KELAS</th>
+                    <th className="p-3 w-40 text-center">STATUS PRESENSI</th>
+                    <th className="p-3">KETERANGAN / CATATAN PENGURUS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                  {santriList.map(s => (
-                    <tr key={s.id} className="hover:bg-[#d4af37]/5">
-                      <td className="p-3">
-                        <div className="flex items-center space-x-2.5">
-                          <img
-                            src={s.foto || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=80&auto=format&fit=crop&q=80'}
-                            alt={s.nama}
-                            className="w-7 h-7 rounded-full object-cover border border-[#d4af37]/40"
-                          />
-                          <div>
-                            <span className="font-bold text-white block">{s.nama}</span>
-                            <span className="text-[10px] text-[#d4af37] font-mono">NIS: {s.id}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-3 text-emerald-200">{s.kelas} • {s.kamar}</td>
-                      <td className="p-3 text-slate-300">{s.namaOrangTua || '-'}</td>
-                      <td className="p-3 text-emerald-300">{s.namaWaliKelas || '-'}</td>
-                      <td className="p-3 font-mono text-[#d4af37] font-bold">
-                        Rp {(s.saldoUangSaku || 0).toLocaleString('id-ID')}
-                      </td>
-                    </tr>
-                  ))}
+                  {santriList
+                    .filter(s => selectedClassSantriTab === 'SEMUA' || s.kelas === selectedClassSantriTab)
+                    .map((s, idx) => {
+                      const cur = globalSantriAbsensi[s.id] || { status: 'Hadir', ket: '' };
+                      return (
+                        <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
+                          <td className="p-3 text-center text-emerald-300 font-mono">{idx + 1}</td>
+                          <td className="p-3">
+                            <div className="flex items-center space-x-2.5">
+                              <img
+                                src={s.foto || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=80&auto=format&fit=crop&q=80'}
+                                alt={s.nama}
+                                className="w-8 h-8 rounded-full object-cover border border-[#d4af37]/40 shrink-0"
+                              />
+                              <div>
+                                <span className="font-bold text-white block">{s.nama}</span>
+                                <span className="text-[10px] text-[#d4af37] font-mono">NIS: {s.id}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-3 text-emerald-200 font-semibold">{s.kelas}</td>
+                          <td className="p-3 text-center">
+                            <select
+                              value={cur.status}
+                              onChange={(e) => setGlobalSantriAbsensi({
+                                ...globalSantriAbsensi,
+                                [s.id]: { ...cur, status: e.target.value as any }
+                              })}
+                              className={`w-full font-bold text-xs rounded-xl p-1.5 border shadow-inner ${
+                                cur.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50' :
+                                cur.status === 'Izin' ? 'bg-amber-950 text-amber-300 border-amber-500/50' :
+                                cur.status === 'Sakit' ? 'bg-blue-950 text-blue-300 border-blue-500/50' :
+                                'bg-red-950 text-red-300 border-red-500/50'
+                              }`}
+                            >
+                              <option value="Hadir">✓ Hadir</option>
+                              <option value="Izin">✉ Izin</option>
+                              <option value="Sakit">🏥 Sakit</option>
+                              <option value="Alpha">✗ Alpha</option>
+                            </select>
+                          </td>
+                          <td className="p-3">
+                            <input
+                              type="text"
+                              value={cur.ket}
+                              placeholder="Catatan udzur / kedisiplinan..."
+                              onChange={(e) => setGlobalSantriAbsensi({
+                                ...globalSantriAbsensi,
+                                [s.id]: { ...cur, ket: e.target.value }
+                              })}
+                              className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#d4af37]"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
           </div>
         )}
 
-        {/* ===================== TAB 6: JADWAL & KITAB ===================== */}
+        {/* ===================== TAB 6: JADWAL & SILABUS MEMAKNAI ===================== */}
         {activeTab === 'jadwal' && (
-          <div className="space-y-6">
-            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30">
-              <h2 className="text-base font-bold text-white text-gold-3d">Jadwal Pelajaran Diniyah Madrasah</h2>
-              <p className="text-xs text-emerald-300">Tabel memanjang jadwal pengajian & kurikulum kitab per angkatan.</p>
-            </div>
-
-            <div className="card-3d rounded-2xl p-5 border border-[#d4af37]/30 overflow-x-auto">
-              <table className="w-full text-xs text-left min-w-[700px]">
-                <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
-                  <tr>
-                    <th className="p-3">Hari</th>
-                    <th className="p-3">Waktu</th>
-                    <th className="p-3">Kelas / Angkatan</th>
-                    <th className="p-3">Kitab Kuning</th>
-                    <th className="p-3">Ustadz Pengampu</th>
-                    <th className="p-3">Ruang / Tempat</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                  {jadwalList.map(j => (
-                    <tr key={j.id || `${j.hari}-${j.jamKe}-${j.kelas}`} className="hover:bg-[#d4af37]/5">
-                      <td className="p-3 font-bold text-[#d4af37]">{j.hari}</td>
-                      <td className="p-3 font-mono text-emerald-300">{j.waktu}</td>
-                      <td className="p-3 text-white font-bold">{j.kelas}</td>
-                      <td className="p-3 text-emerald-200 font-serif italic">{j.mapel}</td>
-                      <td className="p-3 text-slate-300">{j.nama}</td>
-                      <td className="p-3 text-slate-400">{j.keterangan || 'Aula Utama'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Kurikulum Kitab Per Angkatan */}
-            <div className="card-3d rounded-2xl p-5 border border-[#d4af37]/30 space-y-3">
-              <h3 className="text-sm font-bold text-white text-gold-3d">Kurikulum Kitab Per Angkatan Diniyah</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {kurikulumList.map(k => (
-                  <div key={k.id} className="card-3d-glass rounded-xl p-4 border border-[#d4af37]/25 space-y-1.5">
-                    <span className="px-2 py-0.5 rounded bg-[#d4af37]/20 text-[#d4af37] font-bold text-[10px]">
-                      {k.kelas} • {k.mapel}
-                    </span>
-                    <h4 className="font-bold text-white text-sm">{k.kitab}</h4>
-                    <p className="text-xs text-emerald-300 font-serif">Pengarang / Muallif: {k.muallif}</p>
-                    <p className="text-[11px] text-slate-300">Target: {k.targetSemester} {k.ustadzPengampu ? `• Pengampu: ${k.ustadzPengampu}` : ''}</p>
-                  </div>
-                ))}
+          <div className="space-y-8">
+            {/* Header Jadwal & Silabus */}
+            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-white text-gold-3d flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-[#d4af37]" />
+                  Jadwal Pelajaran & Silabus Memaknai Diniyah
+                </h2>
+                <p className="text-xs text-emerald-300">
+                  Tabel jadwal terpisah per tingkatan (Tsanawiyah & Aliyah) serta silabus memaknai kitab kuning yang terhubung real-time.
+                </p>
               </div>
+              <div className="flex items-center gap-2 bg-[#020e08] px-3 py-1.5 rounded-xl border border-[#d4af37]/30">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span className="text-[11px] text-[#d4af37] font-semibold">Tersinkronisasi Realtime</span>
+              </div>
+            </div>
+
+            {/* TABEL 1: TINGKATAN TSANAWIYAH */}
+            <div className="card-3d rounded-3xl p-6 border-2 border-emerald-500/40 space-y-5 bg-gradient-to-b from-[#0b3824]/30 to-[#020e08]">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-emerald-500/30">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-950/80 border border-emerald-500/50 flex items-center justify-center text-emerald-300 shadow-md">
+                    <BookOpen className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white text-gold-3d flex items-center gap-2">
+                      Tingkatan Tsanawiyah (Kelas 1 - 3 Tsanawiyah)
+                    </h3>
+                    <p className="text-xs text-emerald-300">
+                      Jadwal Pengajian Sesi Pagi - Siang (Hari: Sabtu s/d Kamis)
+                    </p>
+                  </div>
+                </div>
+
+                <span className="text-xs text-emerald-300 bg-[#020e08] px-3 py-1 rounded-full border border-emerald-500/30 self-start md:self-auto font-mono">
+                  Sesi Pagi / Siang
+                </span>
+              </div>
+
+              {/* Filter Khusus Tabel Tsanawiyah */}
+              <div className="p-4 rounded-2xl bg-[#03150d] border border-emerald-500/30 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <span className="text-xs text-emerald-300 font-bold min-w-[130px]">Pilih Kelas / Angkatan:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {['SEMUA', '1 TSANAWIYAH', '2 TSANAWIYAH', '3 TSANAWIYAH'].map(kls => {
+                      const active = jadwalTsAngkatan === kls;
+                      return (
+                        <button
+                          key={kls}
+                          type="button"
+                          onClick={() => setJadwalTsAngkatan(kls)}
+                          className={`text-xs font-black transition-all shadow-md ${
+                            active
+                              ? 'btn-pill-gold-3d scale-102'
+                              : 'btn-pill-dark-3d'
+                          }`}
+                        >
+                          {kls === 'SEMUA' ? 'SEMUA TSANAWIYAH' : kls}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t border-emerald-500/20">
+                  <span className="text-xs text-emerald-300 font-bold min-w-[130px]">Pilih Hari Pengajian:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['SEMUA', 'SABTU', 'AHAD', 'SENIN', 'SELASA', 'RABU', 'KAMIS'].map(day => {
+                      const active = jadwalTsDay === day;
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => setJadwalTsDay(day)}
+                          className={`text-xs font-black transition-all shadow-md ${
+                            active
+                              ? 'btn-pill-gold-3d scale-102'
+                              : 'btn-pill-dark-3d'
+                          }`}
+                        >
+                          {day === 'SEMUA' ? 'SEMUA HARI' : day}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border border-emerald-500/30 shadow-xl">
+                <table className="w-full text-xs text-left min-w-[750px]">
+                  <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
+                    <tr>
+                      <th className="p-3">Hari</th>
+                      <th className="p-3">Jam Ke</th>
+                      <th className="p-3">Waktu</th>
+                      <th className="p-3">Kelas</th>
+                      <th className="p-3">Mata Pelajaran / Kitab</th>
+                      <th className="p-3">Ustadz / Guru Pengampu</th>
+                      <th className="p-3">Ruangan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-500/15 bg-[#020e08]/80">
+                    {jadwalList
+                      .filter(j => {
+                        const isTs = j.kelas.toUpperCase().includes('TSANAWIYAH') || j.tingkatan === 'Tsanawiyah';
+                        const matchClass = jadwalTsAngkatan === 'SEMUA' || j.kelas.toUpperCase().trim() === jadwalTsAngkatan.toUpperCase().trim();
+                        const matchDay = jadwalTsDay === 'SEMUA' || j.hari.toUpperCase().trim() === jadwalTsDay.toUpperCase().trim();
+                        return isTs && matchClass && matchDay;
+                      })
+                      .map((j, idx) => (
+                        <tr key={j.id || `${j.hari}-${j.jamKe}-${j.kelas}-${idx}`} className="hover:bg-emerald-500/10 transition">
+                          <td className="p-3 font-bold text-[#d4af37]">{j.hari}</td>
+                          <td className="p-3 text-slate-300 font-mono">Ke-{j.jamKe || 1}</td>
+                          <td className="p-3 font-mono text-emerald-300">{j.waktu}</td>
+                          <td className="p-3 text-white font-bold">{j.kelas}</td>
+                          <td className="p-3 text-emerald-200 font-serif italic font-semibold">{j.mapel}</td>
+                          <td className="p-3 text-slate-300">{j.nama}</td>
+                          <td className="p-3 text-slate-400">{j.keterangan || 'Gedung Tsanawiyah'}</td>
+                        </tr>
+                      ))}
+                    {jadwalList.filter(j => {
+                      const isTs = j.kelas.toUpperCase().includes('TSANAWIYAH') || j.tingkatan === 'Tsanawiyah';
+                      const matchClass = jadwalTsAngkatan === 'SEMUA' || j.kelas.toUpperCase().trim() === jadwalTsAngkatan.toUpperCase().trim();
+                      const matchDay = jadwalTsDay === 'SEMUA' || j.hari.toUpperCase().trim() === jadwalTsDay.toUpperCase().trim();
+                      return isTs && matchClass && matchDay;
+                    }).length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="p-6 text-center text-slate-400">
+                          Tidak ada data jadwal Tsanawiyah untuk filter kelas & hari yang dipilih.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* TABEL 2: TINGKATAN ALIYAH */}
+            <div className="card-3d rounded-3xl p-6 border-2 border-indigo-500/40 space-y-5 bg-gradient-to-b from-[#111638]/30 to-[#020e08]">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-indigo-500/30">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-950/80 border border-indigo-500/50 flex items-center justify-center text-indigo-300 shadow-md">
+                    <BookOpen className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white text-gold-3d flex items-center gap-2">
+                      Tingkatan Aliyah (Kelas 1 - 3 Aliyah)
+                    </h3>
+                    <p className="text-xs text-indigo-300">
+                      Jadwal Pengajian Sesi Malam (Hari: Malam Sabtu s/d Malam Kamis)
+                    </p>
+                  </div>
+                </div>
+
+                <span className="text-xs text-indigo-300 bg-[#020e08] px-3 py-1 rounded-full border border-indigo-500/30 self-start md:self-auto font-mono">
+                  Sesi Malam (Ba&apos;da Maghrib / Isya)
+                </span>
+              </div>
+
+              {/* Filter Khusus Tabel Aliyah */}
+              <div className="p-4 rounded-2xl bg-[#060c1d] border border-indigo-500/30 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <span className="text-xs text-indigo-300 font-bold min-w-[130px]">Pilih Kelas / Angkatan:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {['SEMUA', '1 ALIYAH', '2 ALIYAH', '3 ALIYAH'].map(kls => {
+                      const active = jadwalAlAngkatan === kls;
+                      return (
+                        <button
+                          key={kls}
+                          type="button"
+                          onClick={() => setJadwalAlAngkatan(kls)}
+                          className={`text-xs font-black transition-all shadow-md ${
+                            active
+                              ? 'btn-pill-gold-3d scale-102'
+                              : 'btn-pill-dark-3d'
+                          }`}
+                        >
+                          {kls === 'SEMUA' ? 'SEMUA ALIYAH' : kls}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t border-indigo-500/20">
+                  <span className="text-xs text-indigo-300 font-bold min-w-[130px]">Pilih Hari Pengajian:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['SEMUA', 'MALAM SABTU', 'MALAM AHAD', 'MALAM SENIN', 'MALAM SELASA', 'MALAM RABU', 'MALAM KAMIS'].map(malam => {
+                      const active = jadwalAlDay === malam;
+                      return (
+                        <button
+                          key={malam}
+                          type="button"
+                          onClick={() => setJadwalAlDay(malam)}
+                          className={`text-xs font-black transition-all shadow-md ${
+                            active
+                              ? 'btn-pill-gold-3d scale-102'
+                              : 'btn-pill-dark-3d'
+                          }`}
+                        >
+                          {malam === 'SEMUA' ? 'SEMUA HARI' : malam}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border border-indigo-500/30 shadow-xl">
+                <table className="w-full text-xs text-left min-w-[750px]">
+                  <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
+                    <tr>
+                      <th className="p-3">Hari (Format Malam)</th>
+                      <th className="p-3">Jam Ke</th>
+                      <th className="p-3">Waktu</th>
+                      <th className="p-3">Kelas</th>
+                      <th className="p-3">Mata Pelajaran / Kitab</th>
+                      <th className="p-3">Ustadz / Guru Pengampu</th>
+                      <th className="p-3">Ruangan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-indigo-500/15 bg-[#020e08]/80">
+                    {jadwalList
+                      .filter(j => {
+                        const isAl = j.kelas.toUpperCase().includes('ALIYAH') || j.tingkatan === 'Aliyah';
+                        const matchClass = jadwalAlAngkatan === 'SEMUA' || j.kelas.toUpperCase().trim() === jadwalAlAngkatan.toUpperCase().trim();
+                        const matchDay = jadwalAlDay === 'SEMUA' || j.hari.toUpperCase().trim() === jadwalAlDay.toUpperCase().trim();
+                        return isAl && matchClass && matchDay;
+                      })
+                      .map((j, idx) => (
+                        <tr key={j.id || `${j.hari}-${j.jamKe}-${j.kelas}-${idx}`} className="hover:bg-indigo-500/10 transition">
+                          <td className="p-3 font-bold text-indigo-300">{j.hari}</td>
+                          <td className="p-3 text-slate-300 font-mono">Ke-{j.jamKe || 1}</td>
+                          <td className="p-3 font-mono text-emerald-300">{j.waktu}</td>
+                          <td className="p-3 text-white font-bold">{j.kelas}</td>
+                          <td className="p-3 text-emerald-200 font-serif italic font-semibold">{j.mapel}</td>
+                          <td className="p-3 text-slate-300">{j.nama}</td>
+                          <td className="p-3 text-slate-400">{j.keterangan || 'Gedung Aliyah / Musholla'}</td>
+                        </tr>
+                      ))}
+                    {jadwalList.filter(j => {
+                      const isAl = j.kelas.toUpperCase().includes('ALIYAH') || j.tingkatan === 'Aliyah';
+                      const matchClass = jadwalAlAngkatan === 'SEMUA' || j.kelas.toUpperCase().trim() === jadwalAlAngkatan.toUpperCase().trim();
+                      const matchDay = jadwalAlDay === 'SEMUA' || j.hari.toUpperCase().trim() === jadwalAlDay.toUpperCase().trim();
+                      return isAl && matchClass && matchDay;
+                    }).length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="p-6 text-center text-slate-400">
+                          Tidak ada data jadwal Aliyah untuk filter kelas & hari yang dipilih.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* TABEL 3: SILABUS MEMAKNAI (TERKONEKSI DENGAN PENGURUS & GURU) */}
+            <div className="card-3d rounded-3xl p-6 border-2 border-[#d4af37]/50 space-y-5 bg-gradient-to-b from-[#0b3824]/40 to-[#020e08]">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#d4af37]/30">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-[#d4af37]" />
+                    <h3 className="text-base font-bold text-white text-gold-3d">
+                      Tabel Silabus Memaknai Kitab Kuning
+                    </h3>
+                  </div>
+                  <p className="text-xs text-emerald-300">
+                    Silabus kurikulum ngaji weton & bandongan santri per angkatan (Terkoneksi real-time).
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Tombol Semester 1 & Semester 2 */}
+                  <div className="flex items-center gap-2 p-1.5 bg-[#020e08] rounded-2xl border border-[#d4af37]/40">
+                    <button
+                      type="button"
+                      onClick={() => setSilabusSemester('Semester 1')}
+                      className={`text-xs font-black transition-all shadow-md ${
+                        silabusSemester === 'Semester 1'
+                          ? 'btn-pill-gold-3d scale-102'
+                          : 'btn-pill-dark-3d'
+                      }`}
+                    >
+                      SEMESTER 1 (GANJIL)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSilabusSemester('Semester 2')}
+                      className={`text-xs font-black transition-all shadow-md ${
+                        silabusSemester === 'Semester 2'
+                          ? 'btn-pill-gold-3d scale-102'
+                          : 'btn-pill-dark-3d'
+                      }`}
+                    >
+                      SEMESTER 2 (GENAP)
+                    </button>
+                  </div>
+
+                  {onSaveSilabus && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingSilabus(null);
+                        setSilabusForm({
+                          namaKitab: '',
+                          kelas: silabusAngkatanFilter !== 'SEMUA' ? silabusAngkatanFilter : '1 TSANAWIYAH',
+                          tingkatan: silabusAngkatanFilter.includes('ALIYAH') ? 'Aliyah' : 'Tsanawiyah',
+                          semester: silabusSemester,
+                          mulai: 'Fasal 1: Bab Muqaddimah & Kalam',
+                          batasAkhir: 'Khatam Bab Akhir Kitab',
+                          materiSaatIni: 'Fasal 1: Bab Kalam',
+                          status: 'Sesuai Target',
+                          keterangan: 'Kajian Rutin Santri',
+                          ustadzPengampu: pengurus.nama || ''
+                        });
+                        setShowAddSilabusModal(true);
+                      }}
+                      className="btn-pill-gold-3d text-xs font-black shadow-lg"
+                    >
+                      <Plus className="w-4 h-4" />
+                      + Tambah Silabus
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Filter Angkatan untuk Silabus */}
+              <div className="p-4 rounded-2xl bg-[#03150d] border border-[#d4af37]/30 flex flex-col sm:flex-row sm:items-center gap-2">
+                <span className="text-xs text-[#d4af37] font-bold min-w-[130px]">Pilih Angkatan / Kelas:</span>
+                <div className="flex flex-wrap gap-2">
+                  {['SEMUA', '1 TSANAWIYAH', '2 TSANAWIYAH', '3 TSANAWIYAH', '1 ALIYAH', '2 ALIYAH', '3 ALIYAH'].map(kls => {
+                    const active = silabusAngkatanFilter === kls;
+                    return (
+                      <button
+                        key={kls}
+                        type="button"
+                        onClick={() => setSilabusAngkatanFilter(kls)}
+                        className={`text-xs font-black transition-all shadow-md ${
+                          active
+                            ? 'btn-pill-gold-3d scale-102'
+                            : 'btn-pill-dark-3d'
+                        }`}
+                      >
+                        {kls === 'SEMUA' ? 'SEMUA ANGKATAN' : kls}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30">
+                <table className="w-full text-xs text-left min-w-[1050px]">
+                  <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
+                    <tr>
+                      <th className="p-3">Nama Ustadz Pengampu</th>
+                      <th className="p-3">Kitab Kuning</th>
+                      <th className="p-3">Kelas / Angkatan</th>
+                      <th className="p-3">Semester</th>
+                      <th className="p-3">Mulai Memaknai (Materi Awal)</th>
+                      <th className="p-3">Batas Akhir (Target Khatam)</th>
+                      <th className="p-3">Materi Saat Ini</th>
+                      <th className="p-3 text-center">Status Pencocokan</th>
+                      <th className="p-3">Keterangan</th>
+                      {onSaveSilabus && <th className="p-3 text-center">Aksi</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
+                    {silabusList
+                      .filter(s => {
+                        const matchClass = silabusAngkatanFilter === 'SEMUA' || s.kelas.toUpperCase().trim() === silabusAngkatanFilter.toUpperCase().trim();
+                        const matchSem = !s.semester || s.semester === silabusSemester;
+                        return matchClass && matchSem;
+                      })
+                      .map((s, idx) => {
+                        const statusColor = 
+                          s.status === 'Sesuai Target' ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/50' :
+                          s.status === 'Khatam / Tercapai' ? 'bg-amber-950/90 text-amber-300 border-amber-500/50' :
+                          s.status === 'Belum Tercapai / Tertinggal' ? 'bg-red-950/90 text-red-300 border-red-500/50' :
+                          'bg-blue-950/90 text-blue-300 border-blue-500/50';
+
+                        return (
+                          <tr key={s.id || idx} className="hover:bg-[#d4af37]/5">
+                            <td className="p-3 font-bold text-white flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-[#d4af37]"></span>
+                              {s.ustadzPengampu}
+                            </td>
+                            <td className="p-3 text-[#d4af37] font-serif font-bold text-sm">
+                              {s.namaKitab}
+                            </td>
+                            <td className="p-3 text-emerald-200 font-semibold">{s.kelas}</td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-bold">
+                                {s.semester || silabusSemester}
+                              </span>
+                            </td>
+                            <td className="p-3 text-emerald-300">{s.mulai || '-'}</td>
+                            <td className="p-3 text-amber-300">{s.batasAkhir || '-'}</td>
+                            <td className="p-3 text-teal-200 font-bold">{s.materiSaatIni || 'Bab Awal'}</td>
+                            <td className="p-3 text-center">
+                              <span className={`px-2.5 py-1 rounded-full border text-[10px] font-bold whitespace-nowrap ${statusColor}`}>
+                                {s.status || 'Sesuai Target'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-slate-300">{s.keterangan || '-'}</td>
+                            {onSaveSilabus && (
+                              <td className="p-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingSilabus(s);
+                                    setSilabusForm({
+                                      id: s.id,
+                                      namaKitab: s.namaKitab || '',
+                                      kelas: s.kelas || '1 TSANAWIYAH',
+                                      tingkatan: (s.tingkatan as any) || 'Tsanawiyah',
+                                      semester: (s.semester as any) || silabusSemester,
+                                      mulai: s.mulai || '',
+                                      batasAkhir: s.batasAkhir || '',
+                                      materiSaatIni: s.materiSaatIni || '',
+                                      status: (s.status as any) || 'Sesuai Target',
+                                      keterangan: s.keterangan || '',
+                                      ustadzPengampu: s.ustadzPengampu || pengurus.nama || ''
+                                    });
+                                    setShowAddSilabusModal(true);
+                                  }}
+                                  className="p-1.5 bg-amber-500/20 text-amber-300 hover:bg-amber-500 hover:text-black rounded-lg transition border border-amber-500/40"
+                                  title="Edit Silabus"
+                                >
+                                  <Sliders className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* MODAL FORM TAMBAH / EDIT SILABUS PENGURUS */}
+              {showAddSilabusModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                  <div className="card-3d w-full max-w-2xl bg-[#03140c] border-2 border-[#d4af37]/60 rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+                    <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/30">
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="w-6 h-6 text-[#d4af37]" />
+                        <h3 className="text-base font-bold text-white text-gold-3d">
+                          {editingSilabus ? '✏️ Edit Silabus Memaknai' : '➕ Tambah Silabus Memaknai Baru'}
+                        </h3>
+                      </div>
+                      <button
+                        onClick={() => setShowAddSilabusModal(false)}
+                        className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (onSaveSilabus) {
+                          onSaveSilabus({
+                            id: editingSilabus?.id || `SLB-${Date.now()}`,
+                            namaKitab: silabusForm.namaKitab,
+                            kelas: silabusForm.kelas,
+                            tingkatan: silabusForm.tingkatan,
+                            semester: silabusForm.semester,
+                            mulai: silabusForm.mulai,
+                            batasAkhir: silabusForm.batasAkhir,
+                            materiSaatIni: silabusForm.materiSaatIni,
+                            status: silabusForm.status,
+                            keterangan: silabusForm.keterangan,
+                            ustadzPengampu: silabusForm.ustadzPengampu
+                          });
+                        }
+                        setShowAddSilabusModal(false);
+                      }}
+                      className="space-y-4 text-xs"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Nama Ustadz Pengampu</label>
+                          <input
+                            type="text"
+                            required
+                            value={silabusForm.ustadzPengampu}
+                            onChange={(e) => setSilabusForm({ ...silabusForm, ustadzPengampu: e.target.value })}
+                            className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-[#d4af37]"
+                            placeholder="Contoh: Ust. M. Rizqi Fadlillah"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Kitab Kuning</label>
+                          <input
+                            type="text"
+                            required
+                            value={silabusForm.namaKitab}
+                            onChange={(e) => setSilabusForm({ ...silabusForm, namaKitab: e.target.value })}
+                            className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-[#d4af37]"
+                            placeholder="Contoh: Matan Al-Jurumiyyah / Fathul Qorib"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Tingkatan / Jenjang</label>
+                          <select
+                            value={silabusForm.tingkatan}
+                            onChange={(e) => {
+                              const tingkatan = e.target.value as 'Tsanawiyah' | 'Aliyah';
+                              setSilabusForm({
+                                ...silabusForm,
+                                tingkatan,
+                                kelas: tingkatan === 'Tsanawiyah' ? '1 TSANAWIYAH' : '1 ALIYAH'
+                              });
+                            }}
+                            className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#d4af37]"
+                          >
+                            <option value="Tsanawiyah">Tsanawiyah (Sore)</option>
+                            <option value="Aliyah">Aliyah (Malam)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Kelas / Angkatan</label>
+                          <select
+                            value={silabusForm.kelas}
+                            onChange={(e) => setSilabusForm({ ...silabusForm, kelas: e.target.value })}
+                            className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#d4af37]"
+                          >
+                            {silabusForm.tingkatan === 'Tsanawiyah' ? (
+                              <>
+                                <option value="1 TSANAWIYAH">1 TSANAWIYAH</option>
+                                <option value="2 TSANAWIYAH">2 TSANAWIYAH</option>
+                                <option value="3 TSANAWIYAH">3 TSANAWIYAH</option>
+                              </>
+                            ) : (
+                              <>
+                                <option value="1 ALIYAH">1 ALIYAH</option>
+                                <option value="2 ALIYAH">2 ALIYAH</option>
+                                <option value="3 ALIYAH">3 ALIYAH</option>
+                              </>
+                            )}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Semester</label>
+                          <select
+                            value={silabusForm.semester}
+                            onChange={(e) => setSilabusForm({ ...silabusForm, semester: e.target.value as any })}
+                            className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#d4af37]"
+                          >
+                            <option value="Semester 1">Semester 1 (Ganjil)</option>
+                            <option value="Semester 2">Semester 2 (Genap)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Status Pencocokan Materi</label>
+                          <select
+                            value={silabusForm.status}
+                            onChange={(e) => setSilabusForm({ ...silabusForm, status: e.target.value as any })}
+                            className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#d4af37]"
+                          >
+                            <option value="Sesuai Target">✅ Sesuai Target (On Track)</option>
+                            <option value="Belum Tercapai / Tertinggal">⚠️ Belum Tercapai / Tertinggal</option>
+                            <option value="Khatam / Tercapai">🎉 Khatam / Tercapai Sempurna</option>
+                            <option value="Proses">🔄 Dalam Proses Maknani</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Baris Materi: Mulai Memaknai, Batas Akhir, Materi Saat Ini (BERISI MATERI BUKAN TANGGAL) */}
+                      <div className="p-3.5 rounded-2xl bg-[#020e08] border border-amber-500/30 space-y-3">
+                        <div className="flex items-center gap-2 text-amber-300 font-bold text-xs pb-1 border-b border-amber-500/20">
+                          <span>📖 Detail Kurikulum & Progres Materi Maknani</span>
+                          <span className="text-[10px] text-slate-400 font-normal">(Isikan Bab / Fasal / Halaman materi, bukan tanggal)</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-slate-300 font-semibold mb-1">
+                              Mulai Memaknai (Materi Awal)
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={silabusForm.mulai}
+                              onChange={(e) => setSilabusForm({ ...silabusForm, mulai: e.target.value })}
+                              className="w-full bg-[#031c10] border border-emerald-500/40 rounded-xl px-3 py-2 text-emerald-200 placeholder-slate-500 focus:outline-none focus:border-emerald-400 font-medium"
+                              placeholder="Fasal 1: Bab Muqaddimah & Kalam"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-slate-300 font-semibold mb-1">
+                              Batas Akhir (Target Khatam)
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={silabusForm.batasAkhir}
+                              onChange={(e) => setSilabusForm({ ...silabusForm, batasAkhir: e.target.value })}
+                              className="w-full bg-[#1c1403] border border-amber-500/40 rounded-xl px-3 py-2 text-amber-200 placeholder-slate-500 focus:outline-none focus:border-amber-400 font-medium"
+                              placeholder="Khatam Bab Idhofah / Bab Akhir"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-slate-300 font-semibold mb-1">
+                              Materi Saat Ini
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={silabusForm.materiSaatIni}
+                              onChange={(e) => setSilabusForm({ ...silabusForm, materiSaatIni: e.target.value })}
+                              className="w-full bg-[#031818] border border-teal-500/40 rounded-xl px-3 py-2 text-teal-200 placeholder-slate-500 focus:outline-none focus:border-teal-400 font-medium"
+                              placeholder="Bab Al-I&apos;rab & Tashrif"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-300 font-bold mb-1">Keterangan / Catatan Tambahan</label>
+                        <textarea
+                          rows={2}
+                          value={silabusForm.keterangan}
+                          onChange={(e) => setSilabusForm({ ...silabusForm, keterangan: e.target.value })}
+                          className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-[#d4af37]"
+                          placeholder="Catatan pengajian: Pengajian rutin bakda maghrib, target muhafadzoh 50 bait..."
+                        />
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-3 border-t border-[#d4af37]/20">
+                        <button
+                          type="button"
+                          onClick={() => setShowAddSilabusModal(false)}
+                          className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 transition-all"
+                        >
+                          Batal
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] to-amber-500 text-black font-extrabold hover:shadow-lg hover:shadow-[#d4af37]/30 transition-all"
+                        >
+                          💾 Simpan Silabus
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
