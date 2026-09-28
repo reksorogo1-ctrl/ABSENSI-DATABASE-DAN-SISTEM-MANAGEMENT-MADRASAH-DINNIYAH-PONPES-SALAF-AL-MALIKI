@@ -128,17 +128,54 @@ export interface AbsensiSantriRecord {
 }
 
 export interface AbsensiGuruRecord {
+  id?: string;
+  absensiId?: string;
+  jadwalId?: string;
+  ustadzTerjadwalId?: string;
+  ustadzTerjadwalNama?: string;
+  ustadzAktualId?: string;
+  ustadzAktualNama?: string;
+  tipeAbsensi?: 'Normal' | 'Pengganti';
   tanggal: string;
-  nama: string;
+  nama: string; // compatibility with ustadzAktualNama or ustadzTerjadwalNama
   mapel: string;
   kelas: string;
   status: 'Hadir' | 'Terlambat' | 'Izin' | 'Alpha';
   catatan: string;
   hari: string;
   jamKe: number | string;
+  jamJadwal?: string;
+  jamAbsen?: string;
   waktu: string;
+  latitude?: number;
+  longitude?: number;
+  akurasiGps?: number;
+  jarak?: number;
+  zona?: string;
+  alasanPenggantian?: string;
+  statusPersetujuan?: 'Disetujui' | 'Menunggu' | 'Ditolak' | 'Langsung';
+  timestampServer?: string;
   ustadzPengganti?: string;
   alasanIzin?: string;
+}
+
+export interface PenggantiUstadzRequest {
+  id: string;
+  jadwalId: string;
+  tanggal: string;
+  hari: string;
+  jamKe: number | string;
+  jamJadwal: string;
+  kelas: string;
+  mapel: string;
+  ustadzTerjadwal: string;
+  ustadzPengganti: string;
+  alasan: string;
+  status: 'Menunggu' | 'Disetujui' | 'Ditolak';
+  diajukanOleh: string;
+  disetujuiOleh?: string;
+  catatanAdmin?: string;
+  createdAt: string;
 }
 
 export interface IzinMengajarRequest {
@@ -179,6 +216,8 @@ export interface GuruPengajar {
   kitab?: string;
   noWa?: string;
   keterangan?: string;
+  jabatan?: string;
+  tugasUtama?: string;
 }
 
 export interface SilabusMemaknaiRecord {
@@ -257,6 +296,12 @@ export interface AppSettings {
   berita_deskripsi?: string;
   running_text_caption?: string;
 
+  // Media Sosial & Kontak Pesantren (Dapat diinput manual via Option Panel)
+  social_instagram?: string;
+  social_tiktok?: string;
+  social_youtube?: string;
+  social_whatsapp?: string;
+
   // Notifikasi Keterlambatan Pembayaran Syahriyah (Diatur via Option Panel)
   notif_keterlambatan_syahriyah?: string;
 
@@ -281,6 +326,7 @@ export interface AppSettings {
   jam_tsanawiyah_2_mulai?: string; // Default: '09:45'
   jam_tsanawiyah_2_batas_hadir?: string; // Default: '10:15' (setelah ini otomatis Terlambat)
   jam_tsanawiyah_2_selesai?: string; // Default: '11:45' (setelah ini tombol non-aktif)
+  jam_tsanawiyah_selesai?: string; // Batas penutupan presensi Tsanawiyah
 
   jam_aliyah_1_mulai?: string; // Default: '19:00'
   jam_aliyah_1_batas_hadir?: string; // Default: '19:30' (setelah ini otomatis Terlambat)
@@ -288,7 +334,25 @@ export interface AppSettings {
   jam_aliyah_2_mulai?: string; // Default: '21:00'
   jam_aliyah_2_batas_hadir?: string; // Default: '21:30' (setelah ini otomatis Terlambat)
   jam_aliyah_2_selesai?: string; // Default: '22:30' (setelah ini tombol/barcode non-aktif)
+  jam_aliyah_selesai?: string; // Batas penutupan presensi Aliyah
   bypass_jam_presensi_testing?: boolean; // Mode pengujian jam presensi bebas
+
+  // Pengaturan Geofencing & Google Maps Terintegrasi
+  geofencing_enabled?: boolean; // Status Geofencing Aktif / Nonaktif
+  geofencing_zone_name?: string; // Nama Zona (misal: "Kompleks Pondok Pesantren & Madrasah Diniyah")
+  geofencing_latitude?: number; // Koordinat Latitude Pusat Zona
+  geofencing_longitude?: number; // Koordinat Longitude Pusat Zona
+  geofencing_radius_meters?: number; // Radius Absensi (meter, default: 100)
+  geofencing_max_gps_accuracy?: number; // Batas Akurasi GPS (meter, default: 50)
+  geofencing_allow_mock_simulation?: boolean; // Simulasi koordinat untuk pengujian
+
+  // Pengaturan Toleransi & Jam Absensi
+  toleransi_keterlambatan_menit?: number; // Toleransi Keterlambatan (menit, default: 15)
+
+  // Pengaturan Absensi Ustadz Pengganti
+  pengganti_enabled?: boolean; // Aktifkan Fitur Absensi Ustadz Pengganti
+  pengganti_require_admin_approval?: boolean; // Apakah butuh persetujuan admin atau langsung aktif disetujui pengurus
+  pengganti_max_submission_lead_minutes?: number; // Batas waktu pengajuan pengganti sebelum/saat jam jadwal (menit)
 
   // Pengaturan visibilitas / hapus / aktifkan tombol
   show_quick_sync_button?: boolean;

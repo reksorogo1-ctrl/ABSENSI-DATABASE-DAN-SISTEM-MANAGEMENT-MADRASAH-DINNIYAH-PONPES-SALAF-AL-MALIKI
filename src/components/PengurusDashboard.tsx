@@ -10,13 +10,16 @@ import {
   CheckCircle2, AlertTriangle, Phone, MessageCircle, 
   Users, Newspaper, ShieldAlert, Sparkles, Sliders, CheckCheck,
   Send, FileText, UserX, ChevronRight, Check, X, Shield, PlusCircle, Plus,
-  BookmarkCheck, CheckSquare, RefreshCw, GraduationCap
+  BookmarkCheck, CheckSquare, RefreshCw, GraduationCap, MapPin, Compass, Crosshair, Navigation
 } from 'lucide-react';
 import { BrandLogos } from './BrandLogos';
+import { GoogleMapsGeofence } from './GoogleMapsGeofence';
+import { validateGeofence, DEFAULT_GEOFENCE_ZONE } from '../lib/geofencing';
 import { 
   checkPresensiSchedule, getServerTime, setSimulatedServerTime, isSimulationActive,
-  PresensiCheckResult, OFFICIAL_SCHEDULES 
+  PresensiCheckResult, OFFICIAL_SCHEDULES, broadcastAttendanceUpdate
 } from '../serverTime';
+import { PenggantiUstadzRequest } from '../types';
 
 interface PengurusDashboardProps {
   pengurus: Pengurus;
@@ -72,6 +75,15 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   onDeleteKalenderEvent
 }) => {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [tabTransitionKey, setTabTransitionKey] = useState<number>(0);
+  const handleSelectTab = (tabId: string) => {
+    setActiveTab(tabId);
+    setTabTransitionKey(k => k + 1);
+  };
+
+  useEffect(() => {
+    setTabTransitionKey(k => k + 1);
+  }, [activeTab]);
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [showIzinModal, setShowIzinModal] = useState<boolean>(false);
   const [editedPengurus, setEditedPengurus] = useState<Pengurus>({ ...pengurus });
@@ -319,6 +331,117 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   const [simulationActive, setSimulationActive] = useState<boolean>(isSimulationActive());
   const [showSimulasiBar, setShowSimulasiBar] = useState<boolean>(false);
 
+  // Mode Tampilan Absensi: 'normal' | 'pengganti'
+  const [absensiMode, setAbsensiMode] = useState<'normal' | 'pengganti'>('normal');
+
+  // State Pelacakan Geolocation GPS Real-Time
+  const [userCoords, setUserCoords] = useState<{ lat: number | null; lng: number | null; accuracy: number | null }>({
+    lat: null,
+    lng: null,
+    accuracy: null
+  });
+  const [gpsLoading, setGpsLoading] = useState<boolean>(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+
+  // Ambil lokasi GPS perangkat secara berkala
+  useEffect(() => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      setGpsError('Browser tidak mendukung pendeteksian lokasi GPS.');
+      return;
+    }
+
+    setGpsLoading(true);
+    // Coba dapatkan posisi awal
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserCoords({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy
+        });
+        setGpsLoading(false);
+        setGpsError(null);
+      },
+      (err) => {
+        setGpsLoading(false);
+        setGpsError(err.message);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+
+    // Pasang watcher posisi real-time
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setUserCoords({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy
+        });
+        setGpsLoading(false);
+        setGpsError(null);
+      },
+      (err) => {
+        setGpsError(err.message);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
+
+  // Hasil Validasi Geofencing Terhadap Pengaturan Admin
+  const geofenceCheck = useMemo(() => {
+    return validateGeofence(userCoords.lat, userCoords.lng, userCoords.accuracy, {
+      enabled: settings.geofencing_enabled,
+      zoneName: settings.geofencing_zone_name,
+      latitude: settings.geofencing_latitude,
+      longitude: settings.geofencing_longitude,
+      radiusMeters: settings.geofencing_radius_meters,
+      maxGpsAccuracy: settings.geofencing_max_gps_accuracy
+    });
+  }, [userCoords, settings]);
+
+  // State Permohonan Pengganti Ustadz
+  const [penggantiRequestList, setPenggantiRequestList] = useState<PenggantiUstadzRequest[]>(() => {
+    try {
+      const saved = localStorage.getItem('sim_pengganti_requests');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // State Modal Notifikasi / Dialog Validasi Presensi (Di Luar Radius, Di Luar Jam, Berhasil)
+  const [validationAlertModal, setValidationAlertModal] = useState<{
+    isOpen: boolean;
+    type: 'outside_radius' | 'outside_hours' | 'already_checked' | 'no_schedule' | 'no_pengganti' | 'success';
+    title: string;
+    message: string;
+    submessage?: string;
+    details?: {
+      distance?: number;
+      maxRadius?: number;
+      accuracy?: number;
+      currentTime?: string;
+      allowedSchedule?: string;
+    };
+  } | null>(null);
+
+  // State untuk sembunyikan/tampilkan peta geofencing (Default tersembunyi sesuai permintaan user)
+  const [showGeofenceMap, setShowGeofenceMap] = useState<boolean>(false);
+
+  // Sinkronisasi realtime storage untuk pengganti
+  useEffect(() => {
+    const handleStorage = () => {
+      try {
+        const saved = localStorage.getItem('sim_pengganti_requests');
+        if (saved) setPenggantiRequestList(JSON.parse(saved));
+      } catch {}
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
   useEffect(() => {
     const timer = setInterval(() => {
       setServerClock(getServerTime());
@@ -328,75 +451,316 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   }, []);
 
   // Logika Evaluasi Jam Server Real-Time:
-  // TSANAWIYAH:
-  //   08.00 - 08.30 WIB (Batas awal 08.00 WIB)
-  //   * Tepat 08.00 WIB -> 'Hadir'
-  //   * Melewati 08.00 (08.01 - 08.30) -> Otomatis 'Terlambat'
-  // ALIYAH:
-  //   * Sesi 1: 19.00 - 19.30 WIB (Batas awal 19.00 WIB, lewat -> 'Terlambat')
-  //   * Sesi 2: 21.00 - 21.30 WIB (Batas awal 21.00 WIB, lewat -> 'Terlambat')
-  // Di luar jadwal tersebut -> Tombol dinonaktifkan (santri & ustadz tidak bisa presensi)
   const activeSession: PresensiCheckResult = useMemo(() => {
     return checkPresensiSchedule(serverClock, {
-      bypassActive: settings.bypass_jam_presensi_testing
+      bypassActive: settings.bypass_jam_presensi_testing,
+      settings: settings
     });
-  }, [serverClock, settings.bypass_jam_presensi_testing]);
+  }, [serverClock, settings]);
 
-  // Eksekusi Tombol HADIR SAJA (Terkoneksi langsung ke absensi ustadz/ustadzah secara real-time)
-  const handleHadirSaja = () => {
+  // JADWAL OTOMATIS AKTIF DARI DATABASE JADWAL PELAJARAN
+  const currentDayName = activeSession.currentDayName;
+  const activeMatchingSchedules = useMemo(() => {
+    // Cari jadwal hari ini yang sesuai dengan sesi jam aktif (atau semua jadwal hari ini jika testing)
+    return jadwalList.filter(j => {
+      const isHariMatch = j.hari.toUpperCase() === currentDayName.toUpperCase() ||
+                          (activeSession.tingkat === 'ALIYAH' && j.hari.toUpperCase().includes('MALAM'));
+      const isJamMatch = activeSession.jamKe ? Number(j.jamKe) === Number(activeSession.jamKe) : true;
+      return isHariMatch && isJamMatch;
+    });
+  }, [jadwalList, currentDayName, activeSession]);
+
+  // Jadwal aktif untuk ustadz yang sedang login ini
+  const myActiveSchedule = useMemo(() => {
+    return activeMatchingSchedules.find(j => 
+      (j.ustadz || j.nama)?.toLowerCase().trim() === pengurus.nama.toLowerCase().trim()
+    ) || activeMatchingSchedules[0] || null;
+  }, [activeMatchingSchedules, pengurus.nama]);
+
+  // Cek apakah ustadz login ini sudah presensi hari ini pada sesi aktif
+  const isAlreadyCheckedIn = useMemo(() => {
+    return (absensiGuruList || []).some(rec => 
+      rec.tanggal === activeSession.todayIso &&
+      rec.nama.toLowerCase().trim() === pengurus.nama.toLowerCase().trim() &&
+      (activeSession.jamKe ? Number(rec.jamKe) === Number(activeSession.jamKe) : true)
+    );
+  }, [absensiGuruList, activeSession, pengurus.nama]);
+
+  // Form Pengajuan Pengganti Ustadz
+  const [selectedJadwalToReplaceId, setSelectedJadwalToReplaceId] = useState<string>('');
+  const [selectedUstadzPenggantiName, setSelectedUstadzPenggantiName] = useState<string>(guruList[0]?.nama || '');
+  const [alasanPenggantianInput, setAlasanPenggantianInput] = useState<string>('');
+  const [showAjukanPenggantiModal, setShowAjukanPenggantiModal] = useState<boolean>(false);
+
+  // Jadwal yang dipilih untuk digantikan
+  const targetJadwalForReplacement = useMemo(() => {
+    if (selectedJadwalToReplaceId) {
+      return jadwalList.find(j => (j.id || `${j.kelas}_${j.hari}_${j.jamKe}`) === selectedJadwalToReplaceId);
+    }
+    return myActiveSchedule || activeMatchingSchedules[0] || jadwalList[0];
+  }, [selectedJadwalToReplaceId, jadwalList, myActiveSchedule, activeMatchingSchedules]);
+
+  // Kirim Pengajuan Ustadz Pengganti
+  const handleAjukanPenggantiSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetJadwalForReplacement) {
+      alert('Pilih jadwal yang akan digantikan!');
+      return;
+    }
+    if (!selectedUstadzPenggantiName) {
+      alert('Pilih nama ustadz pengganti!');
+      return;
+    }
+    if (!alasanPenggantianInput.trim()) {
+      alert('Mohon isi alasan penggantian secara jelas!');
+      return;
+    }
+
+    const needsAdminApproval = settings.pengganti_require_admin_approval === true;
+    const initialStatus: 'Menunggu' | 'Disetujui' = needsAdminApproval ? 'Menunggu' : 'Disetujui';
+
+    const newReq: PenggantiUstadzRequest = {
+      id: `PNT-${Date.now()}`,
+      jadwalId: targetJadwalForReplacement.id || `${targetJadwalForReplacement.kelas}_${targetJadwalForReplacement.hari}_${targetJadwalForReplacement.jamKe}`,
+      tanggal: activeSession.todayIso,
+      hari: targetJadwalForReplacement.hari,
+      jamKe: targetJadwalForReplacement.jamKe || activeSession.jamKe || 1,
+      jamJadwal: targetJadwalForReplacement.waktu || activeSession.wibClockShort,
+      kelas: targetJadwalForReplacement.kelas,
+      mapel: targetJadwalForReplacement.mapel,
+      ustadzTerjadwal: targetJadwalForReplacement.nama || targetJadwalForReplacement.ustadz || pengurus.nama,
+      ustadzPengganti: selectedUstadzPenggantiName,
+      alasan: alasanPenggantianInput.trim(),
+      status: initialStatus,
+      diajukanOleh: pengurus.nama,
+      disetujuiOleh: needsAdminApproval ? undefined : 'Disetujui Otomatis (Pengurus)',
+      catatanAdmin: needsAdminApproval ? 'Menunggu Persetujuan Admin' : 'Penggantian Langsung Disetujui Pengurus',
+      createdAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+    };
+
+    const updated = [newReq, ...penggantiRequestList];
+    setPenggantiRequestList(updated);
+    try {
+      localStorage.setItem('sim_pengganti_requests', JSON.stringify(updated));
+    } catch {}
+
+    broadcastAttendanceUpdate('pengganti', [newReq], pengurus.nama);
+    setShowAjukanPenggantiModal(false);
+    setAlasanPenggantianInput('');
+
+    if (needsAdminApproval) {
+      alert(`Pengajuan Ustadz Pengganti Berhasil Diajukan!\n\nUstadz Terjadwal: ${newReq.ustadzTerjadwal}\nUstadz Pengganti: ${newReq.ustadzPengganti}\nStatus: MENUNGGU PERSETUJUAN ADMIN\n\nAdmin dapat menyetujui melalui Dashboard Admin.`);
+    } else {
+      alert(`Penggantian Ustadz Resmi Aktif!\n\nUstadz Terjadwal: ${newReq.ustadzTerjadwal}\nUstadz Pengganti: ${newReq.ustadzPengganti}\nStatus: DISETUJUI LANGSUNG\n\nUstadz pengganti sekarang dapat melakukan presensi.`);
+    }
+  };
+
+  // Cek apakah ada jadwal pengganti yang aktif dan disetujui untuk pengurus login
+  const approvedSubstituteForMe = useMemo(() => {
+    return penggantiRequestList.find(r => 
+      r.tanggal === activeSession.todayIso &&
+      r.status === 'Disetujui' &&
+      r.ustadzPengganti.toLowerCase().trim() === pengurus.nama.toLowerCase().trim()
+    );
+  }, [penggantiRequestList, activeSession.todayIso, pengurus.nama]);
+
+  // Eksekusi Tombol HADIR NORMAL
+  const handleHadirNormal = () => {
+    // Validasi 1: Waktu Server
     if (!activeSession.isActive) {
-      alert(
-        '⚠️ Tombol presensi TIDAK DAPAT DIGUNAKAN saat ini karena berada di luar jadwal pelajaran resmi!\n\n' +
-        'Jadwal Waktu Presensi yang Ditentukan:\n' +
-        '• TSANAWIYAH: 08.00 - 08.30 WIB (Batas Awal: 08.00 WIB)\n' +
-        '• ALIYAH Sesi 1: 19.00 - 19.30 WIB (Batas Awal: 19.00 WIB)\n' +
-        '• ALIYAH Sesi 2: 21.00 - 21.30 WIB (Batas Awal: 21.00 WIB)\n\n' +
-        `Waktu Server Saat Ini: ${activeSession.wibTimeStr}\n` +
-        'Status: Di Luar Jadwal (Tombol dinonaktifkan).'
-      );
+      setValidationAlertModal({
+        isOpen: true,
+        type: 'outside_hours',
+        title: '⏰ Di Luar Jam Absensi Pelajaran',
+        message: `Waktu server saat ini adalah ${activeSession.wibTimeStr} WIB. Jadwal mengajar belum dimulai atau telah melewati batas jam sesi pelajaran resmi.`,
+        submessage: `Presensi hanya dapat dilakukan pada jam mengajar yang terdaftar di jadwal (${myActiveSchedule?.waktu || '08:00 - 09:00'}).`,
+        details: {
+          currentTime: activeSession.wibTimeStr,
+          allowedSchedule: myActiveSchedule ? `${myActiveSchedule.mapel} (${myActiveSchedule.kelas}) - ${myActiveSchedule.waktu || 'Sesi Jam'}` : 'Jadwal Reguler'
+        }
+      });
+      return;
+    }
+
+    // Validasi 2: Geofencing & Lokasi
+    if (!geofenceCheck.isValid) {
+      setValidationAlertModal({
+        isOpen: true,
+        type: 'outside_radius',
+        title: '⚠️ Anda Berada di Luar Radius Madrasah',
+        message: `Jarak posisi Anda saat ini: ${geofenceCheck.distanceMeters.toFixed(1)} meter dari titik pusat madrasah (${geofenceCheck.zoneName || 'Zona Madrasah'}).`,
+        submessage: `Batas radius absensi kehadiran yang diizinkan adalah ${geofenceCheck.radiusMeters} meter. Silakan berada di dalam area madrasah untuk melakukan absensi kehadiran.`,
+        details: {
+          distance: geofenceCheck.distanceMeters,
+          maxRadius: geofenceCheck.radiusMeters,
+          accuracy: userCoords.accuracy ?? undefined
+        }
+      });
+      return;
+    }
+
+    // Validasi 3: Cek Jadwal Aktif
+    if (!myActiveSchedule) {
+      setValidationAlertModal({
+        isOpen: true,
+        type: 'no_schedule',
+        title: 'ℹ️ Tidak Ada Jadwal Mengajar Aktif',
+        message: `Tidak ditemukan jadwal mengajar aktif untuk ${pengurus.nama} pada hari ${currentDayName} sesi jam saat ini.`,
+        submessage: 'Sistem menyinkronkan data otomatis dari database jadwal pelajaran.'
+      });
+      return;
+    }
+
+    // Validasi 4: Cek Belum Absen
+    if (isAlreadyCheckedIn) {
+      setValidationAlertModal({
+        isOpen: true,
+        type: 'already_checked',
+        title: '✓ Presensi Sudah Tercatat',
+        message: `Anda sudah berhasil melakukan presensi hadir untuk sesi jam ${myActiveSchedule.mapel} (${myActiveSchedule.kelas}) pada hari ini.`,
+        submessage: 'Data kehadiran telah tersimpan aman di sistem.'
+      });
       return;
     }
 
     const nowTime = activeSession.wibClockShort;
-    const currentDay = activeSession.currentDayName;
-
-    // Koneksikan langsung ke jadwal mengajar pengurus hari ini
-    const todaySchedule = jadwalList.find(j => 
-      (j.ustadz || j.nama)?.toLowerCase().trim() === pengurus.nama.toLowerCase().trim() &&
-      j.hari.toUpperCase() === currentDay &&
-      (activeSession.jamKe ? j.jamKe === activeSession.jamKe : true)
-    );
-
-    const targetKelas = todaySchedule?.kelas || pengurus.kelasBimbingan || (activeSession.tingkat.includes('TSANAWIYAH') ? '1 TSANAWIYAH' : '1 ALIYAH');
-    const targetMapel = todaySchedule?.mapel || pengurus.mapel || 'Pengawasan & Pembinaan Diniyah';
-
     const newRecord: AbsensiGuruRecord = {
+      id: `ABS-G-${Date.now()}`,
+      absensiId: `ABS-G-${Date.now()}`,
+      jadwalId: myActiveSchedule.id || `${myActiveSchedule.kelas}_${myActiveSchedule.hari}_${myActiveSchedule.jamKe}`,
+      ustadzTerjadwalId: pengurus.id,
+      ustadzTerjadwalNama: myActiveSchedule.nama || pengurus.nama,
+      ustadzAktualId: pengurus.id,
+      ustadzAktualNama: pengurus.nama,
+      tipeAbsensi: 'Normal',
       tanggal: activeSession.todayIso,
       nama: pengurus.nama,
-      mapel: targetMapel,
-      kelas: targetKelas,
+      mapel: myActiveSchedule.mapel,
+      kelas: myActiveSchedule.kelas,
       status: activeSession.status,
       catatan: activeSession.status === 'Hadir'
-        ? `Presensi Hadir Tepat Waktu (${nowTime} WIB - ${activeSession.tingkat} ${activeSession.sesi})`
-        : `Presensi Terlambat Otomatis (${nowTime} WIB - Melewati Batas Awal ${activeSession.jadwalAktif?.batasAwal || '08:00'} WIB)`,
-      hari: currentDay,
-      jamKe: activeSession.jamKe || 1,
-      waktu: `${nowTime} WIB`
+        ? `Presensi Hadir Normal Tepat Waktu (${nowTime} WIB - Jarak: ${geofenceCheck.distanceMeters.toFixed(1)}m)`
+        : `Presensi Terlambat (${nowTime} WIB - Melewati Batas Awal - Jarak: ${geofenceCheck.distanceMeters.toFixed(1)}m)`,
+      hari: currentDayName,
+      jamKe: myActiveSchedule.jamKe || activeSession.jamKe || 1,
+      jamJadwal: myActiveSchedule.waktu || `${nowTime} WIB`,
+      jamAbsen: `${nowTime} WIB`,
+      waktu: `${nowTime} WIB`,
+      latitude: userCoords.lat ?? undefined,
+      longitude: userCoords.lng ?? undefined,
+      akurasiGps: userCoords.accuracy ?? undefined,
+      jarak: geofenceCheck.distanceMeters,
+      zona: geofenceCheck.zoneName,
+      statusPersetujuan: 'Langsung',
+      timestampServer: new Date().toISOString()
     };
 
     if (onSaveAbsensiGuru) {
       onSaveAbsensiGuru([newRecord]);
     }
 
-    alert(
-      `Presensi Berhasil Dicatat!\n\n` +
-      `Ustadz/Ustadzah: ${pengurus.nama}\n` +
-      `Hari & Tanggal: ${currentDay}, ${activeSession.todayIso}\n` +
-      `Waktu Server: ${activeSession.wibTimeStr}\n` +
-      `Sesi Jadwal: ${activeSession.tingkat} (${activeSession.sesi} Jam Ke-${activeSession.jamKe})\n` +
-      `Status Terhitung: ${activeSession.status.toUpperCase()} (${activeSession.keterangan})\n\n` +
-      `Data langsung terupdate secara real-time ke Dashboard Admin di Fitur Absensi Ustadz/Ustadzah!`
+    broadcastAttendanceUpdate('guru', [newRecord], pengurus.nama);
+
+    setValidationAlertModal({
+      isOpen: true,
+      type: 'success',
+      title: '✅ Presensi Hadir Berhasil Dicatat!',
+      message: `Alhamdulillah, presensi Ustadz ${newRecord.nama} (${newRecord.mapel} - ${newRecord.kelas}) telah berhasil dicatat.`,
+      submessage: `Status: ${newRecord.status.toUpperCase()} • Jam Absen: ${nowTime} WIB • Jarak: ${geofenceCheck.distanceMeters.toFixed(1)}m. Data langsung tersinkronkan ke Dashboard Admin secara realtime!`
+    });
+  };
+
+  // Eksekusi Tombol HADIR SEBAGAI PENGGANTI
+  const handleHadirPengganti = () => {
+    // Validasi 1: Waktu Server
+    if (!activeSession.isActive) {
+      setValidationAlertModal({
+        isOpen: true,
+        type: 'outside_hours',
+        title: '⏰ Di Luar Jam Absensi Pelajaran',
+        message: `Waktu server saat ini adalah ${activeSession.wibTimeStr} WIB. Presensi ustadz pengganti tidak dapat dilakukan di luar jam pelajaran aktif.`,
+        submessage: 'Presensi hanya dibuka pada jendela jam pelajaran yang ditentukan.'
+      });
+      return;
+    }
+
+    // Validasi 2: Geofencing
+    if (!geofenceCheck.isValid) {
+      setValidationAlertModal({
+        isOpen: true,
+        type: 'outside_radius',
+        title: '⚠️ Anda Berada di Luar Radius Madrasah',
+        message: `Jarak posisi Anda saat ini: ${geofenceCheck.distanceMeters.toFixed(1)} meter dari titik pusat madrasah (${geofenceCheck.zoneName || 'Zona Madrasah'}).`,
+        submessage: `Ustadz pengganti tetap wajib berada secara fisik di lokasi madrasah (Maks: ${geofenceCheck.radiusMeters}m). Dekati lokasi madrasah untuk melakukan absensi.`,
+        details: {
+          distance: geofenceCheck.distanceMeters,
+          maxRadius: geofenceCheck.radiusMeters,
+          accuracy: userCoords.accuracy ?? undefined
+        }
+      });
+      return;
+    }
+
+    // Validasi 3: Cek Persetujuan Pengganti Aktif
+    const targetSub = approvedSubstituteForMe || penggantiRequestList.find(r => 
+      r.tanggal === activeSession.todayIso && r.status === 'Disetujui' &&
+      r.ustadzPengganti.toLowerCase().trim() === pengurus.nama.toLowerCase().trim()
     );
+
+    if (!targetSub) {
+      setValidationAlertModal({
+        isOpen: true,
+        type: 'no_pengganti',
+        title: 'ℹ️ Belum Ada Penugasan Pengganti',
+        message: `Belum ada penugasan ustadz pengganti yang disetujui resmi untuk ${pengurus.nama} pada sesi hari ini.`,
+        submessage: 'Silakan gunakan tombol "Ajukan Pengganti Ustadz" terlebih dahulu untuk mendaftarkan jadwal penggantian.'
+      });
+      return;
+    }
+
+    const nowTime = activeSession.wibClockShort;
+    const newRecord: AbsensiGuruRecord = {
+      id: `ABS-SUB-${Date.now()}`,
+      absensiId: `ABS-SUB-${Date.now()}`,
+      jadwalId: targetSub.jadwalId,
+      ustadzTerjadwalNama: targetSub.ustadzTerjadwal,
+      ustadzAktualNama: targetSub.ustadzPengganti,
+      ustadzPengganti: targetSub.ustadzPengganti,
+      tipeAbsensi: 'Pengganti',
+      tanggal: activeSession.todayIso,
+      nama: targetSub.ustadzTerjadwal, // Nama pada jadwal utama tetap asli
+      mapel: targetSub.mapel,
+      kelas: targetSub.kelas,
+      status: activeSession.status,
+      alasanPenggantian: targetSub.alasan,
+      catatan: `Hadir Sebagai Pengganti Resmi ${targetSub.ustadzTerjadwal} (Alasan: ${targetSub.alasan}) • Jarak: ${geofenceCheck.distanceMeters.toFixed(1)}m`,
+      hari: currentDayName,
+      jamKe: targetSub.jamKe || activeSession.jamKe || 1,
+      jamJadwal: targetSub.jamJadwal,
+      jamAbsen: `${nowTime} WIB`,
+      waktu: `${nowTime} WIB`,
+      latitude: userCoords.lat ?? undefined,
+      longitude: userCoords.lng ?? undefined,
+      akurasiGps: userCoords.accuracy ?? undefined,
+      jarak: geofenceCheck.distanceMeters,
+      zona: geofenceCheck.zoneName,
+      statusPersetujuan: 'Disetujui',
+      timestampServer: new Date().toISOString()
+    };
+
+    if (onSaveAbsensiGuru) {
+      onSaveAbsensiGuru([newRecord]);
+    }
+
+    broadcastAttendanceUpdate('guru', [newRecord], pengurus.nama);
+
+    setValidationAlertModal({
+      isOpen: true,
+      type: 'success',
+      title: '✅ Presensi Pengganti Berhasil Dicatat!',
+      message: `Presensi Ustadz Pengganti (${targetSub.ustadzPengganti}) menggantikan ${targetSub.ustadzTerjadwal} pada mapel ${targetSub.mapel} (${targetSub.kelas}) telah berhasil dicatat.`,
+      submessage: `Jadwal asli tetap aman. Data realisasi kehadiran pengganti langsung tersimpan dan disinkronkan ke Dashboard Admin!`
+    });
   };
 
   // State untuk Tab Presensi Seluruh Santri (Input Manual Pengurus)
@@ -501,146 +865,150 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
             <button
               onClick={() => setShowIzinModal(true)}
-              className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center gap-1.5 shadow transition"
+              className="btn-3d-gold px-3.5 py-1.5 text-xs font-black shadow"
               title="Ajukan Izin Tidak Mengajar"
             >
-              <Send className="w-3.5 h-3.5" />
+              <Send className="w-3.5 h-3.5 text-[#1a1202]" />
               <span className="hidden sm:inline">Ajukan Izin</span>
             </button>
 
             <button
               onClick={onLogout}
-              className="btn-3d-gold px-3 py-1.5 rounded-xl text-black font-extrabold text-xs flex items-center space-x-1.5 shadow"
+              className="btn-3d-danger px-3.5 py-1.5 text-xs font-black shadow"
               title="Keluar dari Portal Pengurus"
             >
-              <LogOut className="w-3.5 h-3.5 text-black" />
+              <LogOut className="w-3.5 h-3.5 text-white" />
               <span className="hidden sm:inline">Keluar</span>
             </button>
           </div>
         </div>
 
         {/* Tab Navigation Menu */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-[#d4af37]/15 overflow-x-auto">
-          <nav className="flex space-x-2 py-2 text-xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-[#d4af37]/20 overflow-x-auto">
+          <nav className="flex items-center gap-2 py-2.5 text-xs min-w-max">
             <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+              onClick={() => handleSelectTab('dashboard')}
+              className={`shrink-0 transition flex items-center gap-1.5 ${
                 activeTab === 'dashboard'
-                  ? 'bg-[#d4af37] text-black shadow'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40'
+                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
+                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Dasbor Utama</span>
+              <span>Dasbor</span>
             </button>
 
             <button
-              onClick={() => setActiveTab('izin-mengajar')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+              onClick={() => handleSelectTab('izin-mengajar')}
+              className={`shrink-0 transition flex items-center gap-1.5 ${
                 activeTab === 'izin-mengajar'
-                  ? 'bg-[#d4af37] text-black shadow'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40'
+                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
+                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
               <span>Izin Mengajar</span>
               {myIzinList.filter(i => i.status === 'Menunggu').length > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full bg-amber-500 text-black font-mono text-[9px] font-bold">
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-600 text-white font-mono text-[9px] font-bold">
                   {myIzinList.filter(i => i.status === 'Menunggu').length}
                 </span>
               )}
             </button>
 
             <button
-              onClick={() => setActiveTab('wali-kelas')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+              onClick={() => handleSelectTab('wali-kelas')}
+              className={`shrink-0 transition flex items-center gap-1.5 ${
                 activeTab === 'wali-kelas'
-                  ? 'bg-[#d4af37] text-black shadow'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40'
+                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
+                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
               }`}
             >
               <GraduationCap className="w-3.5 h-3.5" />
-              <span>Kelas Bimbingan (Wali Kelas)</span>
-              <span className="px-1.5 py-0.5 rounded-full bg-emerald-900 border border-emerald-500/40 text-[9px] text-emerald-300 font-bold">
+              <span>Wali Kelas</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                activeTab === 'wali-kelas'
+                  ? 'bg-black/80 text-[#fef08a] border border-amber-300'
+                  : 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+              }`}>
                 {waliKelasKelas}
               </span>
             </button>
 
             <button
-              onClick={() => setActiveTab('kalender')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+              onClick={() => handleSelectTab('kalender')}
+              className={`shrink-0 transition flex items-center gap-1.5 ${
                 activeTab === 'kalender'
-                  ? 'bg-[#d4af37] text-black shadow'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40'
+                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
+                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
               }`}
             >
               <Calendar className="w-3.5 h-3.5" />
-              <span>Kalender & Agenda</span>
+              <span>Kalender</span>
               {urgentEvents.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full bg-red-600 text-white font-mono text-[9px] animate-pulse">
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-600 text-white font-mono text-[9px] animate-pulse">
                   {urgentEvents.length}
                 </span>
               )}
             </button>
 
             <button
-              onClick={() => setActiveTab('absensi-santri')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+              onClick={() => handleSelectTab('absensi-santri')}
+              className={`shrink-0 transition flex items-center gap-1.5 ${
                 activeTab === 'absensi-santri'
-                  ? 'bg-[#d4af37] text-black shadow'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40'
+                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
+                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
               }`}
             >
               <UserCheck className="w-3.5 h-3.5" />
-              <span>Presensi Seluruh Santri</span>
+              <span>Presensi Santri</span>
             </button>
 
             <button
-              onClick={() => setActiveTab('jadwal')}
-              className={`px-3.5 py-2 rounded-xl font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+              onClick={() => handleSelectTab('jadwal')}
+              className={`shrink-0 transition flex items-center gap-1.5 ${
                 activeTab === 'jadwal'
-                  ? 'btn-3d-gold text-black shadow-lg font-black'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40'
+                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
+                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>Jadwal & Kitab</span>
+              <span>Jadwal & Silabus</span>
               {unreadSilabusUpdates.length > 0 && (
-                <span className="ml-1 px-2 py-0.5 rounded-full bg-amber-400 text-black font-black text-[9px] animate-pulse border border-yellow-200 shadow-md">
-                  ⚡ {unreadSilabusUpdates.length} Update Silabus
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500 text-black font-black text-[9px] animate-pulse border border-amber-300 shadow-md">
+                  ⚡ {unreadSilabusUpdates.length}
                 </span>
               )}
             </button>
 
             <button
-              onClick={() => setActiveTab('ujian-kitab')}
-              className={`px-3.5 py-2 rounded-xl font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+              onClick={() => handleSelectTab('ujian-kitab')}
+              className={`shrink-0 transition flex items-center gap-1.5 ${
                 activeTab === 'ujian-kitab'
-                  ? 'btn-3d-gold text-black shadow-lg font-black'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40'
+                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
+                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
               }`}
             >
               <Award className="w-3.5 h-3.5" />
-              <span>Nilai Ujian & Muhafadzoh</span>
+              <span>Nilai Santri</span>
             </button>
 
             <button
-              onClick={() => setActiveTab('profil-saya')}
-              className={`px-3.5 py-2 rounded-xl font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+              onClick={() => handleSelectTab('profil-saya')}
+              className={`shrink-0 transition flex items-center gap-1.5 ${
                 activeTab === 'profil-saya'
-                  ? 'btn-3d-gold text-black shadow-lg font-black'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40'
+                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
+                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
               }`}
             >
               <Users className="w-3.5 h-3.5" />
-              <span>Biodata & Profil</span>
+              <span>Profil Pengurus</span>
             </button>
           </nav>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className={`${building ? 'build-sequence' : ''} flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6`}>
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* ===================== NOTIFIKASI REAL-TIME UPDATE MATERI SILABUS GURU ===================== */}
         {unreadSilabusUpdates.length > 0 && (
           <div className="card-3d-glass rounded-3xl p-5 border-2 border-amber-400/80 bg-gradient-to-r from-[#2a1b05] via-[#1a1204] to-[#2a1b05] shadow-2xl relative overflow-hidden">
@@ -661,18 +1029,19 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
+              <div className="flex items-center gap-2.5 self-stretch sm:self-auto justify-end">
                 <button
                   onClick={() => setActiveTab('jadwal')}
-                  className="btn-pill-gold-3d px-4 py-2 text-xs font-black shadow-lg"
+                  className="btn-3d-gold px-4 py-2 text-xs font-black shadow-lg"
                 >
-                  📖 Buka Tabel Silabus
+                  <BookOpen className="w-3.5 h-3.5 text-[#1a1202]" />
+                  <span>Buka Tabel Silabus</span>
                 </button>
                 <button
                   onClick={handleDismissAllSilabusAlerts}
-                  className="px-3 py-1.5 rounded-xl bg-black/60 hover:bg-black/90 text-slate-300 hover:text-white text-xs font-bold border border-amber-500/30 transition"
+                  className="btn-3d-dark px-3.5 py-2 text-xs font-bold"
                 >
-                  Tutup Semua
+                  <span>Tutup Semua</span>
                 </button>
               </div>
             </div>
@@ -715,12 +1084,14 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
           </div>
         )}
 
-        {/* ===================== TAB 1: DASBOR UTAMA PENGURUS ===================== */}
-        {activeTab === 'dashboard' && (
-          <div className={`${building ? 'build-sequence' : ''} space-y-6`}>
-            {/* 1. NOTIFIKASI KALENDER AKADEMIK & RAPAT MENDESAK */}
+        {/* ===================== TAB PANES WITH SMOOTH TAB-SWITCH & TABLE-COLUMN ASSEMBLY ===================== */}
+        <div key={`${activeTab}-${tabTransitionKey}`} className="tab-pane-transition space-y-6">
+          {/* ===================== TAB 1: DASBOR UTAMA PENGURUS ===================== */}
+          {activeTab === 'dashboard' && (
+          <div key="tab-dashboard" className="space-y-6 assemble-tab-container">
+            {/* 1. NOTIFIKASI KALENDER AKADEMIK & RAPAT MENDESAK (HEADING) */}
             {urgentEvents.length > 0 && (
-              <div className="card-3d-glass rounded-2xl p-5 border-2 border-red-500/70 bg-gradient-to-r from-red-950/60 via-[#1c0808]/80 to-red-950/60 shadow-xl relative overflow-hidden">
+              <div className="assemble-heading card-3d-glass rounded-2xl p-5 border-2 border-red-500/70 bg-gradient-to-r from-red-950/60 via-[#1c0808]/80 to-red-950/60 shadow-xl relative overflow-hidden">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-red-500/30">
                   <div className="flex items-center space-x-3">
                     <div className="w-9 h-9 rounded-xl bg-red-600 text-white flex items-center justify-center font-bold shadow-lg animate-bounce">
@@ -766,38 +1137,39 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               </div>
             )}
 
-            {/* 2. PRESENSI MANDIRI HARI INI & LOGIKA JAM SERVER REAL-TIME */}
-            <div className="card-3d rounded-3xl p-5 border border-[#d4af37]/40 bg-gradient-to-r from-[#031c12] via-[#05281b] to-[#031c12] shadow-xl space-y-4">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 rounded-2xl bg-[#0b3824] border border-[#d4af37]/60 flex items-center justify-center text-[#d4af37] shadow shrink-0">
-                    <CheckSquare className="w-6 h-6" />
+            {/* 2. PRESENSI MANDIRI HARI INI DENGAN SISTEM GEOFENCING OTOMATIS & PENGGANTI RESMI (CARDS & CONTROLS) */}
+            <div className="assemble-cards card-3d rounded-3xl p-6 border border-[#d4af37]/40 bg-gradient-to-r from-[#031c12] via-[#05281b] to-[#031c12] shadow-2xl space-y-5">
+              {/* Header Info & Jam Server */}
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-[#d4af37]/25">
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-b from-[#0e442c] to-[#052517] border-t border-t-white/60 border-b-2 border-b-[#02130b] border-x border-[#d4af37]/50 flex items-center justify-center text-[#fef08a] shadow-lg shrink-0">
+                    <MapPin className="w-6 h-6 text-[#fef08a] drop-shadow" />
                   </div>
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-sm sm:text-base font-extrabold text-white text-gold-3d flex items-center gap-2">
-                        <span>Presensi Kehadiran Real-Time Ustadz / Pengurus</span>
+                      <h2 className="text-base sm:text-lg font-extrabold text-white text-gold-3d flex items-center gap-2">
+                        <span>Presensi Mandiri Ustadz / Ustadzah</span>
                         <span className="text-xs font-mono font-normal text-emerald-300">({activeSession.todayIso})</span>
                       </h2>
                       {simulationActive && (
-                        <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/50 text-[10px] font-mono font-bold animate-pulse">
-                          ⚡ Mode Simulasi Jam: {activeSession.wibClockShort} WIB
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/50 text-[10px] font-mono font-bold animate-pulse">
+                          ⚡ Mode Uji Jam: {activeSession.wibClockShort} WIB
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-emerald-200/90 mt-0.5">
-                      Pengecekan jam server: <b>TSANAWIYAH (08.00-08.30)</b> dan <b>ALIYAH (19.00-19.30 & 21.00-21.30)</b>. Lewat batas awal otomatis <b>Terlambat</b>. Di luar jadwal tombol nonaktif.
+                      Validasi otomatis lokasi GPS & Jam Server (Asia/Jakarta). Tekan tombol <b>[ HADIR ]</b> di bawah untuk mencatat absensi.
                     </p>
                   </div>
                 </div>
 
                 {/* Jam Server Digital Real-Time & Tombol Toggle Uji Coba */}
-                <div className="flex items-center gap-2 self-stretch md:self-auto justify-between md:justify-end">
-                  <div className="px-3.5 py-1.5 rounded-xl bg-black/70 border border-[#d4af37]/50 shadow-inner flex items-center gap-2">
+                <div className="flex items-center gap-2.5 self-stretch md:self-auto justify-between md:justify-end">
+                  <div className="px-4 py-2 rounded-2xl bg-black/80 border-t border-t-emerald-400/40 border-b border-b-black border-x border-[#d4af37]/40 shadow-inner flex items-center gap-2.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping inline-block" />
                     <div>
-                      <span className="text-[9px] text-[#d4af37] font-bold block uppercase leading-none">JAM SERVER (WIB)</span>
-                      <span className="text-sm font-black text-white font-mono tracking-wider leading-none mt-1 block">
+                      <span className="text-[9px] text-[#d4af37] font-bold block uppercase tracking-wider leading-none">JAM SERVER (WIB)</span>
+                      <span className="text-base font-black text-white font-mono tracking-wider leading-none mt-1 block">
                         {activeSession.wibTimeStr}
                       </span>
                     </div>
@@ -806,96 +1178,335 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowSimulasiBar(!showSimulasiBar)}
-                    className="px-2.5 py-2 rounded-xl bg-[#0b3824] hover:bg-[#104b31] border border-[#d4af37]/40 text-[#f3e5ab] text-xs font-bold transition flex items-center gap-1.5"
-                    title="Buka panel simulasi uji coba jam server"
+                    className="btn-3d-yellow px-3 py-2 text-xs font-extrabold"
+                    title="Buka panel simulasi jam server untuk pengujian"
                   >
-                    <Sliders className="w-3.5 h-3.5 text-[#d4af37]" />
-                    <span className="hidden sm:inline">Uji Coba Jam</span>
+                    <Sliders className="w-3.5 h-3.5 text-[#1a1202]" />
+                    <span className="hidden sm:inline">Uji Jam</span>
                   </button>
                 </div>
               </div>
 
-              {/* Status Kehadiran Hari Ini & Tombol Aksi */}
-              <div className="pt-3 border-t border-[#d4af37]/20 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  {todayAttendance ? (
-                    <div className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-emerald-950/90 border border-emerald-500/50 text-emerald-300 text-xs font-bold shadow-lg">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span>Status Anda Hari Ini: <b>{todayAttendance.status.toUpperCase()}</b> ({todayAttendance.waktu || 'Tercatat'})</span>
-                      {todayAttendance.ustadzPengganti && (
-                        <span className="text-[10px] text-amber-300 ml-1">
-                          • Pengganti: {todayAttendance.ustadzPengganti}
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5">
-                      {/* Tombol Utama: HADIR SAJA dengan Proteksi Jam Server Real-Time */}
-                      <button
-                        type="button"
-                        onClick={handleHadirSaja}
-                        disabled={activeSession.buttonDisabled}
-                        className={`px-5 py-2.5 rounded-xl font-black text-xs flex items-center gap-2 shadow-lg transition active:scale-95 ${
-                          activeSession.buttonDisabled
-                            ? 'bg-slate-800/90 border border-slate-700 text-slate-400 cursor-not-allowed opacity-50 shadow-none'
-                            : activeSession.status === 'Terlambat'
-                              ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-950/60 ring-2 ring-amber-400 animate-pulse'
-                              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/60 ring-2 ring-emerald-400'
-                        }`}
-                        title={activeSession.buttonDisabled ? 'Tombol dinonaktifkan di luar jam presensi' : activeSession.keterangan}
-                        data-testid="hadir-saja-btn"
-                      >
-                        {activeSession.buttonDisabled ? (
-                          <LogOut className="w-4 h-4 text-slate-500 rotate-180" />
-                        ) : (
-                          <Check className="w-4 h-4 stroke-[3]" />
-                        )}
-                        <span>
-                          {activeSession.buttonDisabled 
-                            ? 'PRESENSI DINONAKTIFKAN (DI LUAR JADWAL)' 
-                            : activeSession.status === 'Terlambat'
-                              ? `PRESENSI TERLAMBAT (${activeSession.tingkat})`
-                              : `PRESENSI HADIR (${activeSession.tingkat})`
-                          }
-                        </span>
-                      </button>
-
-                      {/* Indikator Status Waktu Aktif */}
-                      <span className={`px-3 py-1.5 rounded-xl text-[11px] font-mono font-bold border flex items-center gap-1.5 ${
-                        activeSession.isActive
-                          ? activeSession.status === 'Terlambat'
-                            ? 'bg-amber-950/90 text-amber-300 border-amber-500/50'
-                            : 'bg-emerald-950/90 text-emerald-300 border-emerald-500/50'
-                          : 'bg-black/60 text-slate-400 border-slate-700'
-                      }`}>
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>
-                          {activeSession.isActive 
-                            ? `${activeSession.tingkat} (${activeSession.sesi}): ${activeSession.status === 'Terlambat' ? '⚠️ Terlambat (Lewat Batas Awal)' : '🟢 Tepat Waktu'}` 
-                            : `🔒 Di Luar Jadwal Presensi ${activeSession.jadwalBerikutnya ? `(Jadwal Berikutnya: ${activeSession.jadwalBerikutnya.label} ${activeSession.jadwalBerikutnya.jamMulai})` : ''}`}
-                        </span>
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
+              {/* TABS MODE: [ ABSENSI NORMAL ] vs [ ABSENSI PENGGANTI ] */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#03140c] p-2.5 rounded-2xl border border-[#d4af37]/35 shadow-inner">
+                <div className="flex space-x-2.5">
                   <button
-                    onClick={() => setShowIzinModal(true)}
-                    className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center gap-1.5 shadow transition"
+                    type="button"
+                    onClick={() => setAbsensiMode('normal')}
+                    className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 ${
+                      absensiMode === 'normal'
+                        ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                        : 'text-slate-300 hover:text-white hover:bg-emerald-950/40 border border-transparent'
+                    }`}
                   >
-                    <Send className="w-4 h-4" />
-                    <span>Ajukan Izin Tidak Mengajar</span>
+                    <UserCheck className="w-4 h-4" />
+                    <span>[ ABSENSI NORMAL ]</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAbsensiMode('pengganti')}
+                    className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 ${
+                      absensiMode === 'pengganti'
+                        ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                        : 'text-amber-300/80 hover:text-amber-200 hover:bg-amber-950/40 border border-transparent'
+                    }`}
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>[ ABSENSI PENGGANTI ]</span>
+                    {penggantiRequestList.filter(r => r.status === 'Disetujui' && r.ustadzPengganti.toLowerCase().trim() === pengurus.nama.toLowerCase().trim()).length > 0 && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-black text-amber-300 text-[10px] font-mono font-bold">
+                        Aktif
+                      </span>
+                    )}
                   </button>
                 </div>
+
+                <div className="flex items-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setShowAjukanPenggantiModal(true)}
+                    className="btn-3d-yellow px-3 py-1.5 text-xs font-bold"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5" />
+                    <span>Ajukan Pengganti Ustadz</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowIzinModal(true)}
+                    className="px-3 py-1.5 rounded-xl bg-[#0a2f1e] hover:bg-[#0f402a] border-t border-white/30 border-b border-black text-[#fef08a] font-bold text-xs flex items-center gap-1.5 transition shadow"
+                  >
+                    <Send className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Izin Mengajar</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* CARD UTAMA ABSENSI (FOKUS & BERSIH TANPA PETA MENYEMPITKAN LAYAR) */}
+              <div className="bg-[#03140c] border border-[#d4af37]/40 rounded-3xl p-5 sm:p-6 space-y-5 shadow-xl relative overflow-hidden">
+                {absensiMode === 'normal' ? (
+                  /* ================= MODE A: ABSENSI NORMAL ================= */
+                  <div className="space-y-5">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-3 border-b border-[#d4af37]/20">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300">
+                          <BookOpen className="w-4 h-4" />
+                        </div>
+                        <span className="text-sm font-extrabold text-[#fef08a] uppercase tracking-wider">
+                          Jadwal Mengajar Saat Ini (Otomatis dari Database)
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-bold">
+                          Hari: {currentDayName}
+                        </span>
+                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border ${
+                          activeSession.isActive
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                            : 'bg-red-500/20 text-red-300 border-red-500/40'
+                        }`}>
+                          {activeSession.isActive ? `Sesi ${activeSession.status}` : 'Di Luar Jam Pelajaran'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {myActiveSchedule ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                        <div className="bg-black/50 border border-[#d4af37]/25 rounded-2xl p-3.5 space-y-1">
+                          <span className="text-[11px] text-slate-400 block font-medium">Ustadz Terjadwal</span>
+                          <span className="text-sm font-extrabold text-white block truncate">
+                            {myActiveSchedule.nama || myActiveSchedule.ustadz || pengurus.nama}
+                          </span>
+                          <span className="text-[10px] text-emerald-400 font-mono">ID: {pengurus.id}</span>
+                        </div>
+
+                        <div className="bg-black/50 border border-[#d4af37]/25 rounded-2xl p-3.5 space-y-1">
+                          <span className="text-[11px] text-slate-400 block font-medium">Mata Pelajaran</span>
+                          <span className="text-sm font-black text-[#fde047] block truncate">
+                            {myActiveSchedule.mapel}
+                          </span>
+                          <span className="text-[10px] text-slate-400">Kitab Salafiyah</span>
+                        </div>
+
+                        <div className="bg-black/50 border border-[#d4af37]/25 rounded-2xl p-3.5 space-y-1">
+                          <span className="text-[11px] text-slate-400 block font-medium">Kelas / Tingkat</span>
+                          <span className="text-sm font-extrabold text-white block">
+                            {myActiveSchedule.kelas}
+                          </span>
+                          <span className="text-[10px] text-slate-400">Madrasah Diniyah</span>
+                        </div>
+
+                        <div className="bg-black/50 border border-[#d4af37]/25 rounded-2xl p-3.5 space-y-1">
+                          <span className="text-[11px] text-slate-400 block font-medium">Jam Pelajaran</span>
+                          <span className="text-sm font-black text-emerald-300 font-mono block">
+                            {myActiveSchedule.waktu || '08:00 - 09:00'}
+                          </span>
+                          <span className="text-[10px] text-slate-400">Jam Ke-{myActiveSchedule.jamKe || 1}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 rounded-2xl bg-black/60 border border-amber-500/30 text-slate-300 text-xs space-y-1">
+                        <p className="font-extrabold text-[#fde047] text-sm">Tidak ada jadwal mengajar aktif pada sesi saat ini.</p>
+                        <p className="text-slate-400 text-[11px]">
+                          Sistem mengambil jadwal mengajar otomatis dari database jadwal pelajaran untuk Ustadz {pengurus.nama}.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Status Ringkas Absensi & Tombol HADIR 3D */}
+                    <div className="pt-2 flex flex-col items-center justify-center space-y-3">
+                      {isAlreadyCheckedIn ? (
+                        <div className="w-full p-4 rounded-2xl bg-emerald-950/80 border border-emerald-500/60 text-emerald-200 text-center font-bold text-sm flex items-center justify-center gap-2.5 shadow-lg">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                          <span>Anda sudah berhasil melakukan Presensi Hadir pada sesi ini ({myActiveSchedule?.mapel || 'Pelajaran'}).</span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleHadirNormal}
+                          className="btn-3d-hadir-yellow w-full max-w-md text-center flex items-center justify-center gap-3 py-4 shadow-2xl"
+                        >
+                          <Check className="w-6 h-6 stroke-[3.5] text-[#1a1202]" />
+                          <span className="text-base sm:text-lg font-black tracking-wider uppercase">
+                            [ HADIR ]
+                          </span>
+                        </button>
+                      )}
+
+                      <div className="flex flex-wrap items-center justify-center gap-4 text-[11px] text-slate-400 pt-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full ${geofenceCheck.isValid ? 'bg-emerald-400' : 'bg-red-400 animate-pulse'}`} />
+                          <span>Lokasi: {geofenceCheck.isValid ? 'Dalam Radius Madrasah' : `Di Luar Radius (${geofenceCheck.distanceMeters.toFixed(0)}m)`}</span>
+                        </span>
+                        <span>•</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full ${activeSession.isActive ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                          <span>Waktu: {activeSession.isActive ? `Sesi ${activeSession.status}` : 'Di Luar Jam'}</span>
+                        </span>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowGeofenceMap(!showGeofenceMap)}
+                          className="text-[#d4af37] hover:underline font-bold"
+                        >
+                          {showGeofenceMap ? 'Sembunyikan Info Peta GPS' : 'Lihat Info Peta & Koordinat GPS'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* ================= MODE B: ABSENSI PENGGANTI ================= */
+                  <div className="space-y-5">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-3 border-b border-amber-500/25">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300">
+                          <Users className="w-4 h-4" />
+                        </div>
+                        <span className="text-sm font-extrabold text-[#fef08a] uppercase tracking-wider">
+                          Mekanisme Resmi: Presensi Ustadz Pengganti
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-amber-950/80 border border-amber-500/40 text-amber-300 font-bold">
+                        Pengganti: {pengurus.nama}
+                      </span>
+                    </div>
+
+                    {approvedSubstituteForMe ? (
+                      <div className="bg-amber-950/30 border border-amber-500/35 rounded-2xl p-4 space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                          <div className="bg-black/50 p-3 rounded-xl border border-amber-500/20">
+                            <span className="text-slate-400 block text-[11px]">Ustadz Terjadwal Asli:</span>
+                            <span className="text-white font-extrabold text-sm">{approvedSubstituteForMe.ustadzTerjadwal}</span>
+                            <span className="text-[10px] text-amber-300 block mt-0.5">(Jadwal asli tetap aman)</span>
+                          </div>
+
+                          <div className="bg-black/50 p-3 rounded-xl border border-amber-500/20">
+                            <span className="text-slate-400 block text-[11px]">Mata Pelajaran & Kelas:</span>
+                            <span className="text-[#fde047] font-extrabold text-sm">{approvedSubstituteForMe.mapel} ({approvedSubstituteForMe.kelas})</span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">Jam: {approvedSubstituteForMe.jamJadwal}</span>
+                          </div>
+
+                          <div className="bg-black/50 p-3 rounded-xl border border-amber-500/20">
+                            <span className="text-slate-400 block text-[11px]">Status Izin Pengganti:</span>
+                            <span className="text-emerald-400 font-bold text-xs flex items-center gap-1 mt-0.5">
+                              ✓ DISETUJUI RESMI
+                            </span>
+                            <span className="text-[10px] text-slate-300 block truncate">Alasan: {approvedSubstituteForMe.alasan}</span>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 flex flex-col items-center justify-center space-y-3">
+                          <button
+                            type="button"
+                            onClick={handleHadirPengganti}
+                            className="btn-3d-hadir-yellow w-full max-w-md text-center flex items-center justify-center gap-3 py-4 shadow-2xl"
+                          >
+                            <Check className="w-6 h-6 stroke-[3.5] text-[#1a1202]" />
+                            <span className="text-base sm:text-lg font-black tracking-wider uppercase">
+                              [ HADIR ]
+                            </span>
+                          </button>
+
+                          <p className="text-[11px] text-amber-200/90 text-center">
+                            *Presensi Ustadz Pengganti: {approvedSubstituteForMe.ustadzTerjadwal} ({approvedSubstituteForMe.mapel})
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-5 rounded-2xl bg-black/60 border border-amber-500/30 text-xs space-y-3">
+                        <div className="flex items-start space-x-3">
+                          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-bold text-[#fde047] text-sm">
+                              Belum ada penugasan pengganti aktif yang disetujui untuk Anda ({pengurus.nama}) pada hari ini.
+                            </p>
+                            <p className="text-slate-300 text-[11px] mt-1">
+                              Jika Anda menggantikan Ustadz yang berhalangan hadir, silakan ajukan atau konfirmasi penugasan pengganti melalui tombol di bawah:
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowAjukanPenggantiModal(true)}
+                            className="btn-3d-yellow px-4 py-2.5 text-xs font-black shadow-lg"
+                          >
+                            <PlusCircle className="w-4 h-4" />
+                            <span>Ajukan & Daftarkan Pengganti Ustadz Sekarang</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* MODAL / PANEL OPSIONAL GEOFENCING MAP (TERSEMBUNYI SECARA DEFAULT SESUAI PERMINTAAN USER) */}
+                {showGeofenceMap && (
+                  <div className="pt-4 border-t border-[#d4af37]/20 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-[#fef08a] flex items-center gap-1.5">
+                        <MapPin className="w-4 h-4 text-[#fef08a]" />
+                        <span>Peta Geofencing & Titik Koordinat GPS Madrasah</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowGeofenceMap(false)}
+                        className="text-xs text-slate-400 hover:text-white"
+                      >
+                        ✕ Tutup Peta
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                      <div className="lg:col-span-8">
+                        <GoogleMapsGeofence
+                          centerLat={settings.geofencing_latitude || DEFAULT_GEOFENCE_ZONE.latitude}
+                          centerLng={settings.geofencing_longitude || DEFAULT_GEOFENCE_ZONE.longitude}
+                          radiusMeters={settings.geofencing_radius_meters || DEFAULT_GEOFENCE_ZONE.radiusMeters}
+                          zoneName={settings.geofencing_zone_name || DEFAULT_GEOFENCE_ZONE.zoneName}
+                          userLat={userCoords.lat}
+                          userLng={userCoords.lng}
+                          userAccuracy={userCoords.accuracy}
+                          enabled={settings.geofencing_enabled ?? true}
+                          height="220px"
+                          interactive={false}
+                        />
+                      </div>
+
+                      <div className="lg:col-span-4 bg-black/70 border border-[#d4af37]/30 rounded-2xl p-3.5 text-xs space-y-2.5">
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-700">
+                          <span className="text-slate-400">Status Zona:</span>
+                          <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                            geofenceCheck.isValid ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'
+                          }`}>
+                            {geofenceCheck.isValid ? '✓ VALID' : '✕ LUAR RADIUS'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-[11px]">
+                          <span className="text-slate-400">Jarak ke Madrasah:</span>
+                          <span className="font-mono font-bold text-white">{geofenceCheck.distanceMeters.toFixed(1)}m</span>
+                        </div>
+                        <div className="flex justify-between items-center text-[11px]">
+                          <span className="text-slate-400">Radius Maksimal:</span>
+                          <span className="font-mono text-[#d4af37] font-bold">{geofenceCheck.radiusMeters}m</span>
+                        </div>
+                        <div className="flex justify-between items-center text-[11px]">
+                          <span className="text-slate-400">Akurasi GPS HP:</span>
+                          <span className="font-mono text-emerald-300">{userCoords.accuracy ? `±${Math.round(userCoords.accuracy)}m` : '-'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* PANEL SIMULASI UJI COBA JAM SERVER (MEMUDAHKAN PENGUJIAN SESUAI PERMINTAAN USER) */}
               {showSimulasiBar && (
-                <div className="p-3.5 rounded-2xl bg-black/80 border border-[#d4af37]/40 space-y-2.5">
+                <div className="p-4 rounded-2xl bg-black/80 border border-[#d4af37]/40 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#d4af37] flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-[#d4af37]" />
+                    <span className="text-xs font-bold text-[#fef08a] flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[#fef08a]" />
                       <span>Panel Uji Coba Logika Jam Server (Pilih Jam untuk Menguji):</span>
                     </span>
                     <span className="text-[10px] text-emerald-300 font-mono">
@@ -1102,7 +1713,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                     <span className="text-[#d4af37] font-mono text-[11px]">{todayStr}</span>
                   </div>
 
-                  <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25">
+                  <div className="overflow-x-auto table-assemble-dock rounded-xl table-3d-stack puzzle-table-assemble border border-[#d4af37]/25">
                     <table className="w-full text-xs text-left">
                       <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                         <tr>
@@ -1220,8 +1831,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
         {/* ===================== TAB 2: IZIN TIDAK MENGAJAR ===================== */}
         {activeTab === 'izin-mengajar' && (
-          <div className="space-y-6">
-            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/40 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-[#031a10] via-[#062417] to-[#031a10]">
+          <div key="tab-izin-mengajar" className="space-y-6 assemble-tab-container">
+            <div className="assemble-heading card-3d rounded-3xl p-6 border border-[#d4af37]/40 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-[#031a10] via-[#062417] to-[#031a10]">
               <div>
                 <h2 className="text-base sm:text-lg font-extrabold text-white text-gold-3d flex items-center gap-2">
                   <FileText className="w-5 h-5 text-[#d4af37]" />
@@ -1232,23 +1843,25 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </p>
               </div>
 
-              <button
-                onClick={() => setShowIzinModal(true)}
-                className="btn-3d-gold px-4 py-2.5 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow"
-              >
-                <PlusCircle className="w-4 h-4 text-black" />
-                <span>+ Buat Permohonan Izin Baru</span>
-              </button>
+              <div className="assemble-controls">
+                <button
+                  onClick={() => setShowIzinModal(true)}
+                  className="btn-3d-gold px-4 py-2.5 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow"
+                >
+                  <PlusCircle className="w-4 h-4 text-black" />
+                  <span>+ Buat Izin Baru</span>
+                </button>
+              </div>
             </div>
 
             {/* Riwayat Permohonan Izin Pengurus */}
-            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 space-y-4">
+            <div className="assemble-tables table-3d-stack puzzle-table-assemble rounded-3xl p-6 border border-[#d4af37]/30 space-y-4">
               <h3 className="text-sm font-bold text-white text-gold-3d flex items-center justify-between">
                 <span>Daftar Pengajuan Izin Saya</span>
                 <span className="text-xs text-[#d4af37] font-mono">Total: {myIzinList.length} Pengajuan</span>
               </h3>
 
-              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
+              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/25">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
@@ -1314,9 +1927,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
         {/* ===================== TAB 3: KELAS BIMBINGAN (WALI KELAS) ===================== */}
         {activeTab === 'wali-kelas' && (
-          <div className="space-y-6">
+          <div key="tab-wali-kelas" className="space-y-6 assemble-tab-container">
             {/* Banner Info Wali Kelas */}
-            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/40 bg-gradient-to-r from-[#052216] via-[#083321] to-[#052216] shadow-xl">
+            <div className="assemble-heading card-3d rounded-3xl p-6 border border-[#d4af37]/40 bg-gradient-to-r from-[#052216] via-[#083321] to-[#052216] shadow-xl">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div className="flex items-center space-x-3.5">
                   <div className="w-12 h-12 rounded-2xl bg-[#0b3824] border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow">
@@ -1337,20 +1950,20 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="assemble-controls flex items-center gap-2">
                   <button
                     onClick={handleSaveClassAttendance}
                     className="btn-3d-gold px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center gap-1.5 shadow"
                   >
                     <CheckCheck className="w-4 h-4 text-black" />
-                    <span>Simpan Presensi Kelas ke Admin</span>
+                    <span>Simpan Presensi Kelas</span>
                   </button>
                 </div>
               </div>
             </div>
 
             {/* Statistik Kehadiran Anak Didik Hari Ini */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="assemble-cards grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="card-3d-glass rounded-2xl p-4 border border-[#d4af37]/30 text-center">
                 <span className="text-[11px] text-slate-300 font-bold block">Total Anak Didik</span>
                 <span className="text-2xl font-black text-[#d4af37] font-mono mt-1 block">{myStudents.length}</span>
@@ -1404,7 +2017,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
+              <div className="overflow-x-auto table-assemble-dock rounded-2xl table-3d-stack puzzle-table-assemble border border-[#d4af37]/25">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
@@ -1475,7 +2088,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 <span className="text-xs text-emerald-300 font-mono">Terkoneksi Database Admin</span>
               </h3>
 
-              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
+              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/25">
                 <table className="w-full text-xs text-left min-w-[650px]">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
@@ -1515,8 +2128,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
         {/* ===================== TAB 4: KALENDER & AGENDA ===================== */}
         {activeTab === 'kalender' && (
-          <div className="space-y-6">
-            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 flex justify-between items-center">
+          <div key="tab-kalender" className="space-y-6 assemble-tab-container">
+            <div className="assemble-heading card-3d rounded-3xl p-6 border border-[#d4af37]/30 flex justify-between items-center">
               <div>
                 <h2 className="text-lg font-bold text-white text-gold-3d">
                   Kalender Akademik & Agenda Madrasah Diniyah
@@ -1527,7 +2140,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="assemble-cards grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {kalenderList.map(evt => (
                 <div
                   key={evt.id}
@@ -1567,44 +2180,46 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
         {/* ===================== TAB 5: PRESENSI MANUAL SELURUH SANTRI ===================== */}
         {activeTab === 'absensi-santri' && (
-          <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 space-y-5">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-3 border-b border-[#d4af37]/20">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base sm:text-lg font-bold text-white text-gold-3d">
-                    Presensi Manual Seluruh Santri Diniyah
-                  </h3>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
-                    Input Manual Pengurus
-                  </span>
+          <div key="tab-absensi-santri" className="space-y-5 assemble-tab-container">
+            <div className="assemble-heading card-3d rounded-3xl p-6 border border-[#d4af37]/30">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-3 border-b border-[#d4af37]/20">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-bold text-white text-gold-3d">
+                      Presensi Manual Seluruh Santri Diniyah
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                      Input Manual Pengurus
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-300 mt-0.5">
+                    Input presensi santri oleh pengurus langsung terupdate secara real-time ke Dashboard Admin di Fitur Absensi Santri.
+                  </p>
                 </div>
-                <p className="text-xs text-emerald-300 mt-0.5">
-                  Input presensi santri oleh pengurus langsung terupdate secara real-time ke Dashboard Admin di Fitur Absensi Santri.
-                </p>
-              </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleMarkAllHadirGlobal}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 font-bold text-xs flex items-center gap-1.5 transition shadow"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Tandai Hadir Semua</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveAllSantriAttendance}
-                  className="btn-3d-gold px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow"
-                >
-                  <CheckCheck className="w-4 h-4 text-black" />
-                  <span>Simpan Presensi Santri Manual ke Admin</span>
-                </button>
+                <div className="assemble-controls flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleMarkAllHadirGlobal}
+                    className="btn-3d-emerald px-3.5 py-2 text-xs font-bold"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Tandai Hadir Semua</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveAllSantriAttendance}
+                    className="btn-3d-gold px-4 py-2 text-black font-extrabold text-xs flex items-center gap-2 shadow"
+                  >
+                    <CheckCheck className="w-4 h-4 text-black" />
+                    <span>Simpan Presensi Santri</span>
+                  </button>
+                </div>
               </div>
             </div>
 
             {/* Filter Angkatan / Kelas Santri */}
-            <div className="flex flex-wrap items-center gap-2 pt-1">
+            <div className="assemble-controls flex flex-wrap items-center gap-2 pt-1">
               <span className="text-xs text-[#d4af37] font-bold uppercase tracking-wider">Pilih Angkatan:</span>
               <button
                 type="button"
@@ -1630,7 +2245,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             </div>
 
             {/* Tabel Input Presensi Santri Interaktif */}
-            <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
+            <div className="overflow-x-auto rounded-2xl table-3d-stack puzzle-table-assemble border border-[#d4af37]/25">
               <table className="w-full text-xs text-left min-w-[750px]">
                 <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                   <tr>
@@ -1706,9 +2321,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
         {/* ===================== TAB 6: JADWAL & SILABUS MEMAKNAI ===================== */}
         {activeTab === 'jadwal' && (
-          <div className="space-y-8">
+          <div key="tab-jadwal" className="space-y-8 assemble-tab-container">
             {/* Header Jadwal & Silabus */}
-            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="assemble-heading card-3d rounded-3xl p-6 border border-[#d4af37]/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-white text-gold-3d flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-[#d4af37]" />
@@ -1725,7 +2340,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             </div>
 
             {/* TABEL 1: TINGKATAN TSANAWIYAH */}
-            <div className="card-3d rounded-3xl p-6 border-2 border-emerald-500/40 space-y-5 bg-gradient-to-b from-[#0b3824]/30 to-[#020e08]">
+            <div className="table-3d-stack puzzle-slide-left rounded-3xl p-6 border-2 border-emerald-500/40 space-y-5 bg-gradient-to-b from-[#0b3824]/30 to-[#020e08]">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-emerald-500/30">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-emerald-950/80 border border-emerald-500/50 flex items-center justify-center text-emerald-300 shadow-md">
@@ -1795,7 +2410,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-2xl border border-emerald-500/30 shadow-xl">
+              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-emerald-500/30 shadow-xl">
                 <table className="w-full text-xs text-left min-w-[750px]">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
@@ -1845,31 +2460,31 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             </div>
 
             {/* TABEL 2: TINGKATAN ALIYAH */}
-            <div className="card-3d rounded-3xl p-6 border-2 border-indigo-500/40 space-y-5 bg-gradient-to-b from-[#111638]/30 to-[#020e08]">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-indigo-500/30">
+            <div className="table-3d-stack puzzle-slide-right rounded-3xl p-6 border-2 border-amber-500/40 space-y-5 bg-gradient-to-b from-[#1c1404]/50 via-[#0b3824]/30 to-[#020e08]">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-amber-500/30">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-indigo-950/80 border border-indigo-500/50 flex items-center justify-center text-indigo-300 shadow-md">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-950/80 border border-amber-500/50 flex items-center justify-center text-amber-300 shadow-md">
                     <BookOpen className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-white text-gold-3d flex items-center gap-2">
                       Tingkatan Aliyah (Kelas 1 - 3 Aliyah)
                     </h3>
-                    <p className="text-xs text-indigo-300">
+                    <p className="text-xs text-amber-200">
                       Jadwal Pengajian Sesi Malam (Hari: Malam Sabtu s/d Malam Kamis)
                     </p>
                   </div>
                 </div>
 
-                <span className="text-xs text-indigo-300 bg-[#020e08] px-3 py-1 rounded-full border border-indigo-500/30 self-start md:self-auto font-mono">
+                <span className="text-xs text-amber-300 bg-[#020e08] px-3 py-1 rounded-full border border-amber-500/30 self-start md:self-auto font-mono">
                   Sesi Malam (Ba&apos;da Maghrib / Isya)
                 </span>
               </div>
 
               {/* Filter Khusus Tabel Aliyah */}
-              <div className="p-4 rounded-2xl bg-[#060c1d] border border-indigo-500/30 space-y-3">
+              <div className="p-4 rounded-2xl bg-[#03150d] border border-amber-500/30 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <span className="text-xs text-indigo-300 font-bold min-w-[130px]">Pilih Kelas / Angkatan:</span>
+                  <span className="text-xs text-amber-300 font-bold min-w-[130px]">Pilih Kelas / Angkatan:</span>
                   <div className="flex flex-wrap gap-2">
                     {['SEMUA', '1 ALIYAH', '2 ALIYAH', '3 ALIYAH'].map(kls => {
                       const active = jadwalAlAngkatan === kls;
@@ -1891,8 +2506,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t border-indigo-500/20">
-                  <span className="text-xs text-indigo-300 font-bold min-w-[130px]">Pilih Hari Pengajian:</span>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t border-amber-500/20">
+                  <span className="text-xs text-amber-300 font-bold min-w-[130px]">Pilih Hari Pengajian:</span>
                   <div className="flex flex-wrap gap-1.5">
                     {['SEMUA', 'MALAM SABTU', 'MALAM AHAD', 'MALAM SENIN', 'MALAM SELASA', 'MALAM RABU', 'MALAM KAMIS'].map(malam => {
                       const active = jadwalAlDay === malam;
@@ -1915,7 +2530,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-2xl border border-indigo-500/30 shadow-xl">
+              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-amber-500/30 shadow-xl">
                 <table className="w-full text-xs text-left min-w-[750px]">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
@@ -1928,7 +2543,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                       <th className="p-3">Ruangan</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-indigo-500/15 bg-[#020e08]/80">
+                  <tbody className="divide-y divide-amber-500/20 bg-[#020e08]/80">
                     {jadwalList
                       .filter(j => {
                         const isAl = j.kelas.toUpperCase().includes('ALIYAH') || j.tingkatan === 'Aliyah';
@@ -1937,8 +2552,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                         return isAl && matchClass && matchDay;
                       })
                       .map((j, idx) => (
-                        <tr key={j.id || `${j.hari}-${j.jamKe}-${j.kelas}-${idx}`} className="hover:bg-indigo-500/10 transition">
-                          <td className="p-3 font-bold text-indigo-300">{j.hari}</td>
+                        <tr key={j.id || `${j.hari}-${j.jamKe}-${j.kelas}-${idx}`} className="hover:bg-amber-500/10 transition">
+                          <td className="p-3 font-bold text-[#d4af37]">{j.hari}</td>
                           <td className="p-3 text-slate-300 font-mono">Ke-{j.jamKe || 1}</td>
                           <td className="p-3 font-mono text-emerald-300">{j.waktu}</td>
                           <td className="p-3 text-white font-bold">{j.kelas}</td>
@@ -2058,7 +2673,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30">
+              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/30">
                 <table className="w-full text-xs text-left min-w-[1050px]">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
@@ -2370,8 +2985,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
         {/* ===================== TAB 7: UJIAN KITAB & MUHAFADZOH ===================== */}
         {activeTab === 'ujian-kitab' && (
-          <div className="space-y-6">
-            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30">
+          <div key="tab-ujian-kitab" className="space-y-6 assemble-tab-container">
+            <div className="assemble-heading card-3d rounded-3xl p-6 border border-[#d4af37]/30">
               <h2 className="text-base font-bold text-white text-gold-3d">
                 Nilai Koreksian Kitab, Muhafadzoh, & Baca Kitab
               </h2>
@@ -2380,7 +2995,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               </p>
             </div>
 
-            <div className="card-3d rounded-2xl p-5 border border-[#d4af37]/30 overflow-x-auto">
+            <div className="assemble-tables table-assemble-dock table-3d-stack puzzle-table-assemble rounded-2xl p-5 border border-[#d4af37]/30 overflow-x-auto">
               <table className="w-full text-xs text-left min-w-[850px]">
                 <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                   <tr>
@@ -2429,8 +3044,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
         {/* ===================== TAB 8: PROFIL PENGURUS ===================== */}
         {activeTab === 'profil-saya' && (
-          <div className="max-w-2xl mx-auto card-3d rounded-3xl p-6 border border-[#d4af37]/40 space-y-6">
-            <div className="flex items-center space-x-3 pb-4 border-b border-[#d4af37]/20">
+          <div key="tab-profil-saya" className="max-w-2xl mx-auto card-3d rounded-3xl p-6 border border-[#d4af37]/40 space-y-6 assemble-tab-container">
+            <div className="assemble-heading flex items-center space-x-3 pb-4 border-b border-[#d4af37]/20">
               <div className="w-12 h-12 rounded-2xl bg-[#0b3824] border border-[#d4af37]/50 flex items-center justify-center text-[#d4af37]">
                 <Users className="w-6 h-6" />
               </div>
@@ -2440,7 +3055,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center space-x-4">
+            <div className="assemble-cards flex items-center space-x-4">
               <div className="w-24 h-24 rounded-2xl overflow-hidden bg-[#0b3824] border-2 border-[#d4af37] shadow-xl shrink-0">
                 <img
                   src={pengurus.foto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'}
@@ -2491,6 +3106,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             </div>
           </div>
         )}
+        </div>
       </main>
 
       {/* MODAL 1: FORM PENGAJUAN IZIN TIDAK MENGAJAR */}
@@ -2740,6 +3356,219 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL AJUKAN PENGGANTI USTADZ */}
+      {showAjukanPenggantiModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="card-3d-glass rounded-3xl max-w-lg w-full p-6 border-2 border-amber-400 bg-[#041c12] text-white shadow-2xl space-y-4">
+            <div className="flex justify-between items-center pb-3 border-b border-amber-500/30">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500 text-black flex items-center justify-center font-bold">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white text-gold-3d">
+                    Mekanisme Resmi: Ajukan Ustadz Pengganti
+                  </h3>
+                  <p className="text-[11px] text-amber-200">
+                    Jadwal asli tetap terjaga & realisasi absensi tercatat resmi
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAjukanPenggantiModal(false)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAjukanPenggantiSubmit} className="space-y-3.5 text-xs">
+              {/* 1. Pilih Jadwal Yang Akan Digantikan */}
+              <div>
+                <label className="block text-[#d4af37] font-bold mb-1">
+                  1. Pilih Jadwal Yang Akan Digantikan (Database Jadwal)
+                </label>
+                <select
+                  value={selectedJadwalToReplaceId || (targetJadwalForReplacement?.id || '')}
+                  onChange={(e) => setSelectedJadwalToReplaceId(e.target.value)}
+                  className="w-full bg-[#03140c] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
+                >
+                  {jadwalList.map((j, idx) => (
+                    <option key={j.id || idx} value={j.id || `${j.kelas}_${j.hari}_${j.jamKe}`}>
+                      [{j.hari} - {j.waktu || `Jam ${j.jamKe}`}] {j.kelas} • {j.mapel} (Ustadz: {j.nama || j.ustadz})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Detail Jadwal Terpilih */}
+              {targetJadwalForReplacement && (
+                <div className="p-3 rounded-xl bg-black/60 border border-amber-500/30 space-y-1.5 text-[11px]">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Ustadz Terjadwal Asli:</span>
+                    <span className="text-white font-bold">{targetJadwalForReplacement.nama || targetJadwalForReplacement.ustadz}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Mata Pelajaran & Kelas:</span>
+                    <span className="text-amber-300 font-bold">{targetJadwalForReplacement.mapel} ({targetJadwalForReplacement.kelas})</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Hari & Jam:</span>
+                    <span className="text-emerald-300 font-mono">{targetJadwalForReplacement.hari}, {targetJadwalForReplacement.waktu || `Jam Ke-${targetJadwalForReplacement.jamKe}`}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Pilih Ustadz Pengganti */}
+              <div>
+                <label className="block text-[#d4af37] font-bold mb-1">
+                  2. Pilih Ustadz Pengganti Yang Ditugaskan
+                </label>
+                <select
+                  value={selectedUstadzPenggantiName}
+                  onChange={(e) => setSelectedUstadzPenggantiName(e.target.value)}
+                  className="w-full bg-[#03140c] border border-[#d4af37]/40 rounded-xl p-2.5 text-white font-bold"
+                  required
+                >
+                  {guruList.map(g => (
+                    <option key={g.id} value={g.nama}>
+                      {g.nama} ({(g as any).jabatan || g.tugasUtama || 'Asatidz'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 3. Alasan Penggantian */}
+              <div>
+                <label className="block text-[#d4af37] font-bold mb-1">
+                  3. Alasan Berhalangan / Penggantian
+                </label>
+                <textarea
+                  value={alasanPenggantianInput}
+                  onChange={(e) => setAlasanPenggantianInput(e.target.value)}
+                  placeholder="Misal: Ustadz Ahmad berhalangan karena ada udzur syar'i / sakit, digantikan oleh Ust. Ali."
+                  className="w-full bg-[#03140c] border border-[#d4af37]/40 rounded-xl p-2.5 text-white h-20 placeholder-slate-500"
+                  required
+                />
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/30 text-[11px] text-amber-200">
+                ℹ️ <b>Aturan Pengganti:</b> Ustadz pengganti tetap wajib berada di radius lokasi madrasah dengan GPS valid untuk dapat menekan tombol <b>[ HADIR SEBAGAI PENGGANTI ]</b>.
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#d4af37]/20">
+                <button
+                  type="button"
+                  onClick={() => setShowAjukanPenggantiModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="btn-3d-yellow px-4 py-2 font-black shadow-lg"
+                >
+                  Ajukan & Konfirmasi Pengganti
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== MODAL NOTIFIKASI VALIDASI PRESENSI (DI LUAR RADIUS / DI LUAR JAM / SUKSES) ===================== */}
+      {validationAlertModal?.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="card-3d-glass max-w-lg w-full rounded-3xl p-6 sm:p-7 border-2 border-[#d4af37]/70 bg-gradient-to-b from-[#0c2419] via-[#05170f] to-[#020d08] shadow-2xl relative space-y-5 text-center">
+            {/* Header Icon */}
+            <div className="flex justify-center">
+              {validationAlertModal.type === 'outside_radius' ? (
+                <div className="w-16 h-16 rounded-3xl bg-amber-500/20 border-2 border-amber-400/80 flex items-center justify-center text-[#fef08a] shadow-[0_0_25px_rgba(251,191,36,0.35)] animate-pulse">
+                  <MapPin className="w-8 h-8 text-[#fef08a]" />
+                </div>
+              ) : validationAlertModal.type === 'outside_hours' ? (
+                <div className="w-16 h-16 rounded-3xl bg-amber-500/20 border-2 border-amber-400/80 flex items-center justify-center text-[#fef08a] shadow-[0_0_25px_rgba(251,191,36,0.35)] animate-pulse">
+                  <Clock className="w-8 h-8 text-[#fef08a]" />
+                </div>
+              ) : validationAlertModal.type === 'success' ? (
+                <div className="w-16 h-16 rounded-3xl bg-emerald-500/20 border-2 border-emerald-400/80 flex items-center justify-center text-emerald-300 shadow-[0_0_25px_rgba(16,185,129,0.35)] animate-bounce">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-300" />
+                </div>
+              ) : (
+                <div className="w-16 h-16 rounded-3xl bg-blue-500/20 border-2 border-blue-400/80 flex items-center justify-center text-blue-300 shadow">
+                  <AlertTriangle className="w-8 h-8 text-blue-300" />
+                </div>
+              )}
+            </div>
+
+            {/* Title & Message */}
+            <div className="space-y-2">
+              <h3 className="text-lg sm:text-xl font-black text-white text-gold-3d leading-snug">
+                {validationAlertModal.title}
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
+                {validationAlertModal.message}
+              </p>
+              {validationAlertModal.submessage && (
+                <p className="text-[11px] sm:text-xs text-amber-200/90 font-medium pt-1">
+                  {validationAlertModal.submessage}
+                </p>
+              )}
+            </div>
+
+            {/* Diagnostic Details Box */}
+            {validationAlertModal.details && (
+              <div className="p-3.5 rounded-2xl bg-black/70 border border-[#d4af37]/30 text-xs space-y-2 text-left">
+                {validationAlertModal.details.distance !== undefined && (
+                  <div className="flex justify-between items-center text-[11px] border-b border-slate-700/60 pb-1.5">
+                    <span className="text-slate-400">Jarak Anda ke Titik Pusat:</span>
+                    <span className="font-mono font-bold text-[#fef08a]">
+                      {validationAlertModal.details.distance.toFixed(1)} meter
+                    </span>
+                  </div>
+                )}
+                {validationAlertModal.details.maxRadius !== undefined && (
+                  <div className="flex justify-between items-center text-[11px] border-b border-slate-700/60 pb-1.5">
+                    <span className="text-slate-400">Batas Maksimal Radius:</span>
+                    <span className="font-mono font-bold text-emerald-300">
+                      {validationAlertModal.details.maxRadius} meter
+                    </span>
+                  </div>
+                )}
+                {validationAlertModal.details.currentTime && (
+                  <div className="flex justify-between items-center text-[11px] border-b border-slate-700/60 pb-1.5">
+                    <span className="text-slate-400">Jam Server Terkini:</span>
+                    <span className="font-mono font-bold text-white">
+                      {validationAlertModal.details.currentTime}
+                    </span>
+                  </div>
+                )}
+                {validationAlertModal.details.allowedSchedule && (
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-slate-400">Jadwal Yang Terdaftar:</span>
+                    <span className="font-bold text-amber-300">
+                      {validationAlertModal.details.allowedSchedule}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Action Button */}
+            <div className="pt-2 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setValidationAlertModal(null)}
+                className="btn-3d-hadir-yellow w-full max-w-xs text-center font-black text-xs sm:text-sm py-3 shadow-xl"
+              >
+                <span>[ SAYA MENGERTI / TUTUP ]</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

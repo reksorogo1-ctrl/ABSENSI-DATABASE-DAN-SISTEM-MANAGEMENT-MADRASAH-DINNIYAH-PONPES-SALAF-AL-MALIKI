@@ -7,6 +7,7 @@ import { Santri, Pengurus, AppSettings } from '../types';
 import { resolveLogos } from '../brand';
 import { LogoFrame } from './BrandLogos';
 import { saveVideoFile } from '../lib/videoStorage';
+import { KaligrafiSalafHeader } from './KaligrafiSalafHeader';
 
 type LoginMode = 'wali' | 'pengurus' | 'admin';
 
@@ -146,16 +147,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
               <LogoFrame src={logos.madrasah || logos.pondok} alt="Logo Pesantren & Madrasah" shape="round" size="lg" testId="login-logo-round" className="login-logo-slot shadow-2xl" />
             </div>
 
-            <div className="login-reveal" style={{ animationDelay: '0.4s' }}>
-              <div className="font-serif text-[#faebaa] text-3xl sm:text-5xl lg:text-6xl leading-[1.5] drop-shadow-[0_4px_18px_rgba(0,0,0,0.95)] text-gold-3d" style={{ fontFamily: "'Amiri', serif" }} dir="rtl">
-                المدرسة الدينية الإسلامية المالكي
-              </div>
-              <h1 className="mt-3 text-xl sm:text-2xl lg:text-3xl font-black tracking-[0.12em] text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]">
-                Madrasah Diniyah
-              </h1>
-              <p className="mt-1 text-sm sm:text-base lg:text-lg font-bold tracking-[0.1em] text-[#faebaa]">
-                {settings.nama_pesantren || 'Pondok Pesantren Salaf Al-Maliki Pekalongan'}
-              </p>
+            <div className="login-reveal w-full" style={{ animationDelay: '0.4s' }}>
+              <KaligrafiSalafHeader />
               <div className="mt-5 flex items-center justify-center gap-3">
                 <span className="h-px w-24 sm:w-36 bg-gradient-to-r from-transparent to-[#d4af37]" />
                 <span className="w-2.5 h-2.5 rotate-45 bg-[#d4af37] shadow-[0_0_12px_rgba(212,175,55,0.9)]" />
@@ -265,9 +258,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
                   <button type="button" data-testid="forgot-password-btn" onClick={() => setShowForgotPasswordModal(true)} className="text-[#faebaa] hover:text-white underline underline-offset-2 font-bold tracking-wider">Lupa Kata Sandi?</button>
                 </div>
 
-                <button type="submit" data-testid="login-submit-btn" className="login-gold-btn w-full py-4 rounded-xl text-black font-black text-sm sm:text-base tracking-[0.12em] flex items-center justify-center gap-3 hover:scale-[1.015] active:scale-95 transition-transform mt-2">
-                  <span>Masuk ke Sistem</span>
-                  <ArrowRight className="w-5 h-5 stroke-[3]" />
+                <button
+                  type="submit"
+                  data-testid="login-submit-btn"
+                  className="login-gold-btn w-full py-4 rounded-2xl text-black font-black text-sm sm:text-base tracking-[0.14em] flex items-center justify-center gap-3 mt-2"
+                >
+                  <span className="drop-shadow-sm font-black">Masuk ke Sistem</span>
+                  <ArrowRight className="w-5 h-5 stroke-[3] transition-transform duration-200 group-hover:translate-x-1" />
                 </button>
 
                 <button type="button" data-testid="google-login-btn" onClick={onGoogleSignIn} className="w-full py-3.5 rounded-xl bg-[#03140c]/80 hover:bg-[#052216] border border-[#d4af37]/55 text-white font-bold text-xs sm:text-sm tracking-[0.1em] flex items-center justify-center gap-3 shadow-md transition hover:scale-[1.01] active:scale-95">
@@ -300,10 +297,38 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
               <div className="text-[10px] font-bold tracking-[0.2em] text-[#faebaa]/85 mb-2">Media Sosial</div>
               <div className="flex items-center gap-2.5">
                 {[
-                  { href: 'https://instagram.com', Icon: Instagram, t: 'Instagram', id: 'social-instagram' },
-                  { href: 'https://youtube.com', Icon: Youtube, t: 'YouTube', id: 'social-youtube' },
-                  { href: 'https://tiktok.com', Icon: Music2, t: 'TikTok', id: 'social-tiktok' },
-                  { href: 'https://wa.me/6281234567890', Icon: MessageCircle, t: 'WhatsApp', id: 'social-whatsapp' },
+                  { 
+                    href: settings.social_instagram 
+                      ? (settings.social_instagram.startsWith('http') ? settings.social_instagram : `https://instagram.com/${settings.social_instagram.replace(/^@/, '')}`)
+                      : 'https://instagram.com', 
+                    Icon: Instagram, 
+                    t: 'Instagram', 
+                    id: 'social-instagram' 
+                  },
+                  { 
+                    href: settings.social_youtube 
+                      ? (settings.social_youtube.startsWith('http') ? settings.social_youtube : `https://youtube.com/${settings.social_youtube.startsWith('@') ? settings.social_youtube : '@' + settings.social_youtube}`)
+                      : 'https://youtube.com', 
+                    Icon: Youtube, 
+                    t: 'YouTube', 
+                    id: 'social-youtube' 
+                  },
+                  { 
+                    href: settings.social_tiktok 
+                      ? (settings.social_tiktok.startsWith('http') ? settings.social_tiktok : `https://tiktok.com/${settings.social_tiktok.startsWith('@') ? settings.social_tiktok : '@' + settings.social_tiktok}`)
+                      : 'https://tiktok.com', 
+                    Icon: Music2, 
+                    t: 'TikTok', 
+                    id: 'social-tiktok' 
+                  },
+                  { 
+                    href: settings.social_whatsapp 
+                      ? (settings.social_whatsapp.startsWith('http') ? settings.social_whatsapp : `https://wa.me/${settings.social_whatsapp.replace(/[^0-9]/g, '').replace(/^0/, '62')}`)
+                      : 'https://wa.me/6281234567890', 
+                    Icon: MessageCircle, 
+                    t: 'WhatsApp', 
+                    id: 'social-whatsapp' 
+                  },
                 ].map(({ href, Icon, t, id }) => (
                   <a key={t} href={href} target="_blank" rel="noreferrer" title={t} data-testid={id} className="w-10 h-10 rounded-full border-2 border-[#d4af37]/70 bg-[#031d12]/60 text-[#faebaa] hover:bg-[#d4af37] hover:text-black flex items-center justify-center transition shadow"><Icon className="w-4 h-4" /></a>
                 ))}

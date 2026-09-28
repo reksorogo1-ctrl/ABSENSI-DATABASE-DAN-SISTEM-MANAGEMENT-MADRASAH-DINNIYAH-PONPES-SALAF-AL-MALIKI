@@ -1,219 +1,221 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Santri, AbsensiSantriRecord, AbsensiGuruRecord, JadwalPelajaran, 
-  GuruPengajar, NadzhomRecord, NilaiUjianRecord, AppSettings, DashboardStats, AuthSession,
-  SyahriyahRecord, UangSakuRecord, KurikulumKitabRecord,
-  Pengurus, KalenderAkademikEvent, UjianSantriRecord, IzinMengajarRequest,
-  SilabusMemaknaiRecord
+  Santri, GuruPengajar, JadwalPelajaran, NadzhomRecord, NilaiUjianRecord, 
+  AbsensiSantriRecord, AbsensiGuruRecord, SyahriyahRecord, UangSakuRecord, 
+  KurikulumKitabRecord, Pengurus, KalenderAkademikEvent, UjianSantriRecord, 
+  IzinMengajarRequest, SilabusMemaknaiRecord, AppSettings, DashboardStats 
 } from './types';
-import { 
-  DEFAULT_SPREADSHEET_ID, DEFAULT_SETTINGS, INITIAL_SANTRI_LIST, 
-  INITIAL_GURU_LIST, INITIAL_JADWAL_LIST, INITIAL_NADZHOM_LIST, 
-  INITIAL_NILAI_LIST, INITIAL_ABSENSI_SANTRI, INITIAL_ABSENSI_GURU,
-  INITIAL_SYAHRIYAH_LIST, INITIAL_UANG_SAKU_LIST, INITIAL_KURIKULUM_LIST,
-  INITIAL_PENGURUS_LIST, INITIAL_KALENDER_AKADEMIK, INITIAL_UJIAN_SANTRI_LIST,
-  INITIAL_IZIN_MENGAJAR_LIST, INITIAL_SILABUS_MEMAKNAI
+import {
+  DEFAULT_SETTINGS,
+  INITIAL_SANTRI_LIST,
+  INITIAL_GURU_LIST,
+  INITIAL_JADWAL_LIST,
+  INITIAL_NADZHOM_LIST,
+  INITIAL_NILAI_LIST,
+  INITIAL_ABSENSI_SANTRI,
+  INITIAL_ABSENSI_GURU,
+  INITIAL_SYAHRIYAH_LIST,
+  INITIAL_UANG_SAKU_LIST,
+  INITIAL_KURIKULUM_LIST,
+  INITIAL_PENGURUS_LIST,
+  INITIAL_KALENDER_AKADEMIK,
+  INITIAL_UJIAN_SANTRI_LIST,
+  INITIAL_IZIN_MENGAJAR_LIST,
+  INITIAL_SILABUS_MEMAKNAI,
+  DEFAULT_SPREADSHEET_ID
 } from './data';
-import { GoogleSheetsService } from './sheetsService';
-import { googleSignIn, initAuth, getAccessToken, logoutGoogle } from './googleAuth';
-import { broadcastAttendanceUpdate, subscribeAttendanceUpdates } from './serverTime';
-import { AdminDashboard } from './components/AdminDashboard';
-import { WaliSantriPortal } from './components/WaliSantriPortal';
-import { PengurusDashboard } from './components/PengurusDashboard';
 import { IntroOpening } from './components/IntroOpening';
-import { CinematicIntro } from './components/CinematicIntro';
-import { DoorTransition } from './components/DoorTransition';
 import { LoginScreen } from './components/LoginScreen';
+import { DoorTransition } from './components/DoorTransition';
+import { AdminDashboard } from './components/AdminDashboard';
+import { PengurusDashboard } from './components/PengurusDashboard';
+import { WaliSantriPortal } from './components/WaliSantriPortal';
 import { GoogleSheetsModal } from './components/GoogleSheetsModal';
+import { GoogleSheetsService } from './sheetsService';
+import { googleSignIn, getCurrentGoogleUser } from './googleAuth';
+import { resolveActiveVideo } from './lib/videoStorage';
+import { initTablePhysicalParallax } from './lib/tableParallax';
 
 export default function App() {
-  // Intro Video State
+  // 1. INTRO OPENING STATE (Defaults to true on initial visit)
   const [showIntro, setShowIntro] = useState<boolean>(true);
+  const [showDoorTransition, setShowDoorTransition] = useState<boolean>(false);
+  const [introVideoSrc, setIntroVideoSrc] = useState<string>('/assets/intro_salaf_almaliki.mp4');
 
-  // Cinematic sliding-door transition played right after a successful login
-  const [showDoors, setShowDoors] = useState<boolean>(false);
-
-  // Session State
-  const [session, setSession] = useState<AuthSession | null>(null);
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
-
-  // Remember Me & Forgot Password State
-  const [rememberMe, setRememberMe] = useState<boolean>(true);
-  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState<boolean>(false);
-
-  // Google Sheets integration state
-  const [spreadsheetId, setSpreadsheetId] = useState<string>(() => {
-    return localStorage.getItem('sim_spreadsheet_id') || DEFAULT_SPREADSHEET_ID;
-  });
-  const [sheetsService] = useState<GoogleSheetsService>(() => new GoogleSheetsService(spreadsheetId));
-  const [isGoogleConnected, setIsGoogleConnected] = useState<boolean>(false);
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [showSheetsModal, setShowSheetsModal] = useState<boolean>(false);
-
-  // App Data (Local + Sheets Cache)
+  // 2. DATA STATES WITH LOCALSTORAGE BACKING
   const [settings, setSettings] = useState<AppSettings>(() => {
-    const saved = localStorage.getItem('sim_settings');
-    return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
-  });
-  const [santriList, setSantriList] = useState<Santri[]>(() => {
-    const saved = localStorage.getItem('sim_santri');
-    return saved ? JSON.parse(saved) : INITIAL_SANTRI_LIST;
-  });
-  const [guruList, setGuruList] = useState<GuruPengajar[]>(() => {
-    const saved = localStorage.getItem('sim_guru');
-    return saved ? JSON.parse(saved) : INITIAL_GURU_LIST;
-  });
-  const [jadwalList, setJadwalList] = useState<JadwalPelajaran[]>(() => {
-    const saved = localStorage.getItem('sim_jadwal');
-    return saved ? JSON.parse(saved) : INITIAL_JADWAL_LIST;
-  });
-  const [nadzhomList, setNadzhomList] = useState<NadzhomRecord[]>(() => {
-    const saved = localStorage.getItem('sim_nadzhom');
-    return saved ? JSON.parse(saved) : INITIAL_NADZHOM_LIST;
-  });
-  const [nilaiList, setNilaiList] = useState<NilaiUjianRecord[]>(() => {
-    const saved = localStorage.getItem('sim_nilai');
-    return saved ? JSON.parse(saved) : INITIAL_NILAI_LIST;
-  });
-  const [absensiSantriList, setAbsensiSantriList] = useState<AbsensiSantriRecord[]>(() => {
-    const saved = localStorage.getItem('sim_absensi_santri');
-    return saved ? JSON.parse(saved) : INITIAL_ABSENSI_SANTRI;
-  });
-  const [absensiGuruList, setAbsensiGuruList] = useState<AbsensiGuruRecord[]>(() => {
-    const saved = localStorage.getItem('sim_absensi_guru');
-    return saved ? JSON.parse(saved) : INITIAL_ABSENSI_GURU;
+    const saved = localStorage.getItem('almaliki_settings');
+    return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
   });
 
-  // New features data states (Syahriyah, Uang Saku, Kurikulum)
-  const [syahriyahList, setSyahriyahList] = useState<SyahriyahRecord[]>(() => {
-    const saved = localStorage.getItem('sim_syahriyah');
-    return saved ? JSON.parse(saved) : INITIAL_SYAHRIYAH_LIST;
-  });
-  const [uangSakuList, setUangSakuList] = useState<UangSakuRecord[]>(() => {
-    const saved = localStorage.getItem('sim_uang_saku');
-    return saved ? JSON.parse(saved) : INITIAL_UANG_SAKU_LIST;
-  });
-  const [kurikulumList, setKurikulumList] = useState<KurikulumKitabRecord[]>(() => {
-    const saved = localStorage.getItem('sim_kurikulum');
-    return saved ? JSON.parse(saved) : INITIAL_KURIKULUM_LIST;
-  });
-  const [silabusList, setSilabusList] = useState<SilabusMemaknaiRecord[]>(() => {
-    const saved = localStorage.getItem('sim_silabus');
-    return saved ? JSON.parse(saved) : INITIAL_SILABUS_MEMAKNAI;
-  });
-
-  // Pengurus, Kalender Akademik, & Ujian Santri Data States
-  const [pengurusList, setPengurusList] = useState<Pengurus[]>(() => {
-    const saved = localStorage.getItem('sim_pengurus');
-    return saved ? JSON.parse(saved) : INITIAL_PENGURUS_LIST;
-  });
-  const [kalenderList, setKalenderList] = useState<KalenderAkademikEvent[]>(() => {
-    const saved = localStorage.getItem('sim_kalender');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as KalenderAkademikEvent[];
-        const filtered = parsed.filter(e => 
-          e.id !== 'EVT-001' && 
-          e.id !== 'EVT-002' && 
-          !e.judul.toLowerCase().includes('rapat pleno dewan pengurus') &&
-          !e.judul.toLowerCase().includes('pekan ujian muhafadzoh')
-        );
-        localStorage.setItem('sim_kalender', JSON.stringify(filtered));
-        return filtered;
-      } catch {
-        return INITIAL_KALENDER_AKADEMIK;
-      }
-    }
-    return INITIAL_KALENDER_AKADEMIK;
-  });
-  const [ujianList, setUjianList] = useState<UjianSantriRecord[]>(() => {
-    const saved = localStorage.getItem('sim_ujian_kitab');
-    return saved ? JSON.parse(saved) : INITIAL_UJIAN_SANTRI_LIST;
-  });
-  const [izinMengajarList, setIzinMengajarList] = useState<IzinMengajarRequest[]>(() => {
-    const saved = localStorage.getItem('sim_izin_mengajar');
-    return saved ? JSON.parse(saved) : INITIAL_IZIN_MENGAJAR_LIST;
-  });
-
-  // Otomatis simpan rekap saat berganti hari dan reset harian ke nol (System Otomatis)
+  // Sync settings and intro video dynamically from IndexedDB / Storage / Option Panel
   useEffect(() => {
-    const checkDayChange = () => {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const lastActiveDate = localStorage.getItem('sim_active_dashboard_date');
-
-      if (!lastActiveDate) {
-        localStorage.setItem('sim_active_dashboard_date', todayStr);
-      } else if (lastActiveDate !== todayStr) {
-        // Hari telah berganti! Otomatis arsipkan data sebelumnya dan restart sesi harian aktif ke nol
-        try {
-          const currentGuru = JSON.parse(localStorage.getItem('sim_absensi_guru') || '[]');
-          const currentSantri = JSON.parse(localStorage.getItem('sim_absensi_santri') || '[]');
-          if (currentGuru.length > 0) {
-            const prevHistory = JSON.parse(localStorage.getItem('sim_rekap_guru_harian_history') || '[]');
-            localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify([...currentGuru, ...prevHistory]));
-          }
-          if (currentSantri.length > 0) {
-            const prevHistoryS = JSON.parse(localStorage.getItem('sim_rekap_santri_harian_history') || '[]');
-            localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify([...currentSantri, ...prevHistoryS]));
-          }
-        } catch {}
-
-        // Sesi absensi harian di-reset ke nol untuk hari baru
-        setAbsensiSantriList([]);
-        setAbsensiGuruList([]);
-        localStorage.setItem('sim_absensi_santri', JSON.stringify([]));
-        localStorage.setItem('sim_absensi_guru', JSON.stringify([]));
-        localStorage.setItem('sim_active_dashboard_date', todayStr);
-        localStorage.setItem('sim_last_active_date', todayStr);
+    const updateActiveVideo = async () => {
+      const active = await resolveActiveVideo('/assets/intro_salaf_almaliki.mp4');
+      if (active && active.src) {
+        setIntroVideoSrc(active.src);
       }
     };
 
-    checkDayChange();
-    const timer = setInterval(checkDayChange, 10000);
-    return () => clearInterval(timer);
+    updateActiveVideo();
+
+    const handleVideoSync = () => {
+      updateActiveVideo();
+    };
+
+    window.addEventListener('sim_video_updated', handleVideoSync);
+    window.addEventListener('storage', handleVideoSync);
+
+    return () => {
+      window.removeEventListener('sim_video_updated', handleVideoSync);
+      window.removeEventListener('storage', handleVideoSync);
+    };
+  }, [settings.intro_video_url]);
+
+  // Persist settings changes to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('almaliki_settings', JSON.stringify(settings));
+    } catch (e) {
+      console.warn('Failed to persist settings:', e);
+    }
+  }, [settings]);
+
+  // Initialize 3D Table Physical Cursor Parallax & Compression Controller
+  useEffect(() => {
+    return initTablePhysicalParallax();
   }, []);
 
-  // Login Form State
-  const [loginMode, setLoginMode] = useState<'wali' | 'pengurus' | 'admin'>('wali');
-  
-  // Wali Santri login uses NAMA SANTRI as identifier, and NIS as password (editable in Option Panel)
-  const [santriNamaInput, setSantriNamaInput] = useState<string>('Ahmad Fathan Mubina');
-  const [santriPasswordInput, setSantriPasswordInput] = useState<string>('S-1001');
-  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [santriList, setSantriList] = useState<Santri[]>(() => {
+    const saved = localStorage.getItem('almaliki_santri');
+    return saved ? JSON.parse(saved) : INITIAL_SANTRI_LIST;
+  });
 
-  // Pengurus login uses NAMA PENGURUS and PASSWORD (editable in Option Panel)
-  const [pengurusNamaInput, setPengurusNamaInput] = useState<string>('Ust. M. Rizqi Fadlillah, S.Pd.');
-  const [pengurusPasswordInput, setPengurusPasswordInput] = useState<string>('pengurus123');
+  const [guruList, setGuruList] = useState<GuruPengajar[]>(() => {
+    const saved = localStorage.getItem('almaliki_guru');
+    return saved ? JSON.parse(saved) : INITIAL_GURU_LIST;
+  });
 
-  // Admin login uses username 'admin' and fixed/editable password
-  const [adminUsername, setAdminUsername] = useState<string>('admin');
-  const [adminPassword, setAdminPassword] = useState<string>('salaf123');
+  const [jadwalList, setJadwalList] = useState<JadwalPelajaran[]>(() => {
+    const saved = localStorage.getItem('almaliki_jadwal');
+    return saved ? JSON.parse(saved) : INITIAL_JADWAL_LIST;
+  });
+
+  const [nadzhomList, setNadzhomList] = useState<NadzhomRecord[]>(() => {
+    const saved = localStorage.getItem('almaliki_nadzhom');
+    return saved ? JSON.parse(saved) : INITIAL_NADZHOM_LIST;
+  });
+
+  const [nilaiList, setNilaiList] = useState<NilaiUjianRecord[]>(() => {
+    const saved = localStorage.getItem('almaliki_nilai');
+    return saved ? JSON.parse(saved) : INITIAL_NILAI_LIST;
+  });
+
+  const [absensiSantriList, setAbsensiSantriList] = useState<AbsensiSantriRecord[]>(() => {
+    const saved = localStorage.getItem('almaliki_absensi_santri');
+    return saved ? JSON.parse(saved) : INITIAL_ABSENSI_SANTRI;
+  });
+
+  const [absensiGuruList, setAbsensiGuruList] = useState<AbsensiGuruRecord[]>(() => {
+    const saved = localStorage.getItem('almaliki_absensi_guru');
+    return saved ? JSON.parse(saved) : INITIAL_ABSENSI_GURU;
+  });
+
+  const [syahriyahList, setSyahriyahList] = useState<SyahriyahRecord[]>(() => {
+    const saved = localStorage.getItem('almaliki_syahriyah');
+    return saved ? JSON.parse(saved) : INITIAL_SYAHRIYAH_LIST;
+  });
+
+  const [uangSakuList, setUangSakuList] = useState<UangSakuRecord[]>(() => {
+    const saved = localStorage.getItem('almaliki_uang_saku');
+    return saved ? JSON.parse(saved) : INITIAL_UANG_SAKU_LIST;
+  });
+
+  const [kurikulumList, setKurikulumList] = useState<KurikulumKitabRecord[]>(() => {
+    const saved = localStorage.getItem('almaliki_kurikulum');
+    return saved ? JSON.parse(saved) : INITIAL_KURIKULUM_LIST;
+  });
+
+  const [pengurusList, setPengurusList] = useState<Pengurus[]>(() => {
+    const saved = localStorage.getItem('almaliki_pengurus');
+    return saved ? JSON.parse(saved) : INITIAL_PENGURUS_LIST;
+  });
+
+  const [kalenderList, setKalenderList] = useState<KalenderAkademikEvent[]>(() => {
+    const saved = localStorage.getItem('almaliki_kalender');
+    return saved ? JSON.parse(saved) : INITIAL_KALENDER_AKADEMIK;
+  });
+
+  const [ujianList, setUjianList] = useState<UjianSantriRecord[]>(() => {
+    const saved = localStorage.getItem('almaliki_ujian');
+    return saved ? JSON.parse(saved) : INITIAL_UJIAN_SANTRI_LIST;
+  });
+
+  const [izinList, setIzinList] = useState<IzinMengajarRequest[]>(() => {
+    const saved = localStorage.getItem('almaliki_izin');
+    return saved ? JSON.parse(saved) : INITIAL_IZIN_MENGAJAR_LIST;
+  });
+
+  const [silabusList, setSilabusList] = useState<SilabusMemaknaiRecord[]>(() => {
+    const saved = localStorage.getItem('almaliki_silabus');
+    return saved ? JSON.parse(saved) : INITIAL_SILABUS_MEMAKNAI;
+  });
+
+  // Google Sheets Service
+  const [spreadsheetId, setSpreadsheetId] = useState<string>(() => {
+    return localStorage.getItem('almaliki_sheet_id') || DEFAULT_SPREADSHEET_ID;
+  });
+  const sheetsService = useMemo(() => new GoogleSheetsService(spreadsheetId), [spreadsheetId]);
+  const [isSheetsModalOpen, setIsSheetsModalOpen] = useState<boolean>(false);
+  const [isGoogleConnected, setIsGoogleConnected] = useState<boolean>(false);
+  const [isSyncing] = useState<boolean>(false);
+
+  // Sync to localStorage
+  useEffect(() => { localStorage.setItem('almaliki_settings', JSON.stringify(settings)); }, [settings]);
+  useEffect(() => { localStorage.setItem('almaliki_santri', JSON.stringify(santriList)); }, [santriList]);
+  useEffect(() => { localStorage.setItem('almaliki_guru', JSON.stringify(guruList)); }, [guruList]);
+  useEffect(() => { localStorage.setItem('almaliki_jadwal', JSON.stringify(jadwalList)); }, [jadwalList]);
+  useEffect(() => { localStorage.setItem('almaliki_nadzhom', JSON.stringify(nadzhomList)); }, [nadzhomList]);
+  useEffect(() => { localStorage.setItem('almaliki_nilai', JSON.stringify(nilaiList)); }, [nilaiList]);
+  useEffect(() => { localStorage.setItem('almaliki_absensi_santri', JSON.stringify(absensiSantriList)); }, [absensiSantriList]);
+  useEffect(() => { localStorage.setItem('almaliki_absensi_guru', JSON.stringify(absensiGuruList)); }, [absensiGuruList]);
+  useEffect(() => { localStorage.setItem('almaliki_syahriyah', JSON.stringify(syahriyahList)); }, [syahriyahList]);
+  useEffect(() => { localStorage.setItem('almaliki_uang_saku', JSON.stringify(uangSakuList)); }, [uangSakuList]);
+  useEffect(() => { localStorage.setItem('almaliki_kurikulum', JSON.stringify(kurikulumList)); }, [kurikulumList]);
+  useEffect(() => { localStorage.setItem('almaliki_pengurus', JSON.stringify(pengurusList)); }, [pengurusList]);
+  useEffect(() => { localStorage.setItem('almaliki_kalender', JSON.stringify(kalenderList)); }, [kalenderList]);
+  useEffect(() => { localStorage.setItem('almaliki_ujian', JSON.stringify(ujianList)); }, [ujianList]);
+  useEffect(() => { localStorage.setItem('almaliki_izin', JSON.stringify(izinList)); }, [izinList]);
+  useEffect(() => { localStorage.setItem('almaliki_silabus', JSON.stringify(silabusList)); }, [silabusList]);
+  useEffect(() => { localStorage.setItem('almaliki_sheet_id', spreadsheetId); }, [spreadsheetId]);
+
+  // 3. AUTHENTICATION & LOGIN FORM STATES
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [userRole, setUserRole] = useState<'admin' | 'pengurus' | 'wali' | null>(null);
+  const [currentPengurus, setCurrentPengurus] = useState<Pengurus | null>(null);
+  const [currentSantri, setCurrentSantri] = useState<Santri | null>(null);
+
+  const [loginMode, setLoginMode] = useState<'wali' | 'pengurus' | 'admin'>('admin');
   const [loginError, setLoginError] = useState<string>('');
+  const [santriNamaInput, setSantriNamaInput] = useState<string>('');
+  const [santriPasswordInput, setSantriPasswordInput] = useState<string>('');
+  const [pengurusNamaInput, setPengurusNamaInput] = useState<string>('');
+  const [pengurusPasswordInput, setPengurusPasswordInput] = useState<string>('');
+  const [adminUsername, setAdminUsername] = useState<string>('salaf');
+  const [adminPassword, setAdminPassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [rememberMe, setRememberMe] = useState<boolean>(true);
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState<boolean>(false);
+  const [isDoorOpened, setIsDoorOpened] = useState<boolean>(true);
 
-  // Track Auth state with Firebase / Google
-  useEffect(() => {
-    sheetsService.setSpreadsheetId(spreadsheetId);
-    localStorage.setItem('sim_spreadsheet_id', spreadsheetId);
-  }, [spreadsheetId, sheetsService]);
+  // Active Admin Dashboard Tab
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
 
-  useEffect(() => {
-    initAuth(
-      (_user, token) => {
-        if (token) setIsGoogleConnected(true);
-      },
-      () => {
-        setIsGoogleConnected(false);
-      }
-    );
-  }, []);
-
-  // Compute Dashboard Stats dynamically
-  const stats: DashboardStats = React.useMemo(() => {
+  // Stats calculation
+  const stats: DashboardStats = useMemo(() => {
     const totalSantri = santriList.length;
-    // Kolom data ustadz: menghitung ketika ada nama yang sama dihitung satu orang!
-    const uniqueGuruNames = new Set(guruList.map(g => g.nama.trim().toLowerCase()));
-    const totalGuru = uniqueGuruNames.size;
-
+    const totalGuru = guruList.length;
+    
     const hadirSantri = absensiSantriList.filter(a => a.status === 'Hadir').length;
     const izinSantri = absensiSantriList.filter(a => a.status === 'Izin').length;
     const sakitSantri = absensiSantriList.filter(a => a.status === 'Sakit').length;
@@ -224,24 +226,16 @@ export default function App() {
     const izinGuru = absensiGuruList.filter(a => a.status === 'Izin').length;
     const alphaGuru = absensiGuruList.filter(a => a.status === 'Alpha').length;
 
-    const totalAbsensiSantri = absensiSantriList.length;
-    const totalAbsensiGuru = absensiGuruList.length;
-
-    const percentSantri = totalAbsensiSantri ? Math.round((hadirSantri / totalAbsensiSantri) * 100) : 0;
-    const percentGuru = totalAbsensiGuru ? Math.round((hadirGuru / totalAbsensiGuru) * 100) : 0;
-    const percentKeterlambatanGuru = totalAbsensiGuru ? Math.round((terlambatGuru / totalAbsensiGuru) * 100) : 0;
-    const percentIzinGuru = totalAbsensiGuru ? Math.round((izinGuru / totalAbsensiGuru) * 100) : 0;
+    const percentSantri = totalSantri > 0 ? Math.round((hadirSantri / Math.max(absensiSantriList.length, 1)) * 100) : 0;
+    const percentGuru = totalGuru > 0 ? Math.round((hadirGuru / Math.max(absensiGuruList.length, 1)) * 100) : 0;
 
     return {
       totalSantri,
       totalGuru,
-      totalAbsensiSantri,
-      totalAbsensiGuru,
-      percentSantri,
-      percentGuru,
-      percentKeterlambatanGuru,
-      percentIzinGuru,
-      percentAlphaGuru: totalAbsensiGuru ? Math.round((alphaGuru / totalAbsensiGuru) * 100) : 0,
+      totalAbsensiSantri: absensiSantriList.length,
+      totalAbsensiGuru: absensiGuruList.length,
+      percentSantri: Math.min(percentSantri, 100),
+      percentGuru: Math.min(percentGuru, 100),
       hadirSantri,
       izinSantri,
       sakitSantri,
@@ -250,695 +244,164 @@ export default function App() {
       terlambatGuru,
       izinGuru,
       alphaGuru,
-      kehadiranSantriHariIni: percentSantri,
-      kehadiranGuruHariIni: percentGuru,
-      keterlambatanGuru: percentKeterlambatanGuru,
-      rekapSantri: {
-        hadir: hadirSantri,
-        izin: izinSantri,
-        sakit: sakitSantri,
-        alpha: alphaSantri
-      },
-      rekapGuru: {
-        hadir: hadirGuru,
-        terlambat: terlambatGuru,
-        izin: izinGuru,
-        alpha: alphaGuru
-      },
+      kehadiranSantriHariIni: hadirSantri,
+      kehadiranGuruHariIni: hadirGuru,
+      rekapSantri: { hadir: hadirSantri, izin: izinSantri, sakit: sakitSantri, alpha: alphaSantri },
+      rekapGuru: { hadir: hadirGuru, terlambat: terlambatGuru, izin: izinGuru, alpha: alphaGuru },
       history: [
-        { tanggal: '16/09', hadirSantri: 86, hadirGuru: 24, percentSantri: 94, percentGuru: 92 },
-        { tanggal: '17/09', hadirSantri: 85, hadirGuru: 23, percentSantri: 93, percentGuru: 90 },
-        { tanggal: '18/09', hadirSantri: 87, hadirGuru: 25, percentSantri: 96, percentGuru: 95 },
-        { tanggal: '19/09', hadirSantri: 84, hadirGuru: 24, percentSantri: 92, percentGuru: 92 },
-        { tanggal: '20/09', hadirSantri: 88, hadirGuru: 25, percentSantri: 97, percentGuru: 96 },
-        { tanggal: '21/09', hadirSantri: 85, hadirGuru: 24, percentSantri: 93, percentGuru: 92 },
-        { tanggal: '22/09', hadirSantri: 86, hadirGuru: 25, percentSantri: 95, percentGuru: 96 }
+        { tanggal: 'Hari Ini', hadirSantri, hadirGuru, percentSantri, percentGuru }
       ]
     };
   }, [santriList, guruList, absensiSantriList, absensiGuruList]);
 
-  // Sync data from Google Sheets central file
-  const syncWithGoogleSheets = async () => {
-    setIsSyncing(true);
-    try {
-      const token = getAccessToken();
-      if (!token) {
-        await googleSignIn();
-      }
-
-      await sheetsService.initSpreadsheetSchema();
-
-      const [remoteSantri, remoteGuru, remoteJadwal, remoteNadzhom, remoteNilai, remoteSettings] = await Promise.all([
-        sheetsService.getSantriList(),
-        sheetsService.getGuruList(),
-        sheetsService.getJadwalList(),
-        sheetsService.getNadzhomList(),
-        sheetsService.getNilaiList(),
-        sheetsService.getSettings()
-      ]);
-
-      if (remoteSantri && remoteSantri.length > 0) {
-        setSantriList(remoteSantri);
-        localStorage.setItem('sim_santri', JSON.stringify(remoteSantri));
-      }
-      if (remoteGuru && remoteGuru.length > 0) {
-        setGuruList(remoteGuru);
-        localStorage.setItem('sim_guru', JSON.stringify(remoteGuru));
-      }
-      if (remoteJadwal && remoteJadwal.length > 0) {
-        setJadwalList(remoteJadwal);
-        localStorage.setItem('sim_jadwal', JSON.stringify(remoteJadwal));
-      }
-      if (remoteNadzhom && remoteNadzhom.length > 0) {
-        setNadzhomList(remoteNadzhom);
-        localStorage.setItem('sim_nadzhom', JSON.stringify(remoteNadzhom));
-      }
-      if (remoteNilai && remoteNilai.length > 0) {
-        setNilaiList(remoteNilai);
-        localStorage.setItem('sim_nilai', JSON.stringify(remoteNilai));
-      }
-      if (remoteSettings) {
-        setSettings((prev: AppSettings) => ({ ...prev, ...remoteSettings }));
-        localStorage.setItem('sim_settings', JSON.stringify({ ...settings, ...remoteSettings }));
-      }
-
-      setIsGoogleConnected(true);
-      alert('Sinkronisasi Google Sheets Master Berhasil! Seluruh data angkatan santri dan guru telah diperbarui.');
-    } catch (err: any) {
-      console.error('Failed to sync with sheets:', err);
-      alert('Koneksi lokal aktif. Jika ingin menyinkronkan ke Google Sheets pusat, pastikan izin Google Workspace aktif.');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handleDataImported = (imported: {
-    santriList?: Santri[];
-    guruList?: GuruPengajar[];
-    jadwalList?: JadwalPelajaran[];
-    nadzhomList?: NadzhomRecord[];
-    nilaiList?: NilaiUjianRecord[];
-    absensiSantriList?: AbsensiSantriRecord[];
-    absensiGuruList?: AbsensiGuruRecord[];
-    syahriyahList?: SyahriyahRecord[];
-    settings?: Partial<AppSettings>;
-  }) => {
-    if (imported.santriList && imported.santriList.length > 0) {
-      setSantriList(imported.santriList);
-      localStorage.setItem('sim_santri', JSON.stringify(imported.santriList));
-    }
-    if (imported.guruList && imported.guruList.length > 0) {
-      setGuruList(imported.guruList);
-      localStorage.setItem('sim_guru', JSON.stringify(imported.guruList));
-    }
-    if (imported.jadwalList && imported.jadwalList.length > 0) {
-      setJadwalList(imported.jadwalList);
-      localStorage.setItem('sim_jadwal', JSON.stringify(imported.jadwalList));
-    }
-    if (imported.nadzhomList && imported.nadzhomList.length > 0) {
-      setNadzhomList(imported.nadzhomList);
-      localStorage.setItem('sim_nadzhom', JSON.stringify(imported.nadzhomList));
-    }
-    if (imported.nilaiList && imported.nilaiList.length > 0) {
-      setNilaiList(imported.nilaiList);
-      localStorage.setItem('sim_nilai', JSON.stringify(imported.nilaiList));
-    }
-    if (imported.absensiSantriList && imported.absensiSantriList.length > 0) {
-      setAbsensiSantriList(imported.absensiSantriList);
-      localStorage.setItem('sim_absensi_santri', JSON.stringify(imported.absensiSantriList));
-    }
-    if (imported.absensiGuruList && imported.absensiGuruList.length > 0) {
-      setAbsensiGuruList(imported.absensiGuruList);
-      localStorage.setItem('sim_absensi_guru', JSON.stringify(imported.absensiGuruList));
-    }
-    if (imported.syahriyahList && imported.syahriyahList.length > 0) {
-      setSyahriyahList(imported.syahriyahList);
-      localStorage.setItem('sim_syahriyah', JSON.stringify(imported.syahriyahList));
-    }
-    if (imported.settings) {
-      setSettings(prev => {
-        const updated = { ...prev, ...imported.settings };
-        localStorage.setItem('sim_settings', JSON.stringify(updated));
-        return updated;
-      });
-    }
-  };
-
-  const handleGoogleLoginFlow = async () => {
-    try {
-      const res = await googleSignIn();
-      if (res?.user) {
-        setIsGoogleConnected(true);
-        setShowDoors(true);
-        setSession({
-          role: 'admin',
-          identifier: res.user.email || res.user.displayName || 'admin_google'
-        });
-      }
-    } catch (e: any) {
-      console.error('Google sign in error:', e);
-      alert(e?.message || 'Gagal login dengan akun Google.');
-    }
-  };
-
-  // LOGIN LOGIC:
-  // Wali Santri: Username = NAMA SANTRI, Password = NIS SANTRI (bisa diatur via Option Panel)
+  // Login Handler
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
 
-    if (loginMode === 'wali') {
-      const cleanName = santriNamaInput.trim().toLowerCase();
-      const cleanPass = santriPasswordInput.trim();
+    if (loginMode === 'admin') {
+      const validUsernames = ['admin', 'salaf', 'administrator'];
+      const validAdmin = validUsernames.includes(adminUsername.trim().toLowerCase());
+      const validPass = adminPassword === (settings.password_admin || 'salaf123');
 
-      // Find santri by name (or NIS if entered in name field)
-      const found = santriList.find(s => 
-        s.nama.toLowerCase().trim() === cleanName || 
-        s.id.toLowerCase().trim() === cleanName
-      );
-
-      if (!found) {
-        setLoginError(`Santri dengan nama "${santriNamaInput}" tidak ditemukan dalam sistem madrasah. Pastikan penulisan nama lengkap sesuai.`);
-        return;
-      }
-
-      // Check password: match santri.password (custom) or default to santri.id (NIS)
-      const expectedPassword = (found.password || found.id).trim();
-      const cleanExpected = expectedPassword.toLowerCase();
-      const cleanInput = cleanPass.toLowerCase();
-
-      const isPasswordMatch = 
-        cleanInput === cleanExpected ||
-        cleanInput === found.id.toLowerCase() ||
-        cleanInput === cleanExpected.replace(/^s-/, '') ||
-        cleanInput === found.id.toLowerCase().replace(/^s-/, '');
-
-      if (!isPasswordMatch) {
-        setLoginError(`Password / NIS untuk santri "${found.nama}" tidak sesuai. (Password default adalah NIS santri: ${found.id}. Dapat diatur di Option Panel).`);
-        return;
-      }
-
-      // Logged in as Wali Santri with strict Row-Level Security
-      setShowDoors(true);
-      setSession({
-        role: 'wali_santri',
-        identifier: found.id,
-        santriData: found
-      });
-    } else if (loginMode === 'pengurus') {
-      // Pengurus Login
-      const cleanName = pengurusNamaInput.trim().toLowerCase();
-      const cleanPass = pengurusPasswordInput.trim();
-
-      const found = pengurusList.find(p => 
-        p.nama.toLowerCase().trim() === cleanName || 
-        p.id.toLowerCase().trim() === cleanName ||
-        p.nama.toLowerCase().includes(cleanName)
-      );
-
-      if (!found) {
-        setLoginError(`Pengurus dengan nama "${pengurusNamaInput}" tidak ditemukan. Pastikan nama pengurus sesuai daftar.`);
-        return;
-      }
-
-      const expectedPassword = (found.password || 'pengurus123').trim();
-      if (cleanPass !== expectedPassword) {
-        setLoginError(`Kata sandi untuk pengurus "${found.nama}" tidak sesuai. (Sandi saat ini: ${expectedPassword}. Dapat diatur di Option Panel).`);
-        return;
-      }
-
-      // Logged in as Pengurus
-      setShowDoors(true);
-      setSession({
-        role: 'pengurus',
-        identifier: found.id,
-        pengurusData: found
-      });
-    } else {
-      // Admin Login
-      const validAdminPass = settings.password_admin || 'salaf123';
-      if (adminUsername.trim() === 'admin' && adminPassword === validAdminPass) {
-        setShowDoors(true);
-        setSession({
-          role: 'admin',
-          identifier: 'admin'
-        });
+      if (validAdmin && validPass) {
+        setShowDoorTransition(true);
+        setIsDoorOpened(false);
+        setUserRole('admin');
+        setIsLoggedIn(true);
+        setLoginError('');
       } else {
-        setLoginError(`Username atau password admin salah. (Kata sandi saat ini: ${validAdminPass})`);
+        setLoginError('Username atau kata sandi Administrator tidak sesuai!');
+      }
+    } else if (loginMode === 'pengurus') {
+      const found = pengurusList.find(p => 
+        p.nama.trim().toLowerCase() === pengurusNamaInput.trim().toLowerCase() ||
+        p.id.trim().toLowerCase() === pengurusNamaInput.trim().toLowerCase()
+      );
+
+      if (!found) {
+        setLoginError('Nama Pengurus / Ustadz tidak ditemukan dalam daftar!');
+        return;
+      }
+
+      if (pengurusPasswordInput === found.password || pengurusPasswordInput === 'pengurus123' || pengurusPasswordInput === settings.password_admin) {
+        setShowDoorTransition(true);
+        setIsDoorOpened(false);
+        setCurrentPengurus(found);
+        setUserRole('pengurus');
+        setIsLoggedIn(true);
+        setLoginError('');
+      } else {
+        setLoginError('Kata sandi Pengurus / Ustadz keliru!');
+      }
+    } else if (loginMode === 'wali') {
+      const found = santriList.find(s => 
+        s.nama.trim().toLowerCase() === santriNamaInput.trim().toLowerCase() ||
+        s.id.trim().toLowerCase() === santriNamaInput.trim().toLowerCase()
+      );
+
+      if (!found) {
+        setLoginError('Nama Santri atau NIS tidak ditemukan!');
+        return;
+      }
+
+      const expectedPass = found.password || found.id;
+      if (santriPasswordInput === expectedPass || santriPasswordInput === found.id.replace('S-', '')) {
+        setShowDoorTransition(true);
+        setIsDoorOpened(false);
+        setCurrentSantri(found);
+        setUserRole('wali');
+        setIsLoggedIn(true);
+        setLoginError('');
+      } else {
+        setLoginError('Kata sandi Wali Santri keliru! (Gunakan NIS Santri)');
       }
     }
   };
 
   const handleLogout = () => {
-    setSession(null);
+    setIsLoggedIn(false);
+    setIsDoorOpened(true);
+    setUserRole(null);
+    setCurrentPengurus(null);
+    setCurrentSantri(null);
+    setAdminPassword('');
+    setPengurusPasswordInput('');
+    setSantriPasswordInput('');
+    setLoginError('');
   };
 
-  // Mutator actions
-  const handleSaveAbsensiSantri = async (records: AbsensiSantriRecord[]) => {
-    setAbsensiSantriList(prev => {
-      const keys = new Set(records.map(r => `${r.tanggal}_${r.idSantri || r.nama}`));
-      const filtered = prev.filter(p => !keys.has(`${p.tanggal}_${p.idSantri || p.nama}`));
-      const updated = [...records, ...filtered];
-      try {
-        localStorage.setItem('sim_absensi_santri', JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
-
-    // Broadcast update secara real-time ke Dashboard Admin
-    broadcastAttendanceUpdate('santri', records, session?.pengurusData?.nama || 'Pengurus');
-
-    if (isGoogleConnected) {
-      try {
-        await sheetsService.saveAbsensiSantriToSheet(records);
-      } catch (err) {
-        console.warn('Could not write directly to sheets:', err);
-      }
-    }
+  const handleSyncWithSheets = () => {
+    setIsSheetsModalOpen(true);
   };
 
-  const handleSaveAbsensiGuru = async (records: AbsensiGuruRecord[]) => {
-    setAbsensiGuruList(prev => {
-      const keys = new Set(records.map(r => `${r.tanggal}_${r.nama}_${r.kelas}_${r.jamKe}`));
-      const filtered = prev.filter(p => !keys.has(`${p.tanggal}_${p.nama}_${p.kelas}_${p.jamKe}`));
-      const updated = [...records, ...filtered];
-      try {
-        localStorage.setItem('sim_absensi_guru', JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
+  return (
+    <div className="w-full min-h-screen bg-[#010e08] text-white font-sans selection:bg-[#d4af37] selection:text-black">
+      {/* 1. INTRO OPENING SCREEN (With "MASUK" Button) */}
+      {showIntro && (
+        <IntroOpening
+          videoSrc={introVideoSrc}
+          appName={settings.nama_pondok}
+          onComplete={() => setShowIntro(false)}
+        />
+      )}
 
-    // Broadcast update secara real-time ke Dashboard Admin
-    broadcastAttendanceUpdate('guru', records, session?.pengurusData?.nama || 'Ustadz / Pengurus');
+      {/* 2. DOOR SLIDING TRANSITION ON SUCCESSFUL AUTH */}
+      {showDoorTransition && (
+        <DoorTransition
+          onDoorsParting={() => setIsDoorOpened(true)}
+          onComplete={() => {
+            setShowDoorTransition(false);
+            setIsDoorOpened(true);
+          }}
+          settings={settings}
+        />
+      )}
 
-    if (isGoogleConnected) {
-      try {
-        await sheetsService.saveAbsensiGuruToSheet(records);
-      } catch (err) {
-        console.warn('Could not write directly to sheets:', err);
-      }
-    }
-  };
+      {/* 3. LOGIN DASHBOARD (When not yet logged in) */}
+      {!isLoggedIn && !showIntro && (
+        <LoginScreen
+          settings={settings}
+          santriList={santriList}
+          pengurusList={pengurusList}
+          loginMode={loginMode}
+          setLoginMode={setLoginMode}
+          loginError={loginError}
+          setLoginError={setLoginError}
+          santriNamaInput={santriNamaInput}
+          setSantriNamaInput={setSantriNamaInput}
+          santriPasswordInput={santriPasswordInput}
+          setSantriPasswordInput={setSantriPasswordInput}
+          pengurusNamaInput={pengurusNamaInput}
+          setPengurusNamaInput={setPengurusNamaInput}
+          pengurusPasswordInput={pengurusPasswordInput}
+          setPengurusPasswordInput={setPengurusPasswordInput}
+          adminUsername={adminUsername}
+          setAdminUsername={setAdminUsername}
+          adminPassword={adminPassword}
+          setAdminPassword={setAdminPassword}
+          showPassword={showPassword}
+          setShowPassword={setShowPassword}
+          rememberMe={rememberMe}
+          setRememberMe={setRememberMe}
+          showForgotPasswordModal={showForgotPasswordModal}
+          setShowForgotPasswordModal={setShowForgotPasswordModal}
+          onSubmit={handleLoginSubmit}
+          onGoogleSignIn={async () => {
+            await googleSignIn();
+            setIsGoogleConnected(Boolean(getCurrentGoogleUser()));
+          }}
+          onSyncSheets={handleSyncWithSheets}
+          onReplayIntro={() => setShowIntro(true)}
+        />
+      )}
 
-  // Sinkronisasi data presensi real-time lintas tab & komponen
-  useEffect(() => {
-    const unsub = subscribeAttendanceUpdates((payload) => {
-      if (payload.type === 'guru' && payload.records?.length) {
-        setAbsensiGuruList(prev => {
-          const keys = new Set(payload.records.map((r: any) => `${r.tanggal}_${r.nama}_${r.kelas}_${r.jamKe}`));
-          const filtered = prev.filter(p => !keys.has(`${p.tanggal}_${p.nama}_${p.kelas}_${p.jamKe}`));
-          return [...payload.records, ...filtered];
-        });
-      } else if (payload.type === 'santri' && payload.records?.length) {
-        setAbsensiSantriList(prev => {
-          const keys = new Set(payload.records.map((r: any) => `${r.tanggal}_${r.idSantri || r.nama}`));
-          const filtered = prev.filter(p => !keys.has(`${p.tanggal}_${p.idSantri || p.nama}`));
-          return [...payload.records, ...filtered];
-        });
-      }
-    });
-    return () => unsub();
-  }, []);
-
-  const handleSaveNewSantri = (newSantri: Santri) => {
-    const updated = [newSantri, ...santriList];
-    setSantriList(updated);
-    localStorage.setItem('sim_santri', JSON.stringify(updated));
-  };
-
-  const handleUpdateSantriProfile = (updatedSantri: Santri) => {
-    const updated = santriList.map(s => s.id === updatedSantri.id ? updatedSantri : s);
-    setSantriList(updated);
-    localStorage.setItem('sim_santri', JSON.stringify(updated));
-    if (session?.role === 'wali_santri' && session.identifier === updatedSantri.id) {
-      setSession({
-        ...session,
-        santriData: updatedSantri
-      });
-    }
-  };
-
-  const handleDeleteSantri = (id: string) => {
-    const target = santriList.find(s => s.id === id);
-    const updated = santriList.filter(s => s.id !== id);
-    setSantriList(updated);
-    localStorage.setItem('sim_santri', JSON.stringify(updated));
-
-    // Also remove from active session if logged in as that santri
-    if (session?.role === 'wali_santri' && session.identifier === id) {
-      setSession(null);
-    }
-    alert(`Data santri "${target?.nama || id}" telah berhasil dihapus dari database pondok pesantren.`);
-  };
-
-  const handleSaveNewGuru = (newGuru: GuruPengajar) => {
-    const updated = [newGuru, ...guruList];
-    setGuruList(updated);
-    localStorage.setItem('sim_guru', JSON.stringify(updated));
-  };
-
-  const handleDeleteGuru = (idOrName: string) => {
-    const target = guruList.find(g => (g.id && g.id === idOrName) || g.nama === idOrName);
-    const updated = guruList.filter(g => (g.id ? g.id !== idOrName : true) && g.nama !== idOrName);
-    setGuruList(updated);
-    localStorage.setItem('sim_guru', JSON.stringify(updated));
-    alert(`Data ustadz / guru pengajar "${target?.nama || idOrName}" telah berhasil dihapus secara manual.`);
-  };
-
-  const handleSaveSilabus = (rec: SilabusMemaknaiRecord) => {
-    const existingIdx = silabusList.findIndex(s => s.id === rec.id || (s.namaKitab.toLowerCase() === rec.namaKitab.toLowerCase() && s.kelas === rec.kelas && s.semester === rec.semester));
-    let updated: SilabusMemaknaiRecord[];
-    if (existingIdx >= 0) {
-      updated = [...silabusList];
-      updated[existingIdx] = rec;
-    } else {
-      updated = [rec, ...silabusList];
-    }
-    setSilabusList(updated);
-    localStorage.setItem('sim_silabus', JSON.stringify(updated));
-
-    // Update ustadz / guru mapping if needed
-    if (rec.ustadzPengampu) {
-      const guruIdx = guruList.findIndex(g => g.nama.toLowerCase().trim() === rec.ustadzPengampu.toLowerCase().trim() && g.kelas === rec.kelas);
-      if (guruIdx >= 0) {
-        const upGuru = [...guruList];
-        upGuru[guruIdx] = { ...upGuru[guruIdx], kitab: rec.namaKitab };
-        setGuruList(upGuru);
-        localStorage.setItem('sim_guru', JSON.stringify(upGuru));
-      }
-    }
-  };
-
-  const handleDeleteSilabus = (id: string) => {
-    const updated = silabusList.filter(s => s.id !== id);
-    setSilabusList(updated);
-    localStorage.setItem('sim_silabus', JSON.stringify(updated));
-  };
-
-  const handleSaveNewJadwal = (newJadwal: JadwalPelajaran) => {
-    const updated = [...jadwalList, newJadwal];
-    setJadwalList(updated);
-    localStorage.setItem('sim_jadwal', JSON.stringify(updated));
-  };
-
-  const handleSaveNadzhom = (rec: NadzhomRecord) => {
-    const updated = [rec, ...nadzhomList];
-    setNadzhomList(updated);
-    localStorage.setItem('sim_nadzhom', JSON.stringify(updated));
-  };
-
-  const handleSaveNilai = (rec: NilaiUjianRecord) => {
-    const updated = [rec, ...nilaiList];
-    setNilaiList(updated);
-    localStorage.setItem('sim_nilai', JSON.stringify(updated));
-  };
-
-  const handleSaveSyahriyah = (rec: SyahriyahRecord) => {
-    const existingIdx = syahriyahList.findIndex(s => s.id === rec.id);
-    let updated: SyahriyahRecord[];
-    if (existingIdx >= 0) {
-      updated = [...syahriyahList];
-      updated[existingIdx] = rec;
-    } else {
-      updated = [rec, ...syahriyahList];
-    }
-    setSyahriyahList(updated);
-    localStorage.setItem('sim_syahriyah', JSON.stringify(updated));
-  };
-
-  const handleSaveUangSaku = (rec: UangSakuRecord) => {
-    const updated = [rec, ...uangSakuList];
-    setUangSakuList(updated);
-    localStorage.setItem('sim_uang_saku', JSON.stringify(updated));
-
-    // Update santri's live balance
-    const target = santriList.find(s => s.id === rec.idSantri);
-    if (target) {
-      handleUpdateSantriProfile({ ...target, saldoUangSaku: rec.saldoSetelah });
-    }
-  };
-
-  const handleSaveKurikulum = (rec: KurikulumKitabRecord) => {
-    const existingIdx = kurikulumList.findIndex(k => k.id === rec.id);
-    let updated: KurikulumKitabRecord[];
-    if (existingIdx >= 0) {
-      updated = [...kurikulumList];
-      updated[existingIdx] = rec;
-    } else {
-      updated = [...kurikulumList, rec];
-    }
-    setKurikulumList(updated);
-    localStorage.setItem('sim_kurikulum', JSON.stringify(updated));
-  };
-
-  const handleDeleteKurikulum = (id: string) => {
-    const updated = kurikulumList.filter(k => k.id !== id);
-    setKurikulumList(updated);
-    localStorage.setItem('sim_kurikulum', JSON.stringify(updated));
-  };
-
-  // Pengurus Handlers
-  const handleSavePengurus = (newP: Pengurus) => {
-    const updated = [newP, ...pengurusList];
-    setPengurusList(updated);
-    localStorage.setItem('sim_pengurus', JSON.stringify(updated));
-  };
-
-  const handleUpdatePengurus = (upP: Pengurus) => {
-    const updated = pengurusList.map(p => p.id === upP.id ? upP : p);
-    setPengurusList(updated);
-    localStorage.setItem('sim_pengurus', JSON.stringify(updated));
-    if (session?.role === 'pengurus' && session.identifier === upP.id) {
-      setSession({
-        ...session,
-        pengurusData: upP
-      });
-    }
-  };
-
-  // Kalender Akademik Handlers
-  const handleSaveKalender = (evt: KalenderAkademikEvent) => {
-    const existingIdx = kalenderList.findIndex(e => e.id === evt.id);
-    let updated: KalenderAkademikEvent[];
-    if (existingIdx >= 0) {
-      updated = [...kalenderList];
-      updated[existingIdx] = evt;
-    } else {
-      updated = [evt, ...kalenderList];
-    }
-    setKalenderList(updated);
-    localStorage.setItem('sim_kalender', JSON.stringify(updated));
-  };
-
-  const handleDeleteKalender = (id: string) => {
-    const updated = kalenderList.filter(e => e.id !== id);
-    setKalenderList(updated);
-    localStorage.setItem('sim_kalender', JSON.stringify(updated));
-  };
-
-  // Ujian Santri Handlers
-  const handleSaveUjianSantri = (rec: UjianSantriRecord) => {
-    const existingIdx = ujianList.findIndex(u => u.id === rec.id || (u.idSantri === rec.idSantri && u.semester === rec.semester));
-    let updated: UjianSantriRecord[];
-    if (existingIdx >= 0) {
-      updated = [...ujianList];
-      updated[existingIdx] = rec;
-    } else {
-      updated = [rec, ...ujianList];
-    }
-    setUjianList(updated);
-    localStorage.setItem('sim_ujian_kitab', JSON.stringify(updated));
-
-    // Also sync directly into santriList so it immediately reflects in Wali Santri profile column
-    const target = santriList.find(s => s.id === rec.idSantri);
-    if (target) {
-      handleUpdateSantriProfile({
-        ...target,
-        nilaiKoreksianKitab: rec.nilaiKoreksianKitab ?? target.nilaiKoreksianKitab,
-        nilaiMuhafadzoh: rec.nilaiMuhafadzoh ?? target.nilaiMuhafadzoh,
-        nilaiBacaKitab: rec.nilaiBacaKitab ?? target.nilaiBacaKitab,
-        predikatKoreksianKitab: rec.predikatKoreksianKitab || target.predikatKoreksianKitab,
-        predikatMuhafadzoh: rec.predikatMuhafadzoh || target.predikatMuhafadzoh,
-        predikatBacaKitab: rec.predikatBacaKitab || target.predikatBacaKitab,
-        ustadzPengujiKitab: rec.ustadzPenguji || target.ustadzPengujiKitab,
-        tanggalUjianKitab: rec.tanggal || target.tanggalUjianKitab
-      });
-    }
-  };
-
-  const handleSaveSettings = async (st: AppSettings) => {
-    setSettings(st);
-    localStorage.setItem('sim_settings', JSON.stringify(st));
-    if (isGoogleConnected) {
-      try {
-        await sheetsService.saveSettingsToSheet(st);
-      } catch (err) {
-        console.warn('Could not sync settings directly to sheets:', err);
-      }
-    }
-  };
-
-  const handleSaveDashboardAndReset = () => {
-    const confirmed = window.confirm(
-      'Simpan rekapitulasi kehadiran hari ini dan reset formulir serta dashboard ke nol?'
-    );
-    if (!confirmed) return;
-    try {
-      if (absensiGuruList.length > 0) {
-        const prevH = JSON.parse(localStorage.getItem('sim_rekap_guru_harian_history') || '[]');
-        localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify([...absensiGuruList, ...prevH]));
-      }
-      if (absensiSantriList.length > 0) {
-        const prevHS = JSON.parse(localStorage.getItem('sim_rekap_santri_harian_history') || '[]');
-        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify([...absensiSantriList, ...prevHS]));
-      }
-    } catch {}
-
-    setAbsensiSantriList([]);
-    setAbsensiGuruList([]);
-    localStorage.setItem('sim_absensi_santri', JSON.stringify([]));
-    localStorage.setItem('sim_absensi_guru', JSON.stringify([]));
-    alert('Rekap dashboard telah disimpan ke riwayat rekapan dan seluruh sesi absensi harian berhasil direset ke nol (0).');
-  };
-
-  // Handlers Izin Tidak Mengajar Ustadz & Pengganti
-  const handleAddIzinMengajar = (newReq: IzinMengajarRequest) => {
-    const updated = [newReq, ...izinMengajarList];
-    setIzinMengajarList(updated);
-    localStorage.setItem('sim_izin_mengajar', JSON.stringify(updated));
-  };
-
-  const handleApproveIzinMengajar = (
-    requestId: string,
-    ustadzPengganti: string,
-    status: 'Disetujui' | 'Ditolak',
-    catatanAdmin?: string
-  ) => {
-    const target = izinMengajarList.find(i => i.id === requestId);
-    if (!target) return;
-
-    const finalPengganti = ustadzPengganti || target.ustadzPengganti || 'Ust. Pengganti';
-
-    const updatedIzinList = izinMengajarList.map(item => {
-      if (item.id === requestId) {
-        return {
-          ...item,
-          status,
-          ustadzPengganti: finalPengganti,
-          catatanAdmin: catatanAdmin || (status === 'Disetujui' ? `Disetujui Admin. Pengganti: ${finalPengganti}` : 'Permohonan ditolak oleh Admin.')
-        };
-      }
-      return item;
-    });
-
-    setIzinMengajarList(updatedIzinList);
-    localStorage.setItem('sim_izin_mengajar', JSON.stringify(updatedIzinList));
-
-    // KETIKA ADMIN MENYETUJUI STATUS KEHADIRAN PADA ABSENSI USTADZ USTADZAH LANGSUNG MENJADI IZIN DAN SEBELAHNYA ADA NAMA USTAD PENGANTINYA!
-    if (status === 'Disetujui') {
-      const existingIdx = absensiGuruList.findIndex(a => 
-        a.nama.toLowerCase().trim() === target.namaUstadz.toLowerCase().trim() &&
-        a.tanggal === target.tanggal
-      );
-
-      let updatedAbsensi: AbsensiGuruRecord[];
-      if (existingIdx >= 0) {
-        updatedAbsensi = [...absensiGuruList];
-        updatedAbsensi[existingIdx] = {
-          ...updatedAbsensi[existingIdx],
-          status: 'Izin',
-          ustadzPengganti: finalPengganti,
-          alasanIzin: target.alasan,
-          catatan: `Izin tidak mengajar disetujui: ${target.alasan}. Pengganti: ${finalPengganti}`
-        };
-      } else {
-        const newRec: AbsensiGuruRecord = {
-          tanggal: target.tanggal,
-          nama: target.namaUstadz,
-          mapel: target.mapel,
-          kelas: target.kelas,
-          status: 'Izin',
-          catatan: `Izin tidak mengajar disetujui: ${target.alasan}. Pengganti: ${finalPengganti}`,
-          hari: new Date(target.tanggal).toLocaleDateString('id-ID', { weekday: 'long' }).toUpperCase(),
-          jamKe: target.jamKe || 1,
-          waktu: '08:00 - Selesai',
-          ustadzPengganti: finalPengganti,
-          alasanIzin: target.alasan
-        };
-        updatedAbsensi = [newRec, ...absensiGuruList];
-      }
-
-      setAbsensiGuruList(updatedAbsensi);
-      localStorage.setItem('sim_absensi_guru', JSON.stringify(updatedAbsensi));
-    }
-  };
-
-  // 1. If logged in as Wali Santri -> render WaliSantriPortal with Row-Level Security
-  if (session?.role === 'wali_santri' && session.santriData) {
-    const liveSantri = santriList.find(s => s.id === session.santriData?.id) || session.santriData;
-    return (
-      <>
-        <div className="anim-dashboard-fade" key="wali">
-          <WaliSantriPortal
-            santri={liveSantri}
-            nadzhomList={nadzhomList}
-            nilaiList={nilaiList}
-            absensiList={absensiSantriList}
-            syahriyahList={syahriyahList}
-            uangSakuList={uangSakuList}
-            ujianList={ujianList}
-            onLogout={handleLogout}
-            spreadsheetId={spreadsheetId}
-            settings={settings}
-          />
-        </div>
-        {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} settings={settings} />}
-      </>
-    );
-  }
-
-  // 2. If logged in as Pengurus -> render PengurusDashboard
-  if (session?.role === 'pengurus' && session.pengurusData) {
-    const livePengurus = pengurusList.find(p => p.id === session.pengurusData?.id) || session.pengurusData;
-    return (
-      <>
-        <div className="anim-dashboard-fade" key="pengurus">
-          <PengurusDashboard
-            pengurus={livePengurus}
-            settings={settings}
-            stats={stats}
-            santriList={santriList}
-            guruList={guruList}
-            jadwalList={jadwalList}
-            nadzhomList={nadzhomList}
-            nilaiList={nilaiList}
-            absensiSantriList={absensiSantriList}
-            absensiGuruList={absensiGuruList}
-            syahriyahList={syahriyahList}
-            uangSakuList={uangSakuList}
-            kurikulumList={kurikulumList}
-            silabusList={silabusList}
-            kalenderList={kalenderList}
-            ujianList={ujianList}
-            izinList={izinMengajarList}
-            onLogout={handleLogout}
-            onUpdatePengurusProfile={handleUpdatePengurus}
-            onSaveAbsensiSantri={handleSaveAbsensiSantri}
-            onSaveAbsensiGuru={handleSaveAbsensiGuru}
-            onSubmitIzinMengajar={handleAddIzinMengajar}
-            onSaveSilabus={handleSaveSilabus}
-          />
-        </div>
-        {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} settings={settings} />}
-      </>
-    );
-  }
-
-  // 3. If logged in as Admin -> render AdminDashboard
-  if (session?.role === 'admin') {
-    return (
-      <>
-        <div className="anim-dashboard-fade" key="admin">
+      {/* 4. AUTHENTICATED DASHBOARDS */}
+      {isLoggedIn && userRole === 'admin' && (
+        <div 
+          key={isDoorOpened ? 'admin-opened' : 'admin-closed'} 
+          className={`w-full min-h-screen ${isDoorOpened ? 'dashboard-root-entrance' : 'opacity-0 pointer-events-none'}`}
+        >
           <AdminDashboard
             settings={settings}
             stats={stats}
@@ -956,155 +419,138 @@ export default function App() {
             pengurusList={pengurusList}
             kalenderList={kalenderList}
             ujianList={ujianList}
-            izinList={izinMengajarList}
+            izinList={izinList}
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             spreadsheetId={spreadsheetId}
             setSpreadsheetId={setSpreadsheetId}
             isSyncing={isSyncing}
-            onSyncWithSheets={syncWithGoogleSheets}
+            onSyncWithSheets={handleSyncWithSheets}
             onLogout={handleLogout}
-            sheetsService={sheetsService}
-            isGoogleConnected={isGoogleConnected}
-            setIsGoogleConnected={setIsGoogleConnected}
-            onOpenSheetsModal={() => setShowSheetsModal(true)}
-            onDataImported={handleDataImported}
-            onSaveAbsensiSantri={handleSaveAbsensiSantri}
-            onSaveAbsensiGuru={handleSaveAbsensiGuru}
-            onSaveNewSantri={handleSaveNewSantri}
-            onSaveNewGuru={handleSaveNewGuru}
-            onDeleteGuru={handleDeleteGuru}
-            onSaveNewJadwal={handleSaveNewJadwal}
-            onSaveNadzhom={handleSaveNadzhom}
-            onSaveNilai={handleSaveNilai}
-            onSaveSettings={handleSaveSettings}
-            onSaveDashboardAndReset={handleSaveDashboardAndReset}
-            onUpdateSantriProfile={handleUpdateSantriProfile}
-            onSaveSyahriyah={handleSaveSyahriyah}
-            onSaveUangSaku={handleSaveUangSaku}
-            onSaveKurikulum={handleSaveKurikulum}
-            onDeleteKurikulum={handleDeleteKurikulum}
-            onSaveSilabus={handleSaveSilabus}
-            onDeleteSilabus={handleDeleteSilabus}
-            onSavePengurus={handleSavePengurus}
-            onUpdatePengurus={handleUpdatePengurus}
-            onSaveKalender={handleSaveKalender}
-            onDeleteKalender={handleDeleteKalender}
-            onSaveUjianSantri={handleSaveUjianSantri}
-            onApproveIzinMengajar={handleApproveIzinMengajar}
-            onDeleteSantri={handleDeleteSantri}
             onTestIntro={() => setShowIntro(true)}
+            onSaveAbsensiSantri={(records) => setAbsensiSantriList(prev => [...prev, ...records])}
+            onSaveAbsensiGuru={(records) => setAbsensiGuruList(prev => [...prev, ...records])}
+            onSaveNewSantri={(newSantri) => setSantriList(prev => [newSantri, ...prev])}
+            onSaveNewGuru={(newGuru) => setGuruList(prev => [newGuru, ...prev])}
+            onDeleteGuru={(idOrName) => setGuruList(prev => prev.filter(g => g.id !== idOrName && g.nama !== idOrName))}
+            onSaveNewJadwal={(newJadwal) => setJadwalList(prev => [...prev, newJadwal])}
+            onSaveNadzhom={(nadzhom) => setNadzhomList(prev => [nadzhom, ...prev])}
+            onSaveNilai={(nilai) => setNilaiList(prev => [nilai, ...prev])}
+            onSaveSettings={(newSettings) => setSettings(newSettings)}
+            onSaveDashboardAndReset={() => {
+              // reset or snapshot
+            }}
+            onUpdateSantriProfile={(updatedSantri) => {
+              setSantriList(prev => prev.map(s => s.id === updatedSantri.id ? updatedSantri : s));
+            }}
+            onSaveSyahriyah={(record) => setSyahriyahList(prev => [record, ...prev])}
+            onSaveUangSaku={(record) => setUangSakuList(prev => [record, ...prev])}
+            onSaveKurikulum={(record) => setKurikulumList(prev => [record, ...prev])}
+            onDeleteKurikulum={(id) => setKurikulumList(prev => prev.filter(k => k.id !== id))}
+            onSaveSilabus={(record) => setSilabusList(prev => [record, ...prev])}
+            onDeleteSilabus={(id) => setSilabusList(prev => prev.filter(s => s.id !== id))}
+            onSavePengurus={(newPengurus) => setPengurusList(prev => [newPengurus, ...prev])}
+            onUpdatePengurus={(updated) => setPengurusList(prev => prev.map(p => p.id === updated.id ? updated : p))}
+            onSaveKalender={(event) => setKalenderList(prev => [event, ...prev])}
+            onDeleteKalender={(id) => setKalenderList(prev => prev.filter(e => e.id !== id))}
+            onSaveUjianSantri={(record) => setUjianList(prev => [record, ...prev])}
+            onApproveIzinMengajar={(id, ustadzPengganti, status, catatan) => {
+              setIzinList(prev => prev.map(iz => iz.id === id ? { ...iz, status, ustadzPengganti, catatanAdmin: catatan } : iz));
+            }}
           />
         </div>
-        {showSheetsModal && (
-          <GoogleSheetsModal
-            isOpen={showSheetsModal}
-            onClose={() => setShowSheetsModal(false)}
-            sheetsService={sheetsService}
-            spreadsheetId={spreadsheetId}
-            setSpreadsheetId={setSpreadsheetId}
-            isGoogleConnected={isGoogleConnected}
-            setIsGoogleConnected={setIsGoogleConnected}
-            appData={{
-              settings,
-              santriList,
-              guruList,
-              jadwalList,
-              nadzhomList,
-              nilaiList,
-              absensiSantriList,
-              absensiGuruList,
-              syahriyahList
+      )}
+
+      {isLoggedIn && userRole === 'pengurus' && currentPengurus && (
+        <div 
+          key={isDoorOpened ? 'pengurus-opened' : 'pengurus-closed'} 
+          className={`w-full min-h-screen ${isDoorOpened ? 'dashboard-root-entrance' : 'opacity-0 pointer-events-none'}`}
+        >
+          <PengurusDashboard
+            pengurus={currentPengurus}
+            settings={settings}
+            stats={stats}
+            santriList={santriList}
+            guruList={guruList}
+            jadwalList={jadwalList}
+            nadzhomList={nadzhomList}
+            nilaiList={nilaiList}
+            absensiSantriList={absensiSantriList}
+            absensiGuruList={absensiGuruList}
+            syahriyahList={syahriyahList}
+            uangSakuList={uangSakuList}
+            kurikulumList={kurikulumList}
+            silabusList={silabusList}
+            kalenderList={kalenderList}
+            ujianList={ujianList}
+            izinList={izinList}
+            onLogout={handleLogout}
+            onUpdatePengurusProfile={(updated) => {
+              setPengurusList(prev => prev.map(p => p.id === updated.id ? updated : p));
+              setCurrentPengurus(updated);
             }}
-            onDataImported={handleDataImported}
+            onSaveAbsensiSantri={(records) => {
+              setAbsensiSantriList(prev => [...prev, ...records]);
+            }}
+            onSaveAbsensiGuru={(records) => {
+              setAbsensiGuruList(prev => [...prev, ...records]);
+            }}
           />
-        )}
-        {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} settings={settings} />}
-      </>
-    );
-  }
+        </div>
+      )}
 
-  // 5. Login Landing View (rendered with IntroOpening overlaid for seamless cross-dissolve)
-  return (
-    <>
-      <LoginScreen
-        settings={settings}
-        santriList={santriList}
-        pengurusList={pengurusList}
-        loginMode={loginMode}
-        setLoginMode={setLoginMode}
-        loginError={loginError}
-        setLoginError={setLoginError}
-        santriNamaInput={santriNamaInput} setSantriNamaInput={setSantriNamaInput}
-        santriPasswordInput={santriPasswordInput} setSantriPasswordInput={setSantriPasswordInput}
-        pengurusNamaInput={pengurusNamaInput} setPengurusNamaInput={setPengurusNamaInput}
-        pengurusPasswordInput={pengurusPasswordInput} setPengurusPasswordInput={setPengurusPasswordInput}
-        adminUsername={adminUsername} setAdminUsername={setAdminUsername}
-        adminPassword={adminPassword} setAdminPassword={setAdminPassword}
-        showPassword={showPassword} setShowPassword={setShowPassword}
-        rememberMe={rememberMe} setRememberMe={setRememberMe}
-        showForgotPasswordModal={showForgotPasswordModal} setShowForgotPasswordModal={setShowForgotPasswordModal}
-        onSubmit={handleLoginSubmit}
-        onGoogleSignIn={handleGoogleLoginFlow}
-        onSyncSheets={() => setShowSheetsModal(true)}
-        onReplayIntro={() => setShowIntro(true)}
+      {isLoggedIn && userRole === 'wali' && currentSantri && (
+        <div 
+          key={isDoorOpened ? 'wali-opened' : 'wali-closed'} 
+          className={`w-full min-h-screen ${isDoorOpened ? 'dashboard-root-entrance' : 'opacity-0 pointer-events-none'}`}
+        >
+          <WaliSantriPortal
+            santri={currentSantri}
+            nadzhomList={nadzhomList}
+            nilaiList={nilaiList}
+            absensiList={absensiSantriList}
+            syahriyahList={syahriyahList}
+            uangSakuList={uangSakuList}
+            ujianList={ujianList}
+            spreadsheetId={spreadsheetId}
+            settings={settings}
+            onLogout={handleLogout}
+          />
+        </div>
+      )}
+
+      {/* Google Sheets Modal Integration */}
+      <GoogleSheetsModal
+        isOpen={isSheetsModalOpen}
+        onClose={() => setIsSheetsModalOpen(false)}
+        sheetsService={sheetsService}
+        spreadsheetId={spreadsheetId}
+        setSpreadsheetId={setSpreadsheetId}
+        isGoogleConnected={isGoogleConnected}
+        setIsGoogleConnected={setIsGoogleConnected}
+        appData={{
+          settings,
+          santriList,
+          guruList,
+          jadwalList,
+          nadzhomList,
+          nilaiList,
+          absensiSantriList,
+          absensiGuruList,
+          syahriyahList,
+        }}
+        onDataImported={(imported) => {
+          if (imported.santriList) setSantriList(imported.santriList);
+          if (imported.guruList) setGuruList(imported.guruList);
+          if (imported.jadwalList) setJadwalList(imported.jadwalList);
+          if (imported.nadzhomList) setNadzhomList(imported.nadzhomList);
+          if (imported.nilaiList) setNilaiList(imported.nilaiList);
+          if (imported.absensiSantriList) setAbsensiSantriList(imported.absensiSantriList);
+          if (imported.absensiGuruList) setAbsensiGuruList(imported.absensiGuruList);
+          if (imported.syahriyahList) setSyahriyahList(imported.syahriyahList);
+          if (imported.settings) setSettings(prev => ({ ...prev, ...imported.settings }));
+        }}
       />
-
-      {showSheetsModal && (
-        <GoogleSheetsModal
-          isOpen={showSheetsModal}
-          onClose={() => setShowSheetsModal(false)}
-          sheetsService={sheetsService}
-          spreadsheetId={spreadsheetId}
-          setSpreadsheetId={setSpreadsheetId}
-          isGoogleConnected={isGoogleConnected}
-          setIsGoogleConnected={setIsGoogleConnected}
-          appData={{
-            settings,
-            santriList,
-            guruList,
-            jadwalList,
-            nadzhomList,
-            nilaiList,
-            absensiSantriList,
-            absensiGuruList,
-            syahriyahList
-          }}
-          onDataImported={handleDataImported}
-        />
-      )}
-
-      {/* 4. Video Sinematik Intro Opening dengan Transisi Halus (Smooth Cross-fade) */}
-      {showIntro && (
-        <IntroOpening
-          onComplete={() => setShowIntro(false)}
-          appName={settings.portal_title || 'SIM SALAF AL-MALIKI'}
-          subTitle={settings.nama_pesantren || 'PONDOK PESANTREN SALAF AL-MALIKI'}
-          logoUrl={settings.logo_pondok}
-          videoSrc={settings.intro_video_url || '/assets/intro_salaf_almaliki.mp4'}
-          optionPassword={settings.password_option_panel || 'admin123'}
-          onVideoChange={(newUrl, newName) => {
-            const updated = {
-              ...settings,
-              intro_video_url: newUrl,
-              intro_video_name: newName || 'Video Intro Kustom'
-            };
-            setSettings(updated);
-            localStorage.setItem('sim_settings', JSON.stringify(updated));
-          }}
-          onOpenOptionPanelVideo={() => {
-            setShowIntro(false);
-            setSession({
-              role: 'admin',
-              identifier: 'admin'
-            });
-            setActiveTab('pengaturan');
-            localStorage.setItem('sim_option_unlocked', 'true');
-            localStorage.setItem('sim_target_control_section', 'video_intro');
-            setShowDoors(true);
-          }}
-        />
-      )}
-    </>
+    </div>
   );
 }

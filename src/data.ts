@@ -42,6 +42,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   berita_deskripsi: 'Musyawaroh kubro dan ujian semester santri madrasah diniyah salafiyah terjadwal pekan depan.',
   running_text_caption: '📢 MAKLUMAT PONDOK: Seluruh asatidz dan santri wajib menghadiri pembacaan Rotibul Haddad ba\'da Maghrib • Ujian Khitobah & Qiroatul Kutub dilaksanakan hari Ahad depan • Harap seluruh absensi divalidasi tepat waktu.',
 
+  // Media Sosial & Kontak Pesantren Terpusat di Option Panel
+  social_instagram: 'https://instagram.com',
+  social_tiktok: 'https://tiktok.com',
+  social_youtube: 'https://youtube.com',
+  social_whatsapp: '6281234567890',
+
   // Notifikasi Keterlambatan Pembayaran Syahriyah (Diatur via Option Panel)
   notif_keterlambatan_syahriyah: 'Pemberitahuan: Pembayaran Syahriyah (iuran bulanan madrasah) putra/putri Anda saat ini tercatat menunggak / melewati tanggal 10. Dimohon kesediaannya untuk segera menyelesaikan administrasi ke Bendahara Pesantren.',
 

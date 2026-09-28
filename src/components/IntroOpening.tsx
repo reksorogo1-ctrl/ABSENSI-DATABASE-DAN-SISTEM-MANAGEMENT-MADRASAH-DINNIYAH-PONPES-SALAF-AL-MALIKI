@@ -1,171 +1,288 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { ArrowRight } from 'lucide-react';
-import { resolveActiveVideo, type VideoInfo } from '../lib/videoStorage';
+import { Volume2, VolumeX, ArrowRight, LogIn } from 'lucide-react';
 
 interface IntroOpeningProps {
   onComplete: () => void;
-  appName?: string;
-  subTitle?: string;
-  logoUrl?: string;
   videoSrc?: string;
-  optionPassword?: string;
-  onVideoChange?: (newUrl: string, newName?: string) => void;
-  onOpenOptionPanelVideo?: () => void;
+  appName?: string;
 }
 
 export const IntroOpening: React.FC<IntroOpeningProps> = ({
   onComplete,
-  videoSrc,
+  videoSrc = '/assets/intro_salaf_almaliki.mp4'
 }) => {
   const [fadingOut, setFadingOut] = useState<boolean>(false);
-  const [videoLoaded, setVideoLoaded] = useState<boolean>(false);
-  const [videoError, setVideoError] = useState<boolean>(false);
-  const [activeVideo, setActiveVideo] = useState<VideoInfo>({
-    src: videoSrc || '/assets/intro_salaf_almaliki.mp4',
-    name: 'The Journey of Knowledge — Salaf Al-Maliki',
-    isCustom: false,
-    sourceType: 'default',
-  });
+  const [isLoaded, setIsLoaded] = useState<boolean>(false);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [activeSrc, setActiveSrc] = useState<string>(videoSrc);
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const autoSkipTimerRef = useRef<number | null>(null);
+  const prevXRef = useRef<number | null>(null);
+  const targetTimeRef = useRef<number>(0);
+  const isSeekingRef = useRef<boolean>(false);
+  const hasCompletedRef = useRef<boolean>(false);
 
-  // Initialize and load active video
+  // Sync active source whenever videoSrc prop changes
   useEffect(() => {
-    let isMounted = true;
-    async function loadVideo() {
-      const defaultUrl = videoSrc || '/assets/intro_salaf_almaliki.mp4';
-      const resolved = await resolveActiveVideo(defaultUrl);
-      if (isMounted) {
-        setActiveVideo(resolved);
-      }
+    if (videoSrc) {
+      setActiveSrc(videoSrc);
+      hasCompletedRef.current = false;
     }
-    loadVideo();
-    return () => {
-      isMounted = false;
-    };
   }, [videoSrc]);
 
-  // Sync video element when activeVideo changes
+  // Entrance animation
   useEffect(() => {
-    if (videoRef.current && activeVideo.src) {
-      videoRef.current.src = activeVideo.src;
-      videoRef.current.load();
-      videoRef.current.play().catch(() => {
-        if (videoRef.current) {
-          videoRef.current.muted = true;
-          videoRef.current.play().catch(() => setVideoError(true));
-        }
-      });
-    }
-  }, [activeVideo.src]);
+    const timer = setTimeout(() => {
+      setIsLoaded(true);
+    }, 50);
+    return () => clearTimeout(timer);
+  }, []);
 
-  // Silky-smooth cross-fade transition into the login dashboard
-  const handleComplete = () => {
-    if (fadingOut) return;
+  const triggerComplete = () => {
+    if (hasCompletedRef.current) return;
+    hasCompletedRef.current = true;
     setFadingOut(true);
-    // Smooth 1000ms cross-dissolve
     setTimeout(() => {
       onComplete();
-    }, 1000);
+    }, 400);
   };
 
-  // Fallback safety timer if video metadata or playback is delayed
+  // Video Autoplay, Video Ended Auto-Advance & Error Handling
   useEffect(() => {
-    autoSkipTimerRef.current = window.setTimeout(() => {
-      handleComplete();
-    }, 12500);
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.src = activeSrc;
+    video.muted = isMuted;
+
+    const attemptPlay = () => {
+      video.play().catch(() => {
+        // Mobile policy fallback: require initial muted autoplay
+        video.muted = true;
+        setIsMuted(true);
+        video.play().catch(() => {});
+      });
+    };
+
+    const handleLoadedMetadata = () => {
+      targetTimeRef.current = 0;
+      attemptPlay();
+    };
+
+    // Auto navigate to login when video finishes playing
+    const handleEnded = () => {
+      triggerComplete();
+    };
+
+    // Time update check for near-end completion
+    const handleTimeUpdate = () => {
+      if (video.duration && video.currentTime >= video.duration - 0.15) {
+        triggerComplete();
+      }
+    };
+
+    const handleError = () => {
+      if (activeSrc !== '/assets/intro_salaf_almaliki.mp4') {
+        setActiveSrc('/assets/intro_salaf_almaliki.mp4');
+      }
+    };
+
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('ended', handleEnded);
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('error', handleError);
+
+    if (video.readyState >= 1) {
+      handleLoadedMetadata();
+    }
 
     return () => {
-      if (autoSkipTimerRef.current) {
-        window.clearTimeout(autoSkipTimerRef.current);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('ended', handleEnded);
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('error', handleError);
+    };
+  }, [activeSrc]);
+
+  // Mouse & Touch Scrubbing Functionality
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const SENSITIVITY = 0.85;
+
+    const performSeek = () => {
+      if (!video || !video.duration || Number.isNaN(video.duration)) return;
+      if (isSeekingRef.current) return;
+
+      const duration = video.duration;
+      const target = Math.max(0, Math.min(duration, targetTimeRef.current));
+
+      if (Math.abs(video.currentTime - target) > 0.005) {
+        isSeekingRef.current = true;
+        video.currentTime = target;
       }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!video || !video.duration || Number.isNaN(video.duration)) return;
+
+      if (prevXRef.current === null) {
+        prevXRef.current = e.clientX;
+        return;
+      }
+
+      const delta = e.clientX - prevXRef.current;
+      prevXRef.current = e.clientX;
+
+      const duration = video.duration;
+      const timeOffset = (delta / window.innerWidth) * SENSITIVITY * duration;
+      targetTimeRef.current = Math.max(0, Math.min(duration, (targetTimeRef.current || video.currentTime) + timeOffset));
+
+      performSeek();
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!video || !video.duration || Number.isNaN(video.duration) || e.touches.length === 0) return;
+
+      const touchX = e.touches[0].clientX;
+      if (prevXRef.current === null) {
+        prevXRef.current = touchX;
+        return;
+      }
+
+      const delta = touchX - prevXRef.current;
+      prevXRef.current = touchX;
+
+      const duration = video.duration;
+      const timeOffset = (delta / window.innerWidth) * SENSITIVITY * duration;
+      targetTimeRef.current = Math.max(0, Math.min(duration, (targetTimeRef.current || video.currentTime) + timeOffset));
+
+      performSeek();
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        prevXRef.current = e.touches[0].clientX;
+      }
+    };
+
+    const handleEnd = () => {
+      prevXRef.current = null;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseleave', handleEnd);
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleEnd);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseleave', handleEnd);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleEnd);
     };
   }, []);
 
+  const handleSeeked = () => {
+    isSeekingRef.current = false;
+    const video = videoRef.current;
+    if (!video || !video.duration || Number.isNaN(video.duration)) return;
+
+    const duration = video.duration;
+    const target = Math.max(0, Math.min(duration, targetTimeRef.current));
+
+    if (Math.abs(video.currentTime - target) > 0.005) {
+      isSeekingRef.current = true;
+      video.currentTime = target;
+    }
+  };
+
+  const toggleSound = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    const video = videoRef.current;
+    if (video) {
+      const nextMuted = !video.muted;
+      video.muted = nextMuted;
+      setIsMuted(nextMuted);
+      if (!nextMuted) {
+        video.play().catch(() => {});
+      }
+    }
+  };
+
   return (
     <div
-      onClick={handleComplete}
-      className={`fixed inset-0 z-[99999] flex flex-col items-center justify-end bg-[#010905] text-white select-none transition-all duration-1000 ease-in-out overflow-hidden cursor-pointer ${
-        fadingOut ? 'opacity-0 scale-102 pointer-events-none' : 'opacity-100 scale-100'
+      className={`fixed inset-0 z-[99999] w-screen h-[100dvh] min-h-screen overflow-hidden select-none bg-[#03150d] transition-opacity duration-500 ease-in-out ${
+        fadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
-      data-testid="intro-opening-screen"
+      data-testid="salaf-almaliki-intro-screen"
     >
-      {/* 1. CINEMATIC VIDEO BACKGROUND */}
-      <div className="absolute inset-0 z-0 overflow-hidden bg-black pointer-events-none">
-        {/* High-res Islamic Library Background Fallback */}
-        {(!videoLoaded || videoError) && (
-          <img
-            src="/assets/islamic_library_cinematic.jpg"
-            alt="Islamic Library Grand Hall"
-            className="absolute inset-0 w-full h-full object-cover animate-cameraGlide scale-105"
-          />
-        )}
+      {/* Fullscreen Video Background scaled across Desktop & Mobile (HP) */}
+      <video
+        ref={videoRef}
+        src={activeSrc}
+        muted={isMuted}
+        playsInline
+        autoPlay
+        preload="auto"
+        onSeeked={handleSeeked}
+        className="fixed inset-0 z-0 w-full h-full object-cover pointer-events-none"
+        style={{
+          objectPosition: 'center center'
+        }}
+      />
 
-        {/* Real MP4 Video Player (NO loop, smooth auto-transition on completion) */}
-        <video
-          ref={videoRef}
-          src={activeVideo.src}
-          autoPlay
-          muted
-          playsInline
-          onLoadedMetadata={(e) => {
-            const duration = e.currentTarget.duration;
-            if (duration && isFinite(duration) && duration > 0) {
-              if (autoSkipTimerRef.current) {
-                window.clearTimeout(autoSkipTimerRef.current);
-              }
-              // Set timer to trigger slightly before actual end for seamless cross-dissolve
-              autoSkipTimerRef.current = window.setTimeout(() => {
-                handleComplete();
-              }, Math.max(1000, (duration - 0.7) * 1000));
-            }
-          }}
-          onLoadedData={() => {
-            setVideoLoaded(true);
-            setVideoError(false);
-          }}
-          onTimeUpdate={(e) => {
-            const v = e.currentTarget;
-            // Ketika video tersisa 0.8 detik, mulai transisi halus ke dashboard login
-            if (v.duration && v.currentTime >= v.duration - 0.8 && !fadingOut) {
-              handleComplete();
-            }
-          }}
-          onError={() => {
-            console.warn('Video load error on:', activeVideo.src);
-            setVideoError(true);
-          }}
-          onEnded={handleComplete}
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 z-10 ${
-            videoLoaded && !videoError ? 'opacity-100' : 'opacity-0 pointer-events-none'
-          }`}
-        >
-          <source src={activeVideo.src} type="video/mp4" />
-          <source src="/assets/intro_salaf_almaliki.mp4" type="video/mp4" />
-        </video>
+      {/* Subtle bottom gradient for button contrast */}
+      <div className="fixed inset-0 z-10 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none" />
 
-        {/* Soft Bottom Vignette for the Enter Button */}
-        <div className="absolute inset-0 z-20 pointer-events-none bg-gradient-to-t from-black/85 via-transparent to-transparent" />
-      </div>
-
-      {/* 2. BOTTOM ENTER BUTTON */}
-      <div 
-        className="relative z-30 flex flex-col items-center text-center px-6 mb-10 sm:mb-14"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleComplete();
+      {/* TOP RIGHT FLOATING AUDIO TOGGLE (Minimalist & Discrete) */}
+      <div
+        className="fixed top-4 right-4 z-20 transition-all duration-700 ease-out"
+        style={{
+          opacity: isLoaded ? 1 : 0,
+          transform: isLoaded ? 'translateY(0)' : 'translateY(-10px)'
         }}
       >
         <button
           type="button"
-          onClick={handleComplete}
-          className="group px-8 py-3.5 rounded-full bg-black/65 hover:bg-[#d4af37] border-2 border-[#d4af37]/70 hover:border-[#faebaa] text-[#faebaa] hover:text-black font-extrabold text-xs sm:text-sm tracking-widest uppercase transition-all duration-300 flex items-center gap-3 backdrop-blur-md shadow-[0_10px_35px_rgba(0,0,0,0.85)] hover:shadow-[0_0_25px_rgba(212,175,55,0.6)] active:scale-95 hover:scale-105"
-          data-testid="enter-system-btn"
+          onClick={toggleSound}
+          className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border backdrop-blur-md transition-all cursor-pointer shadow-md active:scale-95 ${
+            isMuted
+              ? 'bg-black/50 border-amber-400/50 text-amber-200 hover:bg-black/70'
+              : 'bg-emerald-950/70 border-emerald-400/80 text-emerald-200 hover:bg-emerald-900/80'
+          }`}
+          title={isMuted ? 'Aktifkan Suara' : 'Matikan Suara'}
         >
-          <span>MASUK KE SISTEM</span>
-          <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
+          {isMuted ? <VolumeX className="w-3.5 h-3.5 text-amber-300" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-300" />}
+          <span className="text-[11px]">{isMuted ? 'Suara Mati' : 'Suara Aktif'}</span>
         </button>
+      </div>
+
+      {/* BOTTOM ACTION BUTTON: "MASUK" (Simple, Compact & Sleek) */}
+      <div className="fixed bottom-6 sm:bottom-10 left-0 right-0 z-20 w-full px-4 flex justify-center items-center">
+        <div 
+          className="transition-all duration-700 ease-out flex justify-center"
+          style={{
+            opacity: isLoaded ? 1 : 0,
+            transform: isLoaded ? 'translateY(0)' : 'translateY(15px)'
+          }}
+        >
+          <button
+            type="button"
+            onClick={triggerComplete}
+            className="group inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-2.5 sm:py-3 rounded-full font-bold text-sm sm:text-base tracking-wider uppercase text-black bg-gradient-to-r from-[#ffeaa7] via-[#d4af37] to-[#ffeaa7] border border-[#fff3b0] shadow-[0_4px_20px_rgba(212,175,55,0.6)] hover:shadow-[0_6px_25px_rgba(255,234,167,0.85)] hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
+            data-testid="btn-masuk-login"
+          >
+            <LogIn className="w-4 h-4 stroke-[2.5]" />
+            <span className="font-extrabold tracking-widest">MASUK</span>
+            <ArrowRight className="w-4 h-4 stroke-[3] group-hover:translate-x-1 transition-transform duration-200" />
+          </button>
+        </div>
       </div>
     </div>
   );

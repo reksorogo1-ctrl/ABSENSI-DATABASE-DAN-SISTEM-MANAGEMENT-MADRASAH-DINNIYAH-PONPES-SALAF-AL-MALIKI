@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Santri, NadzhomRecord, NilaiUjianRecord, AbsensiSantriRecord, 
   SyahriyahRecord, UangSakuRecord, AppSettings, UjianSantriRecord 
@@ -35,6 +35,8 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
   onLogout,
   settings
 }) => {
+  const [activeTab, setActiveTab] = useState<string>('semua');
+
   // Filter data strictly for this santri (Row-Level Security)
   const myNadzhom = nadzhomList.filter(n => n.idSantri === santri.id);
   const myNilai = nilaiList.filter(n => n.idSantri === santri.id);
@@ -276,8 +278,36 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
           </div>
         </div>
 
+        {/* NAVIGASI TAB PORTAL WALI SANTRI (SMOOTH ASSEMBLY TRANSITION) */}
+        <div className="flex flex-wrap items-center gap-2 p-2 rounded-2xl bg-[#02130b] border border-[#d4af37]/30 shadow-lg">
+          {[
+            { id: 'semua', label: 'Semua Data' },
+            { id: 'ujian', label: 'Hasil Ujian Kitab' },
+            { id: 'syahriyah', label: 'Tabel Syahriyah' },
+            { id: 'uang-saku', label: 'Riwayat Uang Saku' },
+            { id: 'nadzhom', label: 'Setoran Nadzhom' },
+            { id: 'nilai', label: 'Transkrip Nilai' },
+            { id: 'absensi', label: 'Presensi Diniyah' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === tab.id
+                  ? 'btn-3d-gold text-black shadow-md'
+                  : 'bg-black/40 text-emerald-200 hover:text-white hover:bg-[#052216] border border-[#d4af37]/20'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* TAB PANES WITH SMOOTH TAB-SWITCH & TABLE-COLUMN ASSEMBLY TRANSITION */}
+        <div key={activeTab} className="tab-pane-transition space-y-6">
         {/* KOLOM PENILAIAN UJIAN TERKONEKSI: KOREKSIAN KITAB, MUHAFADZOH, & BACA KITAB (PERSIS DI BAWAH PROFIL ANAK) */}
-        <section className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-5 border-2 border-[#d4af37]/40 shadow-2xl bg-gradient-to-br from-[#062819] via-[#041d13] to-[#02180e]">
+        {(activeTab === 'semua' || activeTab === 'ujian') && (
+        <section className="table-3d-stack puzzle-table-assemble rounded-3xl p-5 sm:p-6 backdrop-blur space-y-5 border-2 border-[#d4af37]/40 shadow-2xl bg-gradient-to-br from-[#062819] via-[#041d13] to-[#02180e]">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-[#d4af37]/25 gap-2">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#d4af37] via-[#f3e5ab] to-[#aa8010] p-0.5 shadow-lg flex items-center justify-center shrink-0">
@@ -434,9 +464,11 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
             </div>
           </div>
         </section>
+        )}
 
         {/* TABEL SYAHRIYAH (IURAN BULANAN) */}
-        <section className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
+        {(activeTab === 'semua' || activeTab === 'syahriyah') && (
+        <section className="table-3d-stack puzzle-table-assemble rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
           <div className="flex flex-wrap items-center justify-between pb-3 border-b border-[#d4af37]/20 gap-2">
             <div className="flex items-center space-x-2.5">
               <div className="p-2 rounded-xl bg-[#d4af37]/10 border border-[#d4af37]/30 text-[#d4af37]">
@@ -507,9 +539,11 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
             </div>
           )}
         </section>
+        )}
 
         {/* TABEL UANG SAKU (MUTASI & SALDO) */}
-        <section className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
+        {(activeTab === 'semua' || activeTab === 'uang-saku') && (
+        <section className="table-3d-stack puzzle-table-assemble rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
           <div className="flex flex-wrap items-center justify-between pb-3 border-b border-[#d4af37]/20 gap-2">
             <div className="flex items-center space-x-2.5">
               <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-400/30 text-amber-300">
@@ -585,9 +619,11 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
             </div>
           )}
         </section>
+        )}
 
         {/* Section: Setoran Nadzhom */}
-        <section className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
+        {(activeTab === 'semua' || activeTab === 'nadzhom') && (
+        <section className="table-3d-stack puzzle-table-assemble rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/20">
             <div className="flex items-center space-x-2.5">
               <BookOpen className="w-5 h-5 text-[#d4af37]" />
@@ -629,9 +665,11 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
             </div>
           )}
         </section>
+        )}
 
         {/* Section: Nilai Ujian */}
-        <section className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
+        {(activeTab === 'semua' || activeTab === 'nilai') && (
+        <section className="table-3d-stack puzzle-table-assemble rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/20">
             <div className="flex items-center space-x-2.5">
               <Award className="w-5 h-5 text-[#d4af37]" />
@@ -682,9 +720,11 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
             </div>
           )}
         </section>
+        )}
 
         {/* Section: Log Absensi Santri */}
-        <section className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
+        {(activeTab === 'semua' || activeTab === 'absensi') && (
+        <section className="table-3d-stack puzzle-table-assemble rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/20">
             <div className="flex items-center space-x-2.5">
               <UserCheck className="w-5 h-5 text-[#d4af37]" />
@@ -725,6 +765,8 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
             </div>
           )}
         </section>
+        )}
+        </div>
       </main>
     </div>
   );
