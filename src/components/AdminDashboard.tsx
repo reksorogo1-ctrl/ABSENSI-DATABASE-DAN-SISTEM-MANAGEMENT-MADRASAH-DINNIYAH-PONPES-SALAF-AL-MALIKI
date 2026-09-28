@@ -7,8 +7,7 @@ import {
   Type, Megaphone, Copy, FileSpreadsheet, Newspaper, CheckCheck, RotateCcw,
   CreditCard, Wallet, AlertTriangle, Phone, MessageCircle, ArrowDownLeft, ArrowUpRight, Trash2, GraduationCap,
   Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload, Play,
-  ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine, MapPin, Compass, Crosshair, Shield, Navigation,
-  Share2, Instagram, Youtube, Music2
+  ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine, MapPin, Compass, Crosshair, Shield, Navigation
 } from 'lucide-react';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Legend, 
@@ -150,17 +149,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const classList = ['1 TSANAWIYAH', '2 TSANAWIYAH', '3 TSANAWIYAH', '1 ALIYAH', '2 ALIYAH', '3 ALIYAH'];
 
-  // State transisi masuk halus ketika berpindah tab atau ditekan tab dasboard
-  const [tabTransitionKey, setTabTransitionKey] = useState<number>(0);
-  const handleSelectTab = (tabId: string) => {
-    setActiveTab(tabId);
-    setTabTransitionKey(k => k + 1);
-  };
-
-  useEffect(() => {
-    setTabTransitionKey(k => k + 1);
-  }, [activeTab]);
-
   // State filter untuk Absensi Guru
   const [guruSelectedClass, setGuruSelectedClass] = useState<string>('1 TSANAWIYAH');
   const isSelectedAliyah = guruSelectedClass.includes('ALIYAH');
@@ -196,10 +184,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const adminPresensiStatus = useMemo(() => {
     return checkPresensiSchedule(adminServerClock, {
-      bypassActive: settings.bypass_jam_presensi_testing,
-      settings: settings
+      bypassActive: settings.bypass_jam_presensi_testing
     });
-  }, [adminServerClock, settings]);
+  }, [adminServerClock, settings.bypass_jam_presensi_testing]);
 
   // Alert Notifikasi Masuk Real-Time dari Pengurus
   const [realtimeAlert, setRealtimeAlert] = useState<{
@@ -642,8 +629,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [optionPasswordInput, setOptionPasswordInput] = useState<string>('');
   const [optionPasswordError, setOptionPasswordError] = useState<string>('');
   const [activeControlSection, setActiveControlSection] = useState<
-    'jam_presensi' | 'geofencing_absensi' | 'simpan_absensi' | 'kontrol_tombol' | 'input_santri' | 'input_guru' | 'input_jadwal' | 
-    'visual_branding' | 'media_sosial' | 'keamanan' | 'profil_santri' | 'kelola_syahriyah' | 'kelola_uang_saku' | 'kelola_kurikulum' |
+    'input_santri' | 'input_guru' | 'input_jadwal' | 'simpan_absensi' | 'geofencing_absensi' | 'kontrol_tombol' | 
+    'visual_branding' | 'keamanan' | 'profil_santri' | 'kelola_syahriyah' | 'kelola_uang_saku' | 'kelola_kurikulum' |
     'kelola_pengurus' | 'kelola_kalender' | 'kelola_ujian_kitab' | 'kelola_berita' | 'video_intro'
   >(() => {
     const target = localStorage.getItem('sim_target_control_section');
@@ -651,7 +638,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       localStorage.removeItem('sim_target_control_section');
       return 'video_intro';
     }
-    return 'jam_presensi';
+    return 'simpan_absensi';
   });
 
   // Video Intro Management States in Option Panel
@@ -733,19 +720,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [jamPresensiForm, setJamPresensiForm] = useState({
     jam_tsanawiyah_1_mulai: settings.jam_tsanawiyah_1_mulai || '08:00',
     jam_tsanawiyah_1_batas_hadir: settings.jam_tsanawiyah_1_batas_hadir || '08:30',
-    jam_tsanawiyah_1_selesai: settings.jam_tsanawiyah_1_selesai || '09:45',
+    jam_tsanawiyah_1_selesai: settings.jam_tsanawiyah_1_selesai || '09:30',
     jam_tsanawiyah_2_mulai: settings.jam_tsanawiyah_2_mulai || '09:45',
     jam_tsanawiyah_2_batas_hadir: settings.jam_tsanawiyah_2_batas_hadir || '10:15',
-    jam_tsanawiyah_2_selesai: settings.jam_tsanawiyah_2_selesai || '12:30',
-    jam_tsanawiyah_selesai: settings.jam_tsanawiyah_selesai || '12:30',
+    jam_tsanawiyah_2_selesai: settings.jam_tsanawiyah_2_selesai || '11:45',
 
     jam_aliyah_1_mulai: settings.jam_aliyah_1_mulai || '19:00',
     jam_aliyah_1_batas_hadir: settings.jam_aliyah_1_batas_hadir || '19:30',
-    jam_aliyah_1_selesai: settings.jam_aliyah_1_selesai || '21:00',
+    jam_aliyah_1_selesai: settings.jam_aliyah_1_selesai || '20:45',
     jam_aliyah_2_mulai: settings.jam_aliyah_2_mulai || '21:00',
     jam_aliyah_2_batas_hadir: settings.jam_aliyah_2_batas_hadir || '21:30',
-    jam_aliyah_2_selesai: settings.jam_aliyah_2_selesai || '23:00',
-    jam_aliyah_selesai: settings.jam_aliyah_selesai || '23:00',
+    jam_aliyah_2_selesai: settings.jam_aliyah_2_selesai || '22:30',
 
     bypass_jam_presensi_testing: settings.bypass_jam_presensi_testing || false
   });
@@ -755,19 +740,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setJamPresensiForm({
       jam_tsanawiyah_1_mulai: settings.jam_tsanawiyah_1_mulai || '08:00',
       jam_tsanawiyah_1_batas_hadir: settings.jam_tsanawiyah_1_batas_hadir || '08:30',
-      jam_tsanawiyah_1_selesai: settings.jam_tsanawiyah_1_selesai || '09:45',
+      jam_tsanawiyah_1_selesai: settings.jam_tsanawiyah_1_selesai || '09:30',
       jam_tsanawiyah_2_mulai: settings.jam_tsanawiyah_2_mulai || '09:45',
       jam_tsanawiyah_2_batas_hadir: settings.jam_tsanawiyah_2_batas_hadir || '10:15',
-      jam_tsanawiyah_2_selesai: settings.jam_tsanawiyah_2_selesai || '12:30',
-      jam_tsanawiyah_selesai: settings.jam_tsanawiyah_selesai || '12:30',
+      jam_tsanawiyah_2_selesai: settings.jam_tsanawiyah_2_selesai || '11:45',
 
       jam_aliyah_1_mulai: settings.jam_aliyah_1_mulai || '19:00',
       jam_aliyah_1_batas_hadir: settings.jam_aliyah_1_batas_hadir || '19:30',
-      jam_aliyah_1_selesai: settings.jam_aliyah_1_selesai || '21:00',
+      jam_aliyah_1_selesai: settings.jam_aliyah_1_selesai || '20:45',
       jam_aliyah_2_mulai: settings.jam_aliyah_2_mulai || '21:00',
       jam_aliyah_2_batas_hadir: settings.jam_aliyah_2_batas_hadir || '21:30',
-      jam_aliyah_2_selesai: settings.jam_aliyah_2_selesai || '23:00',
-      jam_aliyah_selesai: settings.jam_aliyah_selesai || '23:00',
+      jam_aliyah_2_selesai: settings.jam_aliyah_2_selesai || '22:30',
 
       bypass_jam_presensi_testing: settings.bypass_jam_presensi_testing || false
     });
@@ -1034,12 +1017,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     berita_deskripsi: settings.berita_deskripsi || 'Musyawaroh kubro dan ujian semester santri madrasah diniyah salafiyah terjadwal pekan depan.',
     running_text_caption: settings.running_text_caption || '📢 MAKLUMAT PONDOK: Seluruh asatidz dan santri wajib menghadiri pembacaan Rotibul Haddad ba\'da Maghrib • Ujian Khitobah & Qiroatul Kutub dilaksanakan hari Ahad depan • Harap seluruh absensi divalidasi tepat waktu.',
 
-    // Media Sosial & Kontak Pesantren
-    social_instagram: settings.social_instagram || 'https://instagram.com',
-    social_tiktok: settings.social_tiktok || 'https://tiktok.com',
-    social_youtube: settings.social_youtube || 'https://youtube.com',
-    social_whatsapp: settings.social_whatsapp || '6281234567890',
-
     btn_hadir_semua_text: settings.btn_hadir_semua_text || '✓ Hadir Semua',
     btn_hadir_semua_color: settings.btn_hadir_semua_color || '#ffffff',
     btn_simpan_absensi_santri_text: settings.btn_simpan_absensi_santri_text || 'Simpan Absensi Santri',
@@ -1081,12 +1058,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       berita_title: settings.berita_title || 'Evaluasi Perkembangan Pembelajaran & Nadzhom Santri',
       berita_deskripsi: settings.berita_deskripsi || 'Musyawaroh kubro dan ujian semester santri madrasah diniyah salafiyah terjadwal pekan depan.',
       running_text_caption: settings.running_text_caption || '📢 MAKLUMAT PONDOK: Seluruh asatidz dan santri wajib menghadiri pembacaan Rotibul Haddad ba\'da Maghrib • Ujian Khitobah & Qiroatul Kutub dilaksanakan hari Ahad depan • Harap seluruh absensi divalidasi tepat waktu.',
-
-      // Media Sosial & Kontak Pesantren
-      social_instagram: settings.social_instagram || 'https://instagram.com',
-      social_tiktok: settings.social_tiktok || 'https://tiktok.com',
-      social_youtube: settings.social_youtube || 'https://youtube.com',
-      social_whatsapp: settings.social_whatsapp || '6281234567890',
 
       btn_hadir_semua_text: settings.btn_hadir_semua_text || '✓ Hadir Semua',
       btn_hadir_semua_color: settings.btn_hadir_semua_color || '#ffffff',
@@ -1258,7 +1229,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               return (
                 <button
                   key={tab.id}
-                  onClick={() => handleSelectTab(tab.id)}
+                  onClick={() => setActiveTab(tab.id)}
                   className={`w-full text-left px-3.5 py-2.5 rounded-xl font-semibold text-xs flex items-center justify-between transition ${
                     isActive 
                       ? 'bg-[#d4af37]/20 text-white border-l-4 border-[#d4af37] shadow-md' 
@@ -1352,18 +1323,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
         {/* Top Header - 3D Luxury Beveled Banner (Semua Teks Bisa Diatur via Option Panel) */}
-        <header className="build-header header-3d-banner rounded-2xl p-5 sm:p-6 backdrop-blur flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold font-serif text-[#d4af37] text-gold-3d tracking-wide leading-tight">
+        <header className="build-header header-3d-banner rounded-2xl p-5 backdrop-blur flex flex-col md:flex-row justify-between items-center gap-4">
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold font-serif text-[#d4af37] text-gold-3d tracking-wide">
               {settings.header_title || settings.judul_aplikasi || 'SIM Pondok Pesantren Salaf Al-Maliki'}
             </h1>
-            <p className="text-xs text-emerald-200/90 mt-1.5 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block shrink-0" />
+            <p className="text-xs text-emerald-200/90 mt-1 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
               <span>{settings.header_subtitle || settings.login_subtitle || 'Sistem Informasi & Manajemen Santri Madrasah Diniyah Salafiyah'}</span>
             </p>
           </div>
 
-          <div className="flex items-center space-x-3 text-right shrink-0">
+          <div className="flex items-center space-x-3 text-right">
             <button
               onClick={() => onOpenSheetsModal ? onOpenSheetsModal() : setActiveTab('google-sheets')}
               className="px-3.5 py-2 rounded-xl bg-[#031c10] border border-[#d4af37]/60 text-xs font-bold text-[#f3e5ab] flex items-center gap-2 hover:bg-[#062c1b] transition shadow"
@@ -1384,13 +1355,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </header>
 
-        {/* TAB PANES WITH SMOOTH TAB-SWITCH & TABLE-COLUMN ASSEMBLY TRANSITION */}
-        <div key={`${activeTab}-${tabTransitionKey}`} className="tab-pane-transition space-y-6">
-          {/* TAB 1: DASHBOARD UTAMA DENGAN RECHARTS & BERITA TERKINI */}
-          {activeTab === 'dashboard' && (
+        {/* TAB 1: DASHBOARD UTAMA DENGAN RECHARTS & BERITA TERKINI */}
+        {activeTab === 'dashboard' && (
           <div className="build-sequence space-y-6">
             {/* SLOT LAYAR BERITA TERKINI & CAPTION BERGERAK SENDIRI (MARQUEE) */}
-            <div className="card-3d-glass assemble-banner rounded-3xl overflow-hidden border border-[#d4af37]/40 shadow-2xl relative">
+            <div className="card-3d-glass rounded-3xl overflow-hidden border border-[#d4af37]/40 shadow-2xl relative">
               <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#f5e298]/80 to-transparent pointer-events-none z-10" />
               
               {/* Berita Terkini Layout: Layar Visual & Deskripsi */}
@@ -1457,35 +1426,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* 4 Main Stat Cards - 3D Beveled Cards with Sequential Assembly */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 assemble-stat-cards">
-              <div className="card-3d assemble-stat-item p-5 rounded-2xl border-t-2 border-t-emerald-400">
+            {/* 4 Main Stat Cards - 3D Beveled Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="card-3d p-5 rounded-2xl border-t-2 border-t-emerald-400">
                 <span className="text-xs text-emerald-300 font-extrabold uppercase tracking-wider">KEHADIRAN SANTRI</span>
                 <div className="text-3xl font-extrabold text-emerald-400 mt-1 font-mono">{stats.percentSantri}%</div>
                 <p className="text-[10px] text-emerald-200/80 mt-1">Persentase Tingkat Kehadiran Harian</p>
               </div>
 
-              <div className="card-3d assemble-stat-item p-5 rounded-2xl border-t-2 border-t-amber-400">
+              <div className="card-3d p-5 rounded-2xl border-t-2 border-t-amber-400">
                 <span className="text-xs text-emerald-300 font-extrabold uppercase tracking-wider">KEHADIRAN USTADZ/AH</span>
                 <div className="text-3xl font-extrabold text-amber-300 mt-1 font-mono">{stats.percentGuru}%</div>
                 <p className="text-[10px] text-emerald-200/80 mt-1">Kehadiran Pengajar di Madrasah</p>
               </div>
 
-              <div className="card-3d assemble-stat-item p-5 rounded-2xl border-t-2 border-t-[#d4af37]">
+              <div className="card-3d p-5 rounded-2xl border-t-2 border-t-[#d4af37]">
                 <span className="text-xs text-emerald-300 font-extrabold uppercase tracking-wider">TOTAL SANTRI</span>
                 <div className="text-3xl font-extrabold text-[#d4af37] text-gold-3d mt-1 font-mono">{stats.totalSantri}</div>
                 <p className="text-[10px] text-emerald-200/80 mt-1">Terdaftar Dalam Google Sheets</p>
               </div>
 
-              <div className="card-3d assemble-stat-item p-5 rounded-2xl border-t-2 border-t-blue-400">
+              <div className="card-3d p-5 rounded-2xl border-t-2 border-t-blue-400">
                 <span className="text-xs text-emerald-300 font-extrabold uppercase tracking-wider">TOTAL GURU & USTADZ</span>
                 <div className="text-3xl font-extrabold text-blue-300 mt-1 font-mono">{stats.totalGuru}</div>
                 <p className="text-[10px] text-emerald-200/80 mt-1">Pengajar Tsanawiyah & Aliyah</p>
               </div>
             </div>
 
-            {/* Sub Metrics Grid - 3D Micro Chips with Staggered Cascade */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 assemble-submetrics">
+            {/* Sub Metrics Grid - 3D Micro Chips */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
               <div className="card-3d-deep p-3 rounded-xl text-center">
                 <div className="text-[10px] font-bold text-emerald-300">HADIR SANTRI</div>
                 <div className="text-lg font-bold text-emerald-400 mt-0.5 font-mono">{stats.hadirSantri}</div>
@@ -1522,7 +1491,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             {/* INTEGRASI KOMPONEN RECHARTS: GRAFIK TREN */}
             {/* Grafis Tren & Komparasi Recharts - 3D Luxury Glass Panels */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 assemble-charts">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* AreaChart Glass Card */}
               <div className="card-3d-glass p-6 sm:p-7 rounded-3xl lg:col-span-2 overflow-hidden relative group">
                 {/* 3D Specular Light Rim & Ambient Glow Accents */}
@@ -1788,7 +1757,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               {/* Tabel Permohonan Izin yang Masuk */}
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-amber-500/30 bg-[#070502]/80">
+              <div className="overflow-x-auto rounded-2xl border border-amber-500/30 bg-[#070502]/80">
                 <table className="w-full text-xs text-left min-w-[780px]">
                   <thead className="bg-[#1a1207] text-amber-300 border-b border-amber-500/30">
                     <tr>
@@ -1996,7 +1965,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               {/* Tampilan Tabel Rekap Santri */}
               {dashboardRekapTab === 'santri' && (
-                <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/25">
+                <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
                   <table className="w-full text-xs text-left min-w-[760px]">
                     <thead className="bg-[#042013] text-[#d4af37]">
                       <tr>
@@ -2042,7 +2011,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               {/* Tampilan Tabel Rekap Guru */}
               {dashboardRekapTab === 'guru' && (
-                <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/25">
+                <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
                   <table className="w-full text-xs text-left min-w-[780px]">
                     <thead className="bg-[#042013] text-[#d4af37]">
                       <tr>
@@ -2342,7 +2311,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               {/* TABEL DATA MUHAFADZOH DENGAN PERINGKAT ANGKATAN */}
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/25">
+              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
                 <table className="w-full text-xs text-left min-w-[850px]">
                   <thead className="bg-[#03170e] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
@@ -2474,7 +2443,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/25">
+              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
                 <table className="w-full text-xs text-left min-w-[800px]">
                   <thead className="bg-[#03170e] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
@@ -2886,7 +2855,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </span>
               </div>
 
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-xl border border-[#d4af37]/25">
+              <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25">
                 <table className="w-full text-xs text-left min-w-[900px]">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
@@ -3058,7 +3027,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               {/* Tabel Feed Real-Time Santri Terbaru */}
               {(absensiSantriList && absensiSantriList.length > 0) ? (
-                <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-xl border border-[#d4af37]/20">
+                <div className="overflow-x-auto rounded-xl border border-[#d4af37]/20">
                   <table className="w-full min-w-[700px] text-left text-xs">
                     <thead className="bg-[#052216] text-[#d4af37]">
                       <tr>
@@ -3413,7 +3382,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/30 shadow-xl bg-[#020e08]/90">
+              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-xl bg-[#020e08]/90">
                 <table className="w-full min-w-[1050px] text-left text-xs">
                   <thead className="bg-[#052216] text-[#d4af37] uppercase tracking-wider font-bold border-b border-[#d4af37]/30">
                     <tr>
@@ -3665,7 +3634,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               {/* Tabel Ringkasan Rekapan Bulanan Ustadz / Guru */}
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-xl border border-[#d4af37]/20">
+              <div className="overflow-x-auto rounded-xl border border-[#d4af37]/20">
                 <table className="w-full min-w-[800px] text-left text-xs">
                   <thead className="bg-[#052216] text-[#d4af37]">
                     <tr>
@@ -3740,7 +3709,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </span>
               </div>
 
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/20">
+              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/20">
                 <table className="w-full min-w-[850px] text-left text-xs">
                   <thead className="bg-[#052216] text-[#d4af37]">
                     <tr>
@@ -3950,7 +3919,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               {/* Tabel Tsanawiyah */}
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-emerald-500/30 shadow-xl">
+              <div className="overflow-x-auto rounded-2xl border border-emerald-500/30 shadow-xl">
                 <table className="w-full min-w-[950px] text-left text-xs">
                   <thead className="bg-[#031d11] text-[#d4af37] uppercase tracking-wider font-semibold border-b border-emerald-500/30">
                     <tr>
@@ -4091,7 +4060,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               {/* Tabel Aliyah */}
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-amber-500/30 shadow-xl">
+              <div className="overflow-x-auto rounded-2xl border border-amber-500/30 shadow-xl">
                 <table className="w-full min-w-[950px] text-left text-xs">
                   <thead className="bg-[#1f1103] text-[#d4af37] uppercase tracking-wider font-semibold border-b border-amber-500/30">
                     <tr>
@@ -4252,7 +4221,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               {/* Tabel Silabus Memaknai */}
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/30 shadow-2xl">
+              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-2xl">
                 <table className="w-full min-w-[1100px] text-left text-xs">
                   <thead className="bg-[#031d11] text-[#d4af37] uppercase tracking-wider font-bold border-b border-[#d4af37]/30">
                     <tr>
@@ -4865,7 +4834,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </span>
               </div>
 
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/30 shadow-inner">
+              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-inner">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-[#052216] text-[#d4af37]">
                     <tr>
@@ -4998,7 +4967,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </span>
               </div>
 
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/20">
+              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/20">
                 <table className="w-full min-w-[950px] text-left text-xs">
                   <thead className="bg-[#052216] text-[#d4af37]">
                     <tr>
@@ -5083,7 +5052,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <h3 className="text-lg font-bold text-[#d4af37] text-gold-3d">Setoran Nadzhom Seluruh Kelas</h3>
               <span className="text-xs text-emerald-300 font-semibold">(Mode Tampilan Data)</span>
             </div>
-            <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/30 shadow-inner">
+            <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-inner">
               <table className="w-full text-left text-xs">
                 <thead className="bg-[#052216] text-[#d4af37]">
                   <tr>
@@ -5119,7 +5088,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <h3 className="text-lg font-bold text-[#d4af37] text-gold-3d">Nilai Ujian & Transkrip Akademik</h3>
               <span className="text-xs text-emerald-300 font-semibold">(Mode Tampilan Data)</span>
             </div>
-            <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/30 shadow-inner">
+            <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-inner">
               <table className="w-full text-left text-xs">
                 <thead className="bg-[#052216] text-[#d4af37]">
                   <tr>
@@ -5449,7 +5418,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               {/* Table Render based on sheetsPreviewTab */}
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-xl border border-[#d4af37]/25 max-h-96 overflow-y-auto">
+              <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25 max-h-96 overflow-y-auto">
                 {sheetsPreviewTab === 'absensi-guru' && (
                   <table className="w-full text-left text-xs min-w-[650px]">
                     <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
@@ -5923,10 +5892,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               /* KONTEN UTAMA OPTION PANEL KETIKA TERBUKA */
               <div className="space-y-6">
                 {/* SUB MENU PUSAT KONTROL - 3D BEVELED TILES */}
-                {/* SUB-MENU TABS DI DALAM OPTION PANEL */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-9 gap-2 bg-[#052216]/90 p-2.5 rounded-2xl border border-[#d4af37]/35 shadow-inner">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-2 bg-[#052216]/90 p-2.5 rounded-2xl border border-[#d4af37]/35 shadow-inner">
                   {[
-                    { id: 'jam_presensi', label: 'Jam & Batas Hadir', icon: Clock },
                     { id: 'geofencing_absensi', label: 'Geofencing & Pengganti', icon: MapPin },
                     { id: 'simpan_absensi', label: 'Absensi Ustadz', icon: Save },
                     { id: 'kelola_berita', label: 'Berita & Caption', icon: Newspaper },
@@ -5943,7 +5910,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     { id: 'kontrol_tombol', label: 'Tombol & Teks', icon: Settings2 },
                     { id: 'video_intro', label: 'Video Intro', icon: Film },
                     { id: 'visual_branding', label: 'Logo & Visual', icon: Palette },
-                    { id: 'media_sosial', label: 'Media Sosial & WA', icon: Share2 },
                     { id: 'keamanan', label: 'Kata Sandi Admin', icon: Lock }
                   ].map(sec => {
                     const SecIcon = sec.icon;
@@ -5965,271 +5931,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     );
                   })}
                 </div>
-
-                {/* SECTION 0A: PENGATURAN MANUAL JAM PRESENSI & BATAS KETERLAMBATAN (TSANAWIYAH & ALIYAH) */}
-                {activeControlSection === 'jam_presensi' && (
-                  <form onSubmit={handleSaveJamPresensi} className="bg-[#052216]/90 border-2 border-[#d4af37]/40 rounded-2xl p-5 sm:p-6 space-y-6">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[#d4af37]/30">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-xl bg-amber-400 text-black flex items-center justify-center font-bold shadow-lg shrink-0">
-                          <Clock className="w-5 h-5 text-black" />
-                        </div>
-                        <div>
-                          <h4 className="text-sm sm:text-base font-extrabold text-white text-gold-3d">
-                            Pengaturan Manual Jam Absensi & Batas Keterlambatan
-                          </h4>
-                          <p className="text-[11px] text-emerald-300">
-                            Konfigurasi rentang waktu presensi tepat waktu, batas hitung status TERLAMBAT, dan jendela aktif tombol presensi Tsanawiyah & Aliyah.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {jamPresensiMsg && (
-                          <span className="text-xs font-bold text-emerald-400 bg-emerald-950 px-3 py-1.5 rounded-lg border border-emerald-500/40 animate-pulse">
-                            ✓ {jamPresensiMsg}
-                          </span>
-                        )}
-                        <button
-                          type="submit"
-                          className="px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-xs flex items-center gap-2 border border-amber-200/80 shadow transition"
-                        >
-                          <Save className="w-4 h-4" />
-                          <span>Simpan Jadwal Presensi</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* STATUS REAL-TIME PREVIEW SERVER */}
-                    <div className="bg-[#03140c] p-4 rounded-xl border border-[#d4af37]/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-3 h-3 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                        <div>
-                          <span className="text-xs font-bold text-white block">Status Evaluasi Waktu Server Saat Ini:</span>
-                          <span className="text-[11px] text-emerald-300 font-mono">
-                            {adminServerClock.toLocaleTimeString('id-ID')} WIB — Sesi: <strong className="text-amber-300">{adminPresensiStatus.sesi}</strong> ({adminPresensiStatus.tingkat}) | Status Otomatis: <span className={`px-2 py-0.5 rounded font-bold ${adminPresensiStatus.status === 'Hadir' ? 'bg-emerald-900 text-emerald-300' : 'bg-amber-900 text-amber-300'}`}>{adminPresensiStatus.status}</span>
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 bg-[#052216] px-3 py-1.5 rounded-xl border border-[#d4af37]/25">
-                        <span className="text-[11px] text-slate-300 font-medium">Bypass Testing Jam (Non-Stop Aktif):</span>
-                        <button
-                          type="button"
-                          onClick={() => setJamPresensiForm(prev => ({ ...prev, bypass_jam_presensi_testing: !prev.bypass_jam_presensi_testing }))}
-                          className={`px-3 py-1 rounded-lg text-xs font-extrabold transition ${
-                            jamPresensiForm.bypass_jam_presensi_testing
-                              ? 'bg-amber-500 text-black shadow'
-                              : 'bg-slate-800 text-slate-400 border border-slate-700'
-                          }`}
-                        >
-                          {jamPresensiForm.bypass_jam_presensi_testing ? 'TESTING AKTIF' : 'NORMAL JADWAL'}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* DUA KOLOM PENGATURAN: TSANAWIYAH & ALIYAH */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      {/* KARTU 1: TSANAWIYAH (PAGI / SIANG) */}
-                      <div className="bg-[#03140c] p-4 sm:p-5 rounded-xl border-2 border-emerald-500/40 space-y-4 shadow-lg">
-                        <div className="border-b border-emerald-500/30 pb-2 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <GraduationCap className="w-5 h-5 text-emerald-400" />
-                            <h5 className="text-xs sm:text-sm font-extrabold text-emerald-300 uppercase tracking-wide">
-                              1. Jadwal Tsanawiyah (Pagi / Siang)
-                            </h5>
-                          </div>
-                          <span className="text-[10px] bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/40 font-mono">
-                            Jendela: 08:00 - 12:30 WIB
-                          </span>
-                        </div>
-
-                        {/* JAM KE-1 TSANAWIYAH */}
-                        <div className="bg-[#052216] p-3 rounded-xl border border-emerald-500/30 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                              <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 flex items-center justify-center text-[10px] font-bold">1</span>
-                              <span>Jam Ke-1 Tsanawiyah:</span>
-                            </span>
-                            <span className="text-[10px] text-amber-300 font-mono">Default: 08:00 - 08:30 (Tepat)</span>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-[10px] text-slate-300 block mb-1">Jam Mulai Masuk:</label>
-                              <input
-                                type="time"
-                                value={jamPresensiForm.jam_tsanawiyah_1_mulai}
-                                onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_tsanawiyah_1_mulai: e.target.value })}
-                                className="w-full bg-[#03140c] border border-emerald-500/40 rounded-lg p-2 text-xs text-white font-mono font-bold"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-amber-300 block mb-1">Batas Tepat Waktu (Lewat = Terlambat):</label>
-                              <input
-                                type="time"
-                                value={jamPresensiForm.jam_tsanawiyah_1_batas_hadir}
-                                onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_tsanawiyah_1_batas_hadir: e.target.value })}
-                                className="w-full bg-[#03140c] border border-amber-500/50 rounded-lg p-2 text-xs text-amber-200 font-mono font-bold"
-                              />
-                            </div>
-                          </div>
-                          <p className="text-[9.5px] text-slate-400">
-                            * Lewat dari jam batas ini, status kehadiran otomatis dicatat <strong className="text-amber-300">TERLAMBAT</strong> dan langsung ter-update ke Dasbor Admin.
-                          </p>
-                        </div>
-
-                        {/* JAM KE-2 TSANAWIYAH */}
-                        <div className="bg-[#052216] p-3 rounded-xl border border-emerald-500/30 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                              <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 flex items-center justify-center text-[10px] font-bold">2</span>
-                              <span>Jam Ke-2 Tsanawiyah:</span>
-                            </span>
-                            <span className="text-[10px] text-amber-300 font-mono">Default: 09:45 - 10:15 (Tepat)</span>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-[10px] text-slate-300 block mb-1">Jam Mulai Jam Ke-2:</label>
-                              <input
-                                type="time"
-                                value={jamPresensiForm.jam_tsanawiyah_2_mulai}
-                                onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_tsanawiyah_2_mulai: e.target.value })}
-                                className="w-full bg-[#03140c] border border-emerald-500/40 rounded-lg p-2 text-xs text-white font-mono font-bold"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-amber-300 block mb-1">Batas Tepat Waktu (Lewat = Terlambat):</label>
-                              <input
-                                type="time"
-                                value={jamPresensiForm.jam_tsanawiyah_2_batas_hadir}
-                                onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_tsanawiyah_2_batas_hadir: e.target.value })}
-                                className="w-full bg-[#03140c] border border-amber-500/50 rounded-lg p-2 text-xs text-amber-200 font-mono font-bold"
-                              />
-                            </div>
-                          </div>
-                          <p className="text-[9.5px] text-slate-400">
-                            * Jika presensi dilakukan setelah jam batas ini, status langsung dihitung <strong className="text-amber-300">TERLAMBAT</strong>.
-                          </p>
-                        </div>
-
-                        {/* BATAS AKHIR PENUTUPAN TOMBOL TSANAWIYAH */}
-                        <div className="bg-[#052216] p-3 rounded-xl border border-red-500/30 space-y-1.5">
-                          <label className="text-[10.5px] font-bold text-red-300 block">
-                            Batas Akhir Penutupan Tombol Presensi Tsanawiyah (WIB):
-                          </label>
-                          <input
-                            type="time"
-                            value={jamPresensiForm.jam_tsanawiyah_selesai}
-                            onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_tsanawiyah_selesai: e.target.value })}
-                            className="w-full bg-[#03140c] border border-red-500/40 rounded-lg p-2 text-xs text-white font-mono font-bold"
-                          />
-                          <p className="text-[9.5px] text-red-200">
-                            * Di luar jam rentang (08:00 - {jamPresensiForm.jam_tsanawiyah_selesai || '12:30'}), tombol presensi HADIR dinonaktifkan otomatis.
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* KARTU 2: ALIYAH (MALAM) */}
-                      <div className="bg-[#03140c] p-4 sm:p-5 rounded-xl border-2 border-amber-500/40 space-y-4 shadow-lg">
-                        <div className="border-b border-amber-500/30 pb-2 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <BookOpen className="w-5 h-5 text-amber-400" />
-                            <h5 className="text-xs sm:text-sm font-extrabold text-amber-300 uppercase tracking-wide">
-                              2. Jadwal Aliyah (Malam)
-                            </h5>
-                          </div>
-                          <span className="text-[10px] bg-amber-950 text-amber-300 px-2 py-0.5 rounded border border-amber-500/40 font-mono">
-                            Jendela: 19:00 - 23:00 WIB
-                          </span>
-                        </div>
-
-                        {/* JAM KE-1 ALIYAH */}
-                        <div className="bg-[#052216] p-3 rounded-xl border border-amber-500/30 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                              <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center text-[10px] font-bold">1</span>
-                              <span>Jam Ke-1 Aliyah:</span>
-                            </span>
-                            <span className="text-[10px] text-amber-300 font-mono">Default: 19:00 - 19:30 (Tepat)</span>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-[10px] text-slate-300 block mb-1">Jam Mulai Masuk:</label>
-                              <input
-                                type="time"
-                                value={jamPresensiForm.jam_aliyah_1_mulai}
-                                onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_aliyah_1_mulai: e.target.value })}
-                                className="w-full bg-[#03140c] border border-amber-500/40 rounded-lg p-2 text-xs text-white font-mono font-bold"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-amber-300 block mb-1">Batas Tepat Waktu (Lewat = Terlambat):</label>
-                              <input
-                                type="time"
-                                value={jamPresensiForm.jam_aliyah_1_batas_hadir}
-                                onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_aliyah_1_batas_hadir: e.target.value })}
-                                className="w-full bg-[#03140c] border border-amber-500/50 rounded-lg p-2 text-xs text-amber-200 font-mono font-bold"
-                              />
-                            </div>
-                          </div>
-                          <p className="text-[9.5px] text-slate-400">
-                            * Lewat dari jam 19.30 tetap bisa absen dan masuk ke dasbor admin dengan status <strong className="text-amber-300">TERLAMBAT</strong>.
-                          </p>
-                        </div>
-
-                        {/* JAM KE-2 ALIYAH */}
-                        <div className="bg-[#052216] p-3 rounded-xl border border-amber-500/30 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                              <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center text-[10px] font-bold">2</span>
-                              <span>Jam Ke-2 Aliyah:</span>
-                            </span>
-                            <span className="text-[10px] text-amber-300 font-mono">Default: 21:00 - 21:30 (Tepat)</span>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-[10px] text-slate-300 block mb-1">Jam Mulai Jam Ke-2:</label>
-                              <input
-                                type="time"
-                                value={jamPresensiForm.jam_aliyah_2_mulai}
-                                onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_aliyah_2_mulai: e.target.value })}
-                                className="w-full bg-[#03140c] border border-amber-500/40 rounded-lg p-2 text-xs text-white font-mono font-bold"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-amber-300 block mb-1">Batas Tepat Waktu (Lewat = Terlambat):</label>
-                              <input
-                                type="time"
-                                value={jamPresensiForm.jam_aliyah_2_batas_hadir}
-                                onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_aliyah_2_batas_hadir: e.target.value })}
-                                className="w-full bg-[#03140c] border border-amber-500/50 rounded-lg p-2 text-xs text-amber-200 font-mono font-bold"
-                              />
-                            </div>
-                          </div>
-                          <p className="text-[9.5px] text-slate-400">
-                            * Jika presensi dilakukan setelah jam 21.30, status langsung dihitung <strong className="text-amber-300">TERLAMBAT</strong>.
-                          </p>
-                        </div>
-
-                        {/* BATAS AKHIR PENUTUPAN TOMBOL ALIYAH */}
-                        <div className="bg-[#052216] p-3 rounded-xl border border-red-500/30 space-y-1.5">
-                          <label className="text-[10.5px] font-bold text-red-300 block">
-                            Batas Akhir Penutupan Tombol Presensi Aliyah (WIB):
-                          </label>
-                          <input
-                            type="time"
-                            value={jamPresensiForm.jam_aliyah_selesai}
-                            onChange={(e) => setJamPresensiForm({ ...jamPresensiForm, jam_aliyah_selesai: e.target.value })}
-                            className="w-full bg-[#03140c] border border-red-500/40 rounded-lg p-2 text-xs text-white font-mono font-bold"
-                          />
-                          <p className="text-[9.5px] text-red-200">
-                            * Di luar jam rentang (19:00 - {jamPresensiForm.jam_aliyah_selesai || '23:00'}), tombol presensi HADIR dinonaktifkan otomatis.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </form>
-                )}
 
                 {/* SECTION 0: PENGATURAN GEOFENCING, GOOGLE MAPS, DAN USTADZ PENGGANTI */}
                 {activeControlSection === 'geofencing_absensi' && (
@@ -9340,216 +9041,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </form>
                 )}
 
-                {/* SECTION 5B: PUSAT KONTROL MEDIA SOSIAL & KONTAK WHATSAPP */}
-                {activeControlSection === 'media_sosial' && (
-                  <form onSubmit={handleSaveVisualAndSecurity} className="card-3d rounded-2xl p-5 space-y-5">
-                    <div className="flex items-center space-x-2 border-b border-[#d4af37]/20 pb-3">
-                      <Share2 className="w-5 h-5 text-[#d4af37]" />
-                      <div>
-                        <h4 className="text-sm font-bold text-white text-gold-3d">Pusat Kontrol Media Sosial & WhatsApp Pesantren</h4>
-                        <p className="text-[11px] text-emerald-300">
-                          Input tautan manual akun Instagram, TikTok, YouTube, dan nomor WhatsApp resmi untuk ditampilkan di footer Layar Masuk (Login Screen) & Portal.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* 1. INSTAGRAM */}
-                      <div className="card-3d-deep p-4 rounded-xl space-y-2 border border-[#d4af37]/30">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-bold text-[#d4af37] flex items-center gap-2">
-                            <Instagram className="w-4 h-4 text-pink-400" />
-                            <span>1. Akun / Link Instagram</span>
-                          </label>
-                          {visualForm.social_instagram && (
-                            <a
-                              href={visualForm.social_instagram.startsWith('http') ? visualForm.social_instagram : `https://instagram.com/${visualForm.social_instagram.replace(/^@/, '')}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-[10px] text-pink-300 hover:underline flex items-center gap-1 font-bold"
-                            >
-                              <span>Tes Link</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-                        </div>
-                        <input
-                          type="text"
-                          value={visualForm.social_instagram || ''}
-                          onChange={(e) => setVisualForm({ ...visualForm, social_instagram: e.target.value })}
-                          className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white shadow-inner"
-                          placeholder="https://instagram.com/pesantrenalmaliki atau @pesantrenalmaliki"
-                        />
-                        <p className="text-[10px] text-emerald-300/80">
-                          Bisa berupa URL lengkap atau handle (contoh: <code>@salaf_almaliki</code>)
-                        </p>
-                      </div>
-
-                      {/* 2. TIKTOK */}
-                      <div className="card-3d-deep p-4 rounded-xl space-y-2 border border-[#d4af37]/30">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-bold text-[#d4af37] flex items-center gap-2">
-                            <Music2 className="w-4 h-4 text-cyan-400" />
-                            <span>2. Akun / Link TikTok</span>
-                          </label>
-                          {visualForm.social_tiktok && (
-                            <a
-                              href={visualForm.social_tiktok.startsWith('http') ? visualForm.social_tiktok : `https://tiktok.com/${visualForm.social_tiktok.startsWith('@') ? visualForm.social_tiktok : '@' + visualForm.social_tiktok}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-[10px] text-cyan-300 hover:underline flex items-center gap-1 font-bold"
-                            >
-                              <span>Tes Link</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-                        </div>
-                        <input
-                          type="text"
-                          value={visualForm.social_tiktok || ''}
-                          onChange={(e) => setVisualForm({ ...visualForm, social_tiktok: e.target.value })}
-                          className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white shadow-inner"
-                          placeholder="https://tiktok.com/@salafalmaliki atau @salafalmaliki"
-                        />
-                        <p className="text-[10px] text-emerald-300/80">
-                          Bisa berupa URL profil TikTok atau username (contoh: <code>@salafalmaliki</code>)
-                        </p>
-                      </div>
-
-                      {/* 3. YOUTUBE */}
-                      <div className="card-3d-deep p-4 rounded-xl space-y-2 border border-[#d4af37]/30">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-bold text-[#d4af37] flex items-center gap-2">
-                            <Youtube className="w-4 h-4 text-red-500" />
-                            <span>3. Channel / Link YouTube</span>
-                          </label>
-                          {visualForm.social_youtube && (
-                            <a
-                              href={visualForm.social_youtube.startsWith('http') ? visualForm.social_youtube : `https://youtube.com/${visualForm.social_youtube.startsWith('@') ? visualForm.social_youtube : '@' + visualForm.social_youtube}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-[10px] text-red-300 hover:underline flex items-center gap-1 font-bold"
-                            >
-                              <span>Tes Link</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-                        </div>
-                        <input
-                          type="text"
-                          value={visualForm.social_youtube || ''}
-                          onChange={(e) => setVisualForm({ ...visualForm, social_youtube: e.target.value })}
-                          className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white shadow-inner"
-                          placeholder="https://youtube.com/@pesantrenalmaliki atau @pesantrenalmaliki"
-                        />
-                        <p className="text-[10px] text-emerald-300/80">
-                          URL Channel atau Custom Handle (contoh: <code>https://youtube.com/@salafalmaliki</code>)
-                        </p>
-                      </div>
-
-                      {/* 4. WHATSAPP */}
-                      <div className="card-3d-deep p-4 rounded-xl space-y-2 border border-[#d4af37]/30">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-bold text-[#d4af37] flex items-center gap-2">
-                            <MessageCircle className="w-4 h-4 text-emerald-400" />
-                            <span>4. Nomor / Link WhatsApp Admin</span>
-                          </label>
-                          {visualForm.social_whatsapp && (
-                            <a
-                              href={visualForm.social_whatsapp.startsWith('http') ? visualForm.social_whatsapp : `https://wa.me/${visualForm.social_whatsapp.replace(/[^0-9]/g, '').replace(/^0/, '62')}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-[10px] text-emerald-300 hover:underline flex items-center gap-1 font-bold"
-                            >
-                              <span>Tes Chat WA</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-                        </div>
-                        <input
-                          type="text"
-                          value={visualForm.social_whatsapp || ''}
-                          onChange={(e) => setVisualForm({ ...visualForm, social_whatsapp: e.target.value })}
-                          className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white shadow-inner font-mono"
-                          placeholder="081234567890 atau 6281234567890"
-                        />
-                        <p className="text-[10px] text-emerald-300/80">
-                          Nomor WA resmi pesantren (format <code>08...</code> atau <code>628...</code> otomatis menjadi tautan klik chat)
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* LIVE PREVIEW TOMBOL MEDIA SOSIAL */}
-                    <div className="p-4 bg-[#03140c] rounded-xl border border-[#d4af37]/30 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-white flex items-center gap-2">
-                          <Eye className="w-4 h-4 text-[#d4af37]" />
-                          <span>Pratinjau Tombol Media Sosial di Halaman Login & Portal:</span>
-                        </span>
-                        <span className="text-[10px] text-emerald-300">Klik ikon untuk menguji langsung</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-3 bg-[#021109] p-3 rounded-xl border border-[#d4af37]/20 w-fit">
-                        {[
-                          { 
-                            href: visualForm.social_instagram 
-                              ? (visualForm.social_instagram.startsWith('http') ? visualForm.social_instagram : `https://instagram.com/${visualForm.social_instagram.replace(/^@/, '')}`)
-                              : 'https://instagram.com', 
-                            Icon: Instagram, 
-                            title: 'Instagram', 
-                            color: 'hover:text-pink-400' 
-                          },
-                          { 
-                            href: visualForm.social_youtube 
-                              ? (visualForm.social_youtube.startsWith('http') ? visualForm.social_youtube : `https://youtube.com/${visualForm.social_youtube.startsWith('@') ? visualForm.social_youtube : '@' + visualForm.social_youtube}`)
-                              : 'https://youtube.com', 
-                            Icon: Youtube, 
-                            title: 'YouTube', 
-                            color: 'hover:text-red-400' 
-                          },
-                          { 
-                            href: visualForm.social_tiktok 
-                              ? (visualForm.social_tiktok.startsWith('http') ? visualForm.social_tiktok : `https://tiktok.com/${visualForm.social_tiktok.startsWith('@') ? visualForm.social_tiktok : '@' + visualForm.social_tiktok}`)
-                              : 'https://tiktok.com', 
-                            Icon: Music2, 
-                            title: 'TikTok', 
-                            color: 'hover:text-cyan-400' 
-                          },
-                          { 
-                            href: visualForm.social_whatsapp 
-                              ? (visualForm.social_whatsapp.startsWith('http') ? visualForm.social_whatsapp : `https://wa.me/${visualForm.social_whatsapp.replace(/[^0-9]/g, '').replace(/^0/, '62')}`)
-                              : 'https://wa.me/6281234567890', 
-                            Icon: MessageCircle, 
-                            title: 'WhatsApp', 
-                            color: 'hover:text-emerald-400' 
-                          },
-                        ].map(({ href, Icon, title, color }) => (
-                          <a
-                            key={title}
-                            href={href}
-                            target="_blank"
-                            rel="noreferrer"
-                            title={`Buka ${title}`}
-                            className={`w-10 h-10 rounded-full border-2 border-[#d4af37]/70 bg-[#031d12]/80 text-[#faebaa] hover:bg-[#d4af37] hover:text-black flex items-center justify-center transition shadow-lg ${color}`}
-                          >
-                            <Icon className="w-4 h-4" />
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="text-right pt-2 border-t border-[#d4af37]/20">
-                      <button
-                        type="submit"
-                        className="btn-3d-gold px-6 py-2.5 text-black font-extrabold text-xs rounded-xl flex items-center gap-2 ml-auto"
-                      >
-                        <Save className="w-4 h-4 text-black" />
-                        <span>Simpan Link Media Sosial & WhatsApp</span>
-                      </button>
-                    </div>
-                  </form>
-                )}
-
                 {/* SECTION 6: GANTI KATA SANDI (ADMIN & OPTION PANEL) */}
                 {activeControlSection === 'keamanan' && (
                   <form onSubmit={handleSaveVisualAndSecurity} className="card-3d rounded-2xl p-5 space-y-5">
@@ -10389,7 +9880,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             )}
           </div>
         )}
-        </div>
       </main>
 
       {/* =========================================================================

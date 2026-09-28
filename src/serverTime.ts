@@ -26,42 +26,34 @@ export interface ScheduleWindow {
   sesi: string;
   jamKe: number;
   mulai: string;      // e.g. "08:00"
-  batasAwal: string;  // e.g. "08:30" (batas tepat waktu / setelah ini terlambat)
-  selesai: string;    // e.g. "12:30" (batas akhir tombol aktif)
+  batasAwal: string;  // e.g. "08:00"
+  selesai: string;    // e.g. "08:30"
 }
 
 export const OFFICIAL_SCHEDULES: ScheduleWindow[] = [
   {
     tingkat: 'TSANAWIYAH',
-    sesi: 'Jam Ke-1 (Pagi)',
+    sesi: 'Pagi',
     jamKe: 1,
     mulai: '08:00',
-    batasAwal: '08:30',
-    selesai: '12:30'
-  },
-  {
-    tingkat: 'TSANAWIYAH',
-    sesi: 'Jam Ke-2 (Siang)',
-    jamKe: 2,
-    mulai: '09:45',
-    batasAwal: '10:15',
-    selesai: '12:30'
+    batasAwal: '08:00',
+    selesai: '08:30'
   },
   {
     tingkat: 'ALIYAH',
-    sesi: 'Jam Ke-1 (Malam)',
+    sesi: 'Sesi 1 (Malam)',
     jamKe: 1,
     mulai: '19:00',
-    batasAwal: '19:30',
-    selesai: '23:00'
+    batasAwal: '19:00',
+    selesai: '19:30'
   },
   {
     tingkat: 'ALIYAH',
-    sesi: 'Jam Ke-2 (Malam)',
+    sesi: 'Sesi 2 (Malam)',
     jamKe: 2,
     mulai: '21:00',
-    batasAwal: '21:30',
-    selesai: '23:00'
+    batasAwal: '21:00',
+    selesai: '21:30'
   }
 ];
 
@@ -200,7 +192,6 @@ export function checkPresensiSchedule(
     bypassActive?: boolean;
     customSchedules?: ScheduleWindow[];
     toleransiMenit?: number; // Toleransi keterlambatan tambahan jika diatur
-    settings?: any; // AppSettings dinamis dari Option Panel
   }
 ): PresensiCheckResult {
   const serverTime = customDate || getServerTime();
@@ -243,153 +234,83 @@ export function checkPresensiSchedule(
     };
   }
 
-  // Ambil konfigurasi jam dari settings Option Panel atau default resmi
-  const cfg = options?.settings || {};
-  const ts1Mulai = cfg.jam_tsanawiyah_1_mulai || '08:00';
-  const ts1Batas = cfg.jam_tsanawiyah_1_batas_hadir || '08:30';
-  const ts2Mulai = cfg.jam_tsanawiyah_2_mulai || '09:45';
-  const ts2Batas = cfg.jam_tsanawiyah_2_batas_hadir || '10:15';
-  const tsSelesai = cfg.jam_tsanawiyah_selesai || '12:30';
+  const schedules = options?.customSchedules || OFFICIAL_SCHEDULES;
 
-  const al1Mulai = cfg.jam_aliyah_1_mulai || '19:00';
-  const al1Batas = cfg.jam_aliyah_1_batas_hadir || '19:30';
-  const al2Mulai = cfg.jam_aliyah_2_mulai || '21:00';
-  const al2Batas = cfg.jam_aliyah_2_batas_hadir || '21:30';
-  const alSelesai = cfg.jam_aliyah_selesai || '23:00';
+  // Cari jadwal yang sedang aktif di jam ini
+  for (const sch of schedules) {
+    const startSec = timeStringToSeconds(sch.mulai);
+    const endSec = timeStringToSeconds(sch.selesai);
+    const batasSec = timeStringToSeconds(sch.batasAwal);
 
-  const ts1StartSec = timeStringToSeconds(ts1Mulai);
-  const ts1BatasSec = timeStringToSeconds(ts1Batas);
-  const ts2StartSec = timeStringToSeconds(ts2Mulai);
-  const ts2BatasSec = timeStringToSeconds(ts2Batas);
-  const tsEndSec = timeStringToSeconds(tsSelesai);
+    // Cek apakah waktu saat ini berada di dalam jendela presensi (mulai s/d selesai)
+    if (currentSeconds >= startSec && currentSeconds <= endSec) {
+      // Sesuai Permintaan:
+      // "Jika waktu presensi melewati batas awal, ubah status otomatis ke 'Terlambat'"
+      // Batas awal Tsanawiyah: 08.00 (lewat 08.00 -> Terlambat)
+      // Batas awal Aliyah: 19.00 & 21.00 (lewat 19.00/21.00 -> Terlambat)
+      // Catatan: Jika tepat pada menit awal (misal 08:00:00 s.d 08:00:59 atau dengan toleransi 0 detik),
+      // jika currentSeconds > batasSec -> Terlambat, jika == batasSec -> Hadir
+      const isLate = currentSeconds > batasSec;
+      const status: 'Hadir' | 'Terlambat' = isLate ? 'Terlambat' : 'Hadir';
 
-  const al1StartSec = timeStringToSeconds(al1Mulai);
-  const al1BatasSec = timeStringToSeconds(al1Batas);
-  const al2StartSec = timeStringToSeconds(al2Mulai);
-  const al2BatasSec = timeStringToSeconds(al2Batas);
-  const alEndSec = timeStringToSeconds(alSelesai);
+      const sisaDetik = endSec - currentSeconds;
+      const sisaMenit = Math.floor(sisaDetik / 60);
 
-  // 1. EVALUASI JADWAL TSANAWIYAH (RENTANG KESELURUHAN: 08.00 - 12.30)
-  if (currentSeconds >= ts1StartSec && currentSeconds <= tsEndSec) {
-    const isJam2 = currentSeconds >= ts2StartSec;
-    const jamKe = isJam2 ? 2 : 1;
-    const sesi = isJam2 ? 'Jam Ke-2 (Siang)' : 'Jam Ke-1 (Pagi)';
-    const batasSec = isJam2 ? ts2BatasSec : ts1BatasSec;
-    const batasStr = isJam2 ? ts2Batas : ts1Batas;
+      const keterangan = isLate
+        ? `Terlambat (Presensi dilakukan pukul ${wibClockShort} WIB, melewati batas awal ${sch.batasAwal} WIB)`
+        : `Hadir Tepat Waktu (Presensi pukul ${wibClockShort} WIB, tepat pada batas awal ${sch.batasAwal} WIB)`;
 
-    // Lewat batas waktu -> dihitung TERLAMBAT, tapi TETAP BISA ABSEN sampai jam selesai (12.30)
-    const isLate = currentSeconds > batasSec;
-    const status: 'Hadir' | 'Terlambat' = isLate ? 'Terlambat' : 'Hadir';
+      const buttonLabel = isLate
+        ? `PRESENSI TERLAMBAT (${sch.tingkat} - ${wibClockShort} WIB)`
+        : `PRESENSI HADIR TEPAT WAKTU (${sch.tingkat})`;
 
-    const keterangan = isLate
-      ? `Terlambat (Presensi pukul ${wibClockShort} WIB, batas tepat waktu: ${batasStr} WIB)`
-      : `Hadir Tepat Waktu (Presensi pukul ${wibClockShort} WIB, sebelum batas ${batasStr} WIB)`;
-
-    const scheduleObj: ScheduleWindow = {
-      tingkat: 'TSANAWIYAH',
-      sesi,
-      jamKe,
-      mulai: isJam2 ? ts2Mulai : ts1Mulai,
-      batasAwal: batasStr,
-      selesai: tsSelesai
-    };
-
-    return {
-      serverTime,
-      wibTimeStr,
-      wibClockShort,
-      todayIso,
-      currentDayName,
-      isActive: true,
-      tingkat: 'TSANAWIYAH',
-      sesi,
-      jamKe,
-      status,
-      isLate,
-      keterangan,
-      jadwalAktif: scheduleObj,
-      buttonDisabled: false,
-      buttonLabel: isLate
-        ? `PRESENSI TERLAMBAT (TSANAWIYAH - ${wibClockShort} WIB)`
-        : `PRESENSI HADIR TEPAT WAKTU (TSANAWIYAH)`,
-      buttonColorClass: isLate
+      const buttonColorClass = isLate
         ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-950/60 ring-2 ring-amber-400 animate-pulse'
-        : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/60 ring-2 ring-emerald-400',
-      isSimulated: isSimulationActive()
-    };
+        : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/60 ring-2 ring-emerald-400';
+
+      return {
+        serverTime,
+        wibTimeStr,
+        wibClockShort,
+        todayIso,
+        currentDayName,
+        isActive: true,
+        tingkat: sch.tingkat,
+        sesi: sch.sesi,
+        jamKe: sch.jamKe,
+        status,
+        isLate,
+        keterangan,
+        jadwalAktif: sch,
+        buttonDisabled: false,
+        buttonLabel,
+        buttonColorClass,
+        isSimulated: isSimulationActive()
+      };
+    }
   }
 
-  // 2. EVALUASI JADWAL ALIYAH (RENTANG KESELURUHAN: 19.00 - 23.00)
-  if (currentSeconds >= al1StartSec && currentSeconds <= alEndSec) {
-    const isJam2 = currentSeconds >= al2StartSec;
-    const jamKe = isJam2 ? 2 : 1;
-    const sesi = isJam2 ? 'Jam Ke-2 (Malam)' : 'Jam Ke-1 (Malam)';
-    const batasSec = isJam2 ? al2BatasSec : al1BatasSec;
-    const batasStr = isJam2 ? al2Batas : al1Batas;
-
-    // Lewat batas waktu -> dihitung TERLAMBAT, tapi TETAP BISA ABSEN sampai jam selesai (23.00)
-    const isLate = currentSeconds > batasSec;
-    const status: 'Hadir' | 'Terlambat' = isLate ? 'Terlambat' : 'Hadir';
-
-    const keterangan = isLate
-      ? `Terlambat (Presensi pukul ${wibClockShort} WIB, batas tepat waktu: ${batasStr} WIB)`
-      : `Hadir Tepat Waktu (Presensi pukul ${wibClockShort} WIB, sebelum batas ${batasStr} WIB)`;
-
-    const scheduleObj: ScheduleWindow = {
-      tingkat: 'ALIYAH',
-      sesi,
-      jamKe,
-      mulai: isJam2 ? al2Mulai : al1Mulai,
-      batasAwal: batasStr,
-      selesai: alSelesai
-    };
-
-    return {
-      serverTime,
-      wibTimeStr,
-      wibClockShort,
-      todayIso,
-      currentDayName,
-      isActive: true,
-      tingkat: 'ALIYAH',
-      sesi,
-      jamKe,
-      status,
-      isLate,
-      keterangan,
-      jadwalAktif: scheduleObj,
-      buttonDisabled: false,
-      buttonLabel: isLate
-        ? `PRESENSI TERLAMBAT (ALIYAH - ${wibClockShort} WIB)`
-        : `PRESENSI HADIR TEPAT WAKTU (ALIYAH)`,
-      buttonColorClass: isLate
-        ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-950/60 ring-2 ring-amber-400 animate-pulse'
-        : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/60 ring-2 ring-emerald-400',
-      isSimulated: isSimulationActive()
-    };
-  }
-
-  // 3. DI LUAR JADWAL (DI LUAR 08.00-12.30 & DI LUAR 19.00-23.00):
-  // Tombol hadir tidak berfungsi
+  // DI LUAR JADWAL TERSEBUT:
+  // "Di luar jadwal tersebut, nonaktifkan fungsi tombol agar santri/ustadz tidak bisa melakukan presensi."
   let jadwalBerikutnya: PresensiCheckResult['jadwalBerikutnya'] = undefined;
-  if (currentSeconds < ts1StartSec) {
-    const diffMin = Math.round((ts1StartSec - currentSeconds) / 60);
-    jadwalBerikutnya = {
-      label: 'TSANAWIYAH (Jam Ke-1 Pagi)',
-      jamMulai: `${ts1Mulai} WIB`,
-      sisaWaktuText: diffMin > 60 ? `${Math.floor(diffMin / 60)} jam ${diffMin % 60} menit lagi` : `${diffMin} menit lagi`
-    };
-  } else if (currentSeconds < al1StartSec) {
-    const diffMin = Math.round((al1StartSec - currentSeconds) / 60);
-    jadwalBerikutnya = {
-      label: 'ALIYAH (Jam Ke-1 Malam)',
-      jamMulai: `${al1Mulai} WIB`,
-      sisaWaktuText: diffMin > 60 ? `${Math.floor(diffMin / 60)} jam ${diffMin % 60} menit lagi` : `${diffMin} menit lagi`
-    };
-  } else {
+  for (const sch of schedules) {
+    const startSec = timeStringToSeconds(sch.mulai);
+    if (currentSeconds < startSec) {
+      const diffMin = Math.round((startSec - currentSeconds) / 60);
+      jadwalBerikutnya = {
+        label: `${sch.tingkat} (${sch.sesi})`,
+        jamMulai: `${sch.mulai} WIB`,
+        sisaWaktuText: diffMin > 60 ? `${Math.floor(diffMin / 60)} jam ${diffMin % 60} menit lagi` : `${diffMin} menit lagi`
+      };
+      break;
+    }
+  }
+
+  // Jika semua jadwal hari ini telah lewat
+  if (!jadwalBerikutnya) {
     jadwalBerikutnya = {
       label: 'TSANAWIYAH (Pagi Besok)',
-      jamMulai: `${ts1Mulai} WIB`,
+      jamMulai: '08:00 WIB',
       sisaWaktuText: 'Besok Pagi'
     };
   }
@@ -406,7 +327,7 @@ export function checkPresensiSchedule(
     jamKe: 0,
     status: 'Hadir',
     isLate: false,
-    keterangan: `Di luar jam absensi resmi (Tsanawiyah: ${ts1Mulai} - ${tsSelesai} | Aliyah: ${al1Mulai} - ${alSelesai})`,
+    keterangan: 'Di luar jadwal presensi resmi (Tsanawiyah: 08.00-08.30 | Aliyah: 19.00-19.30 & 21.00-21.30)',
     jadwalBerikutnya,
     buttonDisabled: true,
     buttonLabel: 'PRESENSI NONAKTIF (DI LUAR JADWAL)',

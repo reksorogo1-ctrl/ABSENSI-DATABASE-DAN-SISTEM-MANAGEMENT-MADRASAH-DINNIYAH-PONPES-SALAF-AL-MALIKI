@@ -7,7 +7,6 @@ import { playDoorSound } from '../lib/doorSound';
 
 interface DoorTransitionProps {
   onComplete: () => void;
-  onDoorsParting?: () => void;
   settings?: Partial<AppSettings> | null;
 }
 
@@ -16,20 +15,14 @@ const panelBg =
 
 // Luxurious 3D sliding-door reveal played right after a successful login.
 // Two vertical panels slide apart (left <- , -> right) unveiling the dashboard behind.
-export const DoorTransition: React.FC<DoorTransitionProps> = ({ onComplete, onDoorsParting, settings }) => {
+export const DoorTransition: React.FC<DoorTransitionProps> = ({ onComplete, settings }) => {
   const logos = resolveLogos(settings);
 
   useEffect(() => {
     playDoorSound(450);
-    const partingTimer = window.setTimeout(() => {
-      onDoorsParting?.();
-    }, 550);
     const t = window.setTimeout(onComplete, 2100);
-    return () => {
-      window.clearTimeout(partingTimer);
-      window.clearTimeout(t);
-    };
-  }, [onComplete, onDoorsParting]);
+    return () => window.clearTimeout(t);
+  }, [onComplete]);
 
   const door = { duration: 1.35, ease: [0.76, 0, 0.24, 1] as [number, number, number, number], delay: 0.55 };
 

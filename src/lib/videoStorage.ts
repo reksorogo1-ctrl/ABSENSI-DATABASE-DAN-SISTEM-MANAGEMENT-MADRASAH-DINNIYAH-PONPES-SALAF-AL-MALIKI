@@ -1,6 +1,5 @@
 // IndexedDB-backed Persistent Video Storage for SIM Salaf Al-Maliki
-// Enables users to upload custom MP4/WebM videos of any size without 5MB localStorage limits,
-// and ensures seamless compatibility across Mobile HP and Desktop devices.
+// Enables users to upload custom MP4/WebM videos of any size without 5MB localStorage limits.
 
 const DB_NAME = 'sim_almaliki_media_db';
 const DB_VERSION = 1;
@@ -64,7 +63,6 @@ export async function saveVideoFile(file: File | Blob, originalName?: string): P
     localStorage.setItem(LS_VIDEO_SIZE_KEY, fileSize.toString());
     localStorage.setItem(LS_VIDEO_TYPE_KEY, 'file');
     localStorage.setItem('sim_intro_video_updated', new Date().toISOString());
-    window.dispatchEvent(new Event('sim_video_updated'));
   } catch (err) {
     console.warn('Could not store video metadata in localStorage:', err);
   }
@@ -106,7 +104,6 @@ export function saveVideoUrl(url: string, label?: string): void {
   localStorage.setItem(LS_VIDEO_NAME_KEY, label || url.split('/').pop() || 'Video URL Online');
   localStorage.setItem(LS_VIDEO_TYPE_KEY, 'url');
   localStorage.setItem('sim_intro_video_updated', new Date().toISOString());
-  window.dispatchEvent(new Event('sim_video_updated'));
 }
 
 // Reset/remove custom video and revert back to default
@@ -128,10 +125,9 @@ export async function resetVideoToDefault(): Promise<void> {
   localStorage.removeItem(LS_VIDEO_NAME_KEY);
   localStorage.removeItem(LS_VIDEO_SIZE_KEY);
   localStorage.setItem(LS_VIDEO_TYPE_KEY, 'default');
-  window.dispatchEvent(new Event('sim_video_updated'));
 }
 
-// Get the active video to display (handles IndexedDB, URL, settings, fallback)
+// Get the active video to display
 export async function resolveActiveVideo(defaultFallbackUrl: string = '/assets/intro_salaf_almaliki.mp4'): Promise<VideoInfo> {
   const videoType = localStorage.getItem(LS_VIDEO_TYPE_KEY);
   const customUrl = localStorage.getItem(LS_VIDEO_URL_KEY);
@@ -154,7 +150,7 @@ export async function resolveActiveVideo(defaultFallbackUrl: string = '/assets/i
     }
   }
 
-  // 2. If user saved an external URL via saveVideoUrl
+  // 2. If user saved an external URL
   if (videoType === 'url' && customUrl && customUrl.trim()) {
     return {
       src: customUrl.trim(),
@@ -165,17 +161,17 @@ export async function resolveActiveVideo(defaultFallbackUrl: string = '/assets/i
     };
   }
 
-  // 3. Check if an intro URL is stored in almaliki_settings
-  const savedAlmalikiSettings = localStorage.getItem('almaliki_settings');
-  if (savedAlmalikiSettings) {
+  // 3. Check if an intro URL is stored in sim_settings or localStorage
+  const savedSettings = localStorage.getItem('sim_settings');
+  if (savedSettings) {
     try {
-      const parsed = JSON.parse(savedAlmalikiSettings);
-      if (parsed.intro_video_url && parsed.intro_video_url.trim()) {
+      const parsed = JSON.parse(savedSettings);
+      if (parsed.intro_video_url && parsed.intro_video_url !== 'Camera_moving_through_Islamic_li…_20260925184519.mp4') {
         return {
-          src: parsed.intro_video_url.trim(),
-          name: parsed.intro_video_name || 'Video Intro Option Panel',
+          src: parsed.intro_video_url,
+          name: 'Video Intro Salaf Al-Maliki',
           isCustom: true,
-          sourceType: parsed.intro_video_type || 'url'
+          sourceType: 'url'
         };
       }
     } catch {
@@ -183,10 +179,10 @@ export async function resolveActiveVideo(defaultFallbackUrl: string = '/assets/i
     }
   }
 
-  // 4. Default Video: Intro Salaf Al Maliki
+  // 4. Default Video: The Journey of Knowledge - Salaf Al Maliki
   return {
     src: defaultFallbackUrl,
-    name: 'Intro Salaf Al-Maliki (Bawaan)',
+    name: 'The Journey of Knowledge — Salaf Al-Maliki (Bawaan)',
     isCustom: false,
     sourceType: 'default'
   };

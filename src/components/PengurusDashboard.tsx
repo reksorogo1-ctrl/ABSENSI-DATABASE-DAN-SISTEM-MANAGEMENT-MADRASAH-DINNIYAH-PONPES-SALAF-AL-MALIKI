@@ -75,15 +75,6 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   onDeleteKalenderEvent
 }) => {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [tabTransitionKey, setTabTransitionKey] = useState<number>(0);
-  const handleSelectTab = (tabId: string) => {
-    setActiveTab(tabId);
-    setTabTransitionKey(k => k + 1);
-  };
-
-  useEffect(() => {
-    setTabTransitionKey(k => k + 1);
-  }, [activeTab]);
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [showIzinModal, setShowIzinModal] = useState<boolean>(false);
   const [editedPengurus, setEditedPengurus] = useState<Pengurus>({ ...pengurus });
@@ -453,10 +444,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   // Logika Evaluasi Jam Server Real-Time:
   const activeSession: PresensiCheckResult = useMemo(() => {
     return checkPresensiSchedule(serverClock, {
-      bypassActive: settings.bypass_jam_presensi_testing,
-      settings: settings
+      bypassActive: settings.bypass_jam_presensi_testing
     });
-  }, [serverClock, settings]);
+  }, [serverClock, settings.bypass_jam_presensi_testing]);
 
   // JADWAL OTOMATIS AKTIF DARI DATABASE JADWAL PELAJARAN
   const currentDayName = activeSession.currentDayName;
@@ -865,150 +855,146 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
             <button
               onClick={() => setShowIzinModal(true)}
-              className="btn-3d-gold px-3.5 py-1.5 text-xs font-black shadow"
+              className="btn-3d-yellow px-3.5 py-1.5 text-xs font-black shadow"
               title="Ajukan Izin Tidak Mengajar"
             >
-              <Send className="w-3.5 h-3.5 text-[#1a1202]" />
+              <Send className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Ajukan Izin</span>
             </button>
 
             <button
               onClick={onLogout}
-              className="btn-3d-danger px-3.5 py-1.5 text-xs font-black shadow"
+              className="btn-3d-yellow px-3.5 py-1.5 text-xs font-black shadow"
               title="Keluar dari Portal Pengurus"
             >
-              <LogOut className="w-3.5 h-3.5 text-white" />
+              <LogOut className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Keluar</span>
             </button>
           </div>
         </div>
 
         {/* Tab Navigation Menu */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-[#d4af37]/20 overflow-x-auto">
-          <nav className="flex items-center gap-2 py-2.5 text-xs min-w-max">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-[#d4af37]/15 overflow-x-auto">
+          <nav className="flex space-x-2 py-2.5 text-xs">
             <button
-              onClick={() => handleSelectTab('dashboard')}
-              className={`shrink-0 transition flex items-center gap-1.5 ${
+              onClick={() => setActiveTab('dashboard')}
+              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'dashboard'
-                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
-                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
+                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Dasbor</span>
+              <span>Dasbor Utama</span>
             </button>
 
             <button
-              onClick={() => handleSelectTab('izin-mengajar')}
-              className={`shrink-0 transition flex items-center gap-1.5 ${
+              onClick={() => setActiveTab('izin-mengajar')}
+              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'izin-mengajar'
-                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
-                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
+                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
               <span>Izin Mengajar</span>
               {myIzinList.filter(i => i.status === 'Menunggu').length > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-600 text-white font-mono text-[9px] font-bold">
+                <span className="ml-1 px-1.5 py-0.2 rounded-full bg-black text-[#fef08a] font-mono text-[9px] font-bold">
                   {myIzinList.filter(i => i.status === 'Menunggu').length}
                 </span>
               )}
             </button>
 
             <button
-              onClick={() => handleSelectTab('wali-kelas')}
-              className={`shrink-0 transition flex items-center gap-1.5 ${
+              onClick={() => setActiveTab('wali-kelas')}
+              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'wali-kelas'
-                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
-                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
+                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
               <GraduationCap className="w-3.5 h-3.5" />
-              <span>Wali Kelas</span>
-              <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
-                activeTab === 'wali-kelas'
-                  ? 'bg-black/80 text-[#fef08a] border border-amber-300'
-                  : 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
-              }`}>
+              <span>Kelas Bimbingan (Wali Kelas)</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-emerald-900 border border-emerald-500/40 text-[9px] text-emerald-300 font-bold">
                 {waliKelasKelas}
               </span>
             </button>
 
             <button
-              onClick={() => handleSelectTab('kalender')}
-              className={`shrink-0 transition flex items-center gap-1.5 ${
+              onClick={() => setActiveTab('kalender')}
+              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'kalender'
-                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
-                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
+                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
               <Calendar className="w-3.5 h-3.5" />
-              <span>Kalender</span>
+              <span>Kalender & Agenda</span>
               {urgentEvents.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-600 text-white font-mono text-[9px] animate-pulse">
+                <span className="ml-1 px-1.5 py-0.2 rounded-full bg-red-600 text-white font-mono text-[9px] animate-pulse">
                   {urgentEvents.length}
                 </span>
               )}
             </button>
 
             <button
-              onClick={() => handleSelectTab('absensi-santri')}
-              className={`shrink-0 transition flex items-center gap-1.5 ${
+              onClick={() => setActiveTab('absensi-santri')}
+              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'absensi-santri'
-                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
-                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
+                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
               <UserCheck className="w-3.5 h-3.5" />
-              <span>Presensi Santri</span>
+              <span>Presensi Seluruh Santri</span>
             </button>
 
             <button
-              onClick={() => handleSelectTab('jadwal')}
-              className={`shrink-0 transition flex items-center gap-1.5 ${
+              onClick={() => setActiveTab('jadwal')}
+              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'jadwal'
-                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
-                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
+                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>Jadwal & Silabus</span>
+              <span>Jadwal & Kitab</span>
               {unreadSilabusUpdates.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500 text-black font-black text-[9px] animate-pulse border border-amber-300 shadow-md">
-                  ⚡ {unreadSilabusUpdates.length}
+                <span className="ml-1 px-2 py-0.5 rounded-full bg-black text-[#fef08a] font-black text-[9px] animate-pulse border border-yellow-200 shadow-md">
+                  ⚡ {unreadSilabusUpdates.length} Update Silabus
                 </span>
               )}
             </button>
 
             <button
-              onClick={() => handleSelectTab('ujian-kitab')}
-              className={`shrink-0 transition flex items-center gap-1.5 ${
+              onClick={() => setActiveTab('ujian-kitab')}
+              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'ujian-kitab'
-                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
-                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
+                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
               <Award className="w-3.5 h-3.5" />
-              <span>Nilai Santri</span>
+              <span>Nilai Ujian & Muhafadzoh</span>
             </button>
 
             <button
-              onClick={() => handleSelectTab('profil-saya')}
-              className={`shrink-0 transition flex items-center gap-1.5 ${
+              onClick={() => setActiveTab('profil-saya')}
+              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'profil-saya'
-                  ? 'btn-3d-gold px-3.5 py-2 text-xs font-black text-[#1a1202] shadow-lg ring-1 ring-amber-300'
-                  : 'btn-3d-dark px-3 py-1.5 text-xs font-bold text-[#faebaa] hover:text-white'
+                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
               <Users className="w-3.5 h-3.5" />
-              <span>Profil Pengurus</span>
+              <span>Biodata & Profil</span>
             </button>
           </nav>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className={`${building ? 'build-sequence' : ''} flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6`}>
         {/* ===================== NOTIFIKASI REAL-TIME UPDATE MATERI SILABUS GURU ===================== */}
         {unreadSilabusUpdates.length > 0 && (
           <div className="card-3d-glass rounded-3xl p-5 border-2 border-amber-400/80 bg-gradient-to-r from-[#2a1b05] via-[#1a1204] to-[#2a1b05] shadow-2xl relative overflow-hidden">
@@ -1029,19 +1015,18 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2.5 self-stretch sm:self-auto justify-end">
+              <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
                 <button
                   onClick={() => setActiveTab('jadwal')}
-                  className="btn-3d-gold px-4 py-2 text-xs font-black shadow-lg"
+                  className="btn-pill-gold-3d px-4 py-2 text-xs font-black shadow-lg"
                 >
-                  <BookOpen className="w-3.5 h-3.5 text-[#1a1202]" />
-                  <span>Buka Tabel Silabus</span>
+                  📖 Buka Tabel Silabus
                 </button>
                 <button
                   onClick={handleDismissAllSilabusAlerts}
-                  className="btn-3d-dark px-3.5 py-2 text-xs font-bold"
+                  className="px-3 py-1.5 rounded-xl bg-black/60 hover:bg-black/90 text-slate-300 hover:text-white text-xs font-bold border border-amber-500/30 transition"
                 >
-                  <span>Tutup Semua</span>
+                  Tutup Semua
                 </button>
               </div>
             </div>
@@ -1084,14 +1069,12 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
           </div>
         )}
 
-        {/* ===================== TAB PANES WITH SMOOTH TAB-SWITCH & TABLE-COLUMN ASSEMBLY ===================== */}
-        <div key={`${activeTab}-${tabTransitionKey}`} className="tab-pane-transition space-y-6">
-          {/* ===================== TAB 1: DASBOR UTAMA PENGURUS ===================== */}
-          {activeTab === 'dashboard' && (
-          <div key="tab-dashboard" className="space-y-6 assemble-tab-container">
-            {/* 1. NOTIFIKASI KALENDER AKADEMIK & RAPAT MENDESAK (HEADING) */}
+        {/* ===================== TAB 1: DASBOR UTAMA PENGURUS ===================== */}
+        {activeTab === 'dashboard' && (
+          <div className={`${building ? 'build-sequence' : ''} space-y-6`}>
+            {/* 1. NOTIFIKASI KALENDER AKADEMIK & RAPAT MENDESAK */}
             {urgentEvents.length > 0 && (
-              <div className="assemble-heading card-3d-glass rounded-2xl p-5 border-2 border-red-500/70 bg-gradient-to-r from-red-950/60 via-[#1c0808]/80 to-red-950/60 shadow-xl relative overflow-hidden">
+              <div className="card-3d-glass rounded-2xl p-5 border-2 border-red-500/70 bg-gradient-to-r from-red-950/60 via-[#1c0808]/80 to-red-950/60 shadow-xl relative overflow-hidden">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-red-500/30">
                   <div className="flex items-center space-x-3">
                     <div className="w-9 h-9 rounded-xl bg-red-600 text-white flex items-center justify-center font-bold shadow-lg animate-bounce">
@@ -1137,8 +1120,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               </div>
             )}
 
-            {/* 2. PRESENSI MANDIRI HARI INI DENGAN SISTEM GEOFENCING OTOMATIS & PENGGANTI RESMI (CARDS & CONTROLS) */}
-            <div className="assemble-cards card-3d rounded-3xl p-6 border border-[#d4af37]/40 bg-gradient-to-r from-[#031c12] via-[#05281b] to-[#031c12] shadow-2xl space-y-5">
+            {/* 2. PRESENSI MANDIRI HARI INI DENGAN SISTEM GEOFENCING OTOMATIS & PENGGANTI RESMI */}
+            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/40 bg-gradient-to-r from-[#031c12] via-[#05281b] to-[#031c12] shadow-2xl space-y-5">
               {/* Header Info & Jam Server */}
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-[#d4af37]/25">
                 <div className="flex items-center space-x-3.5">
@@ -1713,7 +1696,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                     <span className="text-[#d4af37] font-mono text-[11px]">{todayStr}</span>
                   </div>
 
-                  <div className="overflow-x-auto table-assemble-dock rounded-xl table-3d-stack puzzle-table-assemble border border-[#d4af37]/25">
+                  <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25">
                     <table className="w-full text-xs text-left">
                       <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                         <tr>
@@ -1831,8 +1814,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
         {/* ===================== TAB 2: IZIN TIDAK MENGAJAR ===================== */}
         {activeTab === 'izin-mengajar' && (
-          <div key="tab-izin-mengajar" className="space-y-6 assemble-tab-container">
-            <div className="assemble-heading card-3d rounded-3xl p-6 border border-[#d4af37]/40 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-[#031a10] via-[#062417] to-[#031a10]">
+          <div className="space-y-6">
+            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/40 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-[#031a10] via-[#062417] to-[#031a10]">
               <div>
                 <h2 className="text-base sm:text-lg font-extrabold text-white text-gold-3d flex items-center gap-2">
                   <FileText className="w-5 h-5 text-[#d4af37]" />
@@ -1843,25 +1826,23 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </p>
               </div>
 
-              <div className="assemble-controls">
-                <button
-                  onClick={() => setShowIzinModal(true)}
-                  className="btn-3d-gold px-4 py-2.5 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow"
-                >
-                  <PlusCircle className="w-4 h-4 text-black" />
-                  <span>+ Buat Izin Baru</span>
-                </button>
-              </div>
+              <button
+                onClick={() => setShowIzinModal(true)}
+                className="btn-3d-gold px-4 py-2.5 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow"
+              >
+                <PlusCircle className="w-4 h-4 text-black" />
+                <span>+ Buat Permohonan Izin Baru</span>
+              </button>
             </div>
 
             {/* Riwayat Permohonan Izin Pengurus */}
-            <div className="assemble-tables table-3d-stack puzzle-table-assemble rounded-3xl p-6 border border-[#d4af37]/30 space-y-4">
+            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 space-y-4">
               <h3 className="text-sm font-bold text-white text-gold-3d flex items-center justify-between">
                 <span>Daftar Pengajuan Izin Saya</span>
                 <span className="text-xs text-[#d4af37] font-mono">Total: {myIzinList.length} Pengajuan</span>
               </h3>
 
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/25">
+              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
@@ -1927,9 +1908,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
         {/* ===================== TAB 3: KELAS BIMBINGAN (WALI KELAS) ===================== */}
         {activeTab === 'wali-kelas' && (
-          <div key="tab-wali-kelas" className="space-y-6 assemble-tab-container">
+          <div className="space-y-6">
             {/* Banner Info Wali Kelas */}
-            <div className="assemble-heading card-3d rounded-3xl p-6 border border-[#d4af37]/40 bg-gradient-to-r from-[#052216] via-[#083321] to-[#052216] shadow-xl">
+            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/40 bg-gradient-to-r from-[#052216] via-[#083321] to-[#052216] shadow-xl">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div className="flex items-center space-x-3.5">
                   <div className="w-12 h-12 rounded-2xl bg-[#0b3824] border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow">
@@ -1950,20 +1931,20 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   </div>
                 </div>
 
-                <div className="assemble-controls flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={handleSaveClassAttendance}
                     className="btn-3d-gold px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center gap-1.5 shadow"
                   >
                     <CheckCheck className="w-4 h-4 text-black" />
-                    <span>Simpan Presensi Kelas</span>
+                    <span>Simpan Presensi Kelas ke Admin</span>
                   </button>
                 </div>
               </div>
             </div>
 
             {/* Statistik Kehadiran Anak Didik Hari Ini */}
-            <div className="assemble-cards grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="card-3d-glass rounded-2xl p-4 border border-[#d4af37]/30 text-center">
                 <span className="text-[11px] text-slate-300 font-bold block">Total Anak Didik</span>
                 <span className="text-2xl font-black text-[#d4af37] font-mono mt-1 block">{myStudents.length}</span>
@@ -2017,7 +1998,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="overflow-x-auto table-assemble-dock rounded-2xl table-3d-stack puzzle-table-assemble border border-[#d4af37]/25">
+              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
@@ -2088,7 +2069,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 <span className="text-xs text-emerald-300 font-mono">Terkoneksi Database Admin</span>
               </h3>
 
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/25">
+              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
                 <table className="w-full text-xs text-left min-w-[650px]">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
@@ -2128,8 +2109,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
         {/* ===================== TAB 4: KALENDER & AGENDA ===================== */}
         {activeTab === 'kalender' && (
-          <div key="tab-kalender" className="space-y-6 assemble-tab-container">
-            <div className="assemble-heading card-3d rounded-3xl p-6 border border-[#d4af37]/30 flex justify-between items-center">
+          <div className="space-y-6">
+            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 flex justify-between items-center">
               <div>
                 <h2 className="text-lg font-bold text-white text-gold-3d">
                   Kalender Akademik & Agenda Madrasah Diniyah
@@ -2140,7 +2121,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               </div>
             </div>
 
-            <div className="assemble-cards grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {kalenderList.map(evt => (
                 <div
                   key={evt.id}
@@ -2180,46 +2161,44 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
         {/* ===================== TAB 5: PRESENSI MANUAL SELURUH SANTRI ===================== */}
         {activeTab === 'absensi-santri' && (
-          <div key="tab-absensi-santri" className="space-y-5 assemble-tab-container">
-            <div className="assemble-heading card-3d rounded-3xl p-6 border border-[#d4af37]/30">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-3 border-b border-[#d4af37]/20">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base sm:text-lg font-bold text-white text-gold-3d">
-                      Presensi Manual Seluruh Santri Diniyah
-                    </h3>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
-                      Input Manual Pengurus
-                    </span>
-                  </div>
-                  <p className="text-xs text-emerald-300 mt-0.5">
-                    Input presensi santri oleh pengurus langsung terupdate secara real-time ke Dashboard Admin di Fitur Absensi Santri.
-                  </p>
+          <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 space-y-5">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-3 border-b border-[#d4af37]/20">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-bold text-white text-gold-3d">
+                    Presensi Manual Seluruh Santri Diniyah
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                    Input Manual Pengurus
+                  </span>
                 </div>
+                <p className="text-xs text-emerald-300 mt-0.5">
+                  Input presensi santri oleh pengurus langsung terupdate secara real-time ke Dashboard Admin di Fitur Absensi Santri.
+                </p>
+              </div>
 
-                <div className="assemble-controls flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleMarkAllHadirGlobal}
-                    className="btn-3d-emerald px-3.5 py-2 text-xs font-bold"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Tandai Hadir Semua</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveAllSantriAttendance}
-                    className="btn-3d-gold px-4 py-2 text-black font-extrabold text-xs flex items-center gap-2 shadow"
-                  >
-                    <CheckCheck className="w-4 h-4 text-black" />
-                    <span>Simpan Presensi Santri</span>
-                  </button>
-                </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleMarkAllHadirGlobal}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 font-bold text-xs flex items-center gap-1.5 transition shadow"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Tandai Hadir Semua</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAllSantriAttendance}
+                  className="btn-3d-gold px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow"
+                >
+                  <CheckCheck className="w-4 h-4 text-black" />
+                  <span>Simpan Presensi Santri Manual ke Admin</span>
+                </button>
               </div>
             </div>
 
             {/* Filter Angkatan / Kelas Santri */}
-            <div className="assemble-controls flex flex-wrap items-center gap-2 pt-1">
+            <div className="flex flex-wrap items-center gap-2 pt-1">
               <span className="text-xs text-[#d4af37] font-bold uppercase tracking-wider">Pilih Angkatan:</span>
               <button
                 type="button"
@@ -2245,7 +2224,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             </div>
 
             {/* Tabel Input Presensi Santri Interaktif */}
-            <div className="overflow-x-auto rounded-2xl table-3d-stack puzzle-table-assemble border border-[#d4af37]/25">
+            <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
               <table className="w-full text-xs text-left min-w-[750px]">
                 <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                   <tr>
@@ -2321,9 +2300,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
         {/* ===================== TAB 6: JADWAL & SILABUS MEMAKNAI ===================== */}
         {activeTab === 'jadwal' && (
-          <div key="tab-jadwal" className="space-y-8 assemble-tab-container">
+          <div className="space-y-8">
             {/* Header Jadwal & Silabus */}
-            <div className="assemble-heading card-3d rounded-3xl p-6 border border-[#d4af37]/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-white text-gold-3d flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-[#d4af37]" />
@@ -2340,7 +2319,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             </div>
 
             {/* TABEL 1: TINGKATAN TSANAWIYAH */}
-            <div className="table-3d-stack puzzle-slide-left rounded-3xl p-6 border-2 border-emerald-500/40 space-y-5 bg-gradient-to-b from-[#0b3824]/30 to-[#020e08]">
+            <div className="card-3d rounded-3xl p-6 border-2 border-emerald-500/40 space-y-5 bg-gradient-to-b from-[#0b3824]/30 to-[#020e08]">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-emerald-500/30">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-emerald-950/80 border border-emerald-500/50 flex items-center justify-center text-emerald-300 shadow-md">
@@ -2410,7 +2389,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-emerald-500/30 shadow-xl">
+              <div className="overflow-x-auto rounded-2xl border border-emerald-500/30 shadow-xl">
                 <table className="w-full text-xs text-left min-w-[750px]">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
@@ -2460,31 +2439,31 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             </div>
 
             {/* TABEL 2: TINGKATAN ALIYAH */}
-            <div className="table-3d-stack puzzle-slide-right rounded-3xl p-6 border-2 border-amber-500/40 space-y-5 bg-gradient-to-b from-[#1c1404]/50 via-[#0b3824]/30 to-[#020e08]">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-amber-500/30">
+            <div className="card-3d rounded-3xl p-6 border-2 border-indigo-500/40 space-y-5 bg-gradient-to-b from-[#111638]/30 to-[#020e08]">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-indigo-500/30">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-amber-950/80 border border-amber-500/50 flex items-center justify-center text-amber-300 shadow-md">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-950/80 border border-indigo-500/50 flex items-center justify-center text-indigo-300 shadow-md">
                     <BookOpen className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-white text-gold-3d flex items-center gap-2">
                       Tingkatan Aliyah (Kelas 1 - 3 Aliyah)
                     </h3>
-                    <p className="text-xs text-amber-200">
+                    <p className="text-xs text-indigo-300">
                       Jadwal Pengajian Sesi Malam (Hari: Malam Sabtu s/d Malam Kamis)
                     </p>
                   </div>
                 </div>
 
-                <span className="text-xs text-amber-300 bg-[#020e08] px-3 py-1 rounded-full border border-amber-500/30 self-start md:self-auto font-mono">
+                <span className="text-xs text-indigo-300 bg-[#020e08] px-3 py-1 rounded-full border border-indigo-500/30 self-start md:self-auto font-mono">
                   Sesi Malam (Ba&apos;da Maghrib / Isya)
                 </span>
               </div>
 
               {/* Filter Khusus Tabel Aliyah */}
-              <div className="p-4 rounded-2xl bg-[#03150d] border border-amber-500/30 space-y-3">
+              <div className="p-4 rounded-2xl bg-[#060c1d] border border-indigo-500/30 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <span className="text-xs text-amber-300 font-bold min-w-[130px]">Pilih Kelas / Angkatan:</span>
+                  <span className="text-xs text-indigo-300 font-bold min-w-[130px]">Pilih Kelas / Angkatan:</span>
                   <div className="flex flex-wrap gap-2">
                     {['SEMUA', '1 ALIYAH', '2 ALIYAH', '3 ALIYAH'].map(kls => {
                       const active = jadwalAlAngkatan === kls;
@@ -2506,8 +2485,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t border-amber-500/20">
-                  <span className="text-xs text-amber-300 font-bold min-w-[130px]">Pilih Hari Pengajian:</span>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t border-indigo-500/20">
+                  <span className="text-xs text-indigo-300 font-bold min-w-[130px]">Pilih Hari Pengajian:</span>
                   <div className="flex flex-wrap gap-1.5">
                     {['SEMUA', 'MALAM SABTU', 'MALAM AHAD', 'MALAM SENIN', 'MALAM SELASA', 'MALAM RABU', 'MALAM KAMIS'].map(malam => {
                       const active = jadwalAlDay === malam;
@@ -2530,7 +2509,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-amber-500/30 shadow-xl">
+              <div className="overflow-x-auto rounded-2xl border border-indigo-500/30 shadow-xl">
                 <table className="w-full text-xs text-left min-w-[750px]">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
@@ -2543,7 +2522,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                       <th className="p-3">Ruangan</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-amber-500/20 bg-[#020e08]/80">
+                  <tbody className="divide-y divide-indigo-500/15 bg-[#020e08]/80">
                     {jadwalList
                       .filter(j => {
                         const isAl = j.kelas.toUpperCase().includes('ALIYAH') || j.tingkatan === 'Aliyah';
@@ -2552,8 +2531,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                         return isAl && matchClass && matchDay;
                       })
                       .map((j, idx) => (
-                        <tr key={j.id || `${j.hari}-${j.jamKe}-${j.kelas}-${idx}`} className="hover:bg-amber-500/10 transition">
-                          <td className="p-3 font-bold text-[#d4af37]">{j.hari}</td>
+                        <tr key={j.id || `${j.hari}-${j.jamKe}-${j.kelas}-${idx}`} className="hover:bg-indigo-500/10 transition">
+                          <td className="p-3 font-bold text-indigo-300">{j.hari}</td>
                           <td className="p-3 text-slate-300 font-mono">Ke-{j.jamKe || 1}</td>
                           <td className="p-3 font-mono text-emerald-300">{j.waktu}</td>
                           <td className="p-3 text-white font-bold">{j.kelas}</td>
@@ -2673,7 +2652,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="overflow-x-auto table-assemble-dock table-3d-stack rounded-2xl border border-[#d4af37]/30">
+              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30">
                 <table className="w-full text-xs text-left min-w-[1050px]">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
@@ -2985,8 +2964,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
         {/* ===================== TAB 7: UJIAN KITAB & MUHAFADZOH ===================== */}
         {activeTab === 'ujian-kitab' && (
-          <div key="tab-ujian-kitab" className="space-y-6 assemble-tab-container">
-            <div className="assemble-heading card-3d rounded-3xl p-6 border border-[#d4af37]/30">
+          <div className="space-y-6">
+            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30">
               <h2 className="text-base font-bold text-white text-gold-3d">
                 Nilai Koreksian Kitab, Muhafadzoh, & Baca Kitab
               </h2>
@@ -2995,7 +2974,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               </p>
             </div>
 
-            <div className="assemble-tables table-assemble-dock table-3d-stack puzzle-table-assemble rounded-2xl p-5 border border-[#d4af37]/30 overflow-x-auto">
+            <div className="card-3d rounded-2xl p-5 border border-[#d4af37]/30 overflow-x-auto">
               <table className="w-full text-xs text-left min-w-[850px]">
                 <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                   <tr>
@@ -3044,8 +3023,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
         {/* ===================== TAB 8: PROFIL PENGURUS ===================== */}
         {activeTab === 'profil-saya' && (
-          <div key="tab-profil-saya" className="max-w-2xl mx-auto card-3d rounded-3xl p-6 border border-[#d4af37]/40 space-y-6 assemble-tab-container">
-            <div className="assemble-heading flex items-center space-x-3 pb-4 border-b border-[#d4af37]/20">
+          <div className="max-w-2xl mx-auto card-3d rounded-3xl p-6 border border-[#d4af37]/40 space-y-6">
+            <div className="flex items-center space-x-3 pb-4 border-b border-[#d4af37]/20">
               <div className="w-12 h-12 rounded-2xl bg-[#0b3824] border border-[#d4af37]/50 flex items-center justify-center text-[#d4af37]">
                 <Users className="w-6 h-6" />
               </div>
@@ -3055,7 +3034,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               </div>
             </div>
 
-            <div className="assemble-cards flex items-center space-x-4">
+            <div className="flex items-center space-x-4">
               <div className="w-24 h-24 rounded-2xl overflow-hidden bg-[#0b3824] border-2 border-[#d4af37] shadow-xl shrink-0">
                 <img
                   src={pengurus.foto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'}
@@ -3106,7 +3085,6 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             </div>
           </div>
         )}
-        </div>
       </main>
 
       {/* MODAL 1: FORM PENGAJUAN IZIN TIDAK MENGAJAR */}
