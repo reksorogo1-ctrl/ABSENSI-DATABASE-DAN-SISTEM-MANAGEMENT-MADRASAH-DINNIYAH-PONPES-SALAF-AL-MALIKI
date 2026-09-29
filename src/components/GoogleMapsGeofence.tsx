@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { APIProvider, Map, Marker, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
-import { MapPin, Navigation, Compass, Crosshair, Shield, CheckCircle2, AlertTriangle, Layers } from 'lucide-react';
+import { MapPin, Navigation, Compass, Crosshair, Shield, CheckCircle2, AlertTriangle, Layers, Lock, Unlock } from 'lucide-react';
 import { GOOGLE_MAPS_API_KEY, DEFAULT_GEOFENCE_ZONE } from '../lib/geofencing';
 
 interface GoogleMapsGeofenceProps {
@@ -14,6 +14,7 @@ interface GoogleMapsGeofenceProps {
   userLng?: number | null;
   userAccuracy?: number | null;
   interactive?: boolean; // For Admin to pick/drag coordinates
+  isLocked?: boolean; // Status lokasi terkunci
   onCoordinatesChange?: (lat: number, lng: number) => void;
   height?: string;
   isInsideZone?: boolean;
@@ -98,6 +99,7 @@ export const GoogleMapsGeofence: React.FC<GoogleMapsGeofenceProps> = ({
   userLng,
   userAccuracy,
   interactive = false,
+  isLocked = false,
   onCoordinatesChange,
   height = '280px',
   isInsideZone = true,
@@ -120,7 +122,7 @@ export const GoogleMapsGeofence: React.FC<GoogleMapsGeofenceProps> = ({
 
   const handleMapClick = useCallback(
     (e: any) => {
-      if (!interactive || !onCoordinatesChange) return;
+      if (!interactive || isLocked || !onCoordinatesChange) return;
       const latLng = e.detail?.latLng || e.latLng;
       if (!latLng) return;
       const lat = typeof latLng.lat === 'function' ? latLng.lat() : latLng.lat;
@@ -129,12 +131,12 @@ export const GoogleMapsGeofence: React.FC<GoogleMapsGeofenceProps> = ({
         onCoordinatesChange(lat, lng);
       }
     },
-    [interactive, onCoordinatesChange]
+    [interactive, isLocked, onCoordinatesChange]
   );
 
   const handleMarkerDragEnd = useCallback(
     (e: any) => {
-      if (!interactive || !onCoordinatesChange) return;
+      if (!interactive || isLocked || !onCoordinatesChange) return;
       const latLng = e.latLng || e.detail?.latLng;
       if (!latLng) return;
       const lat = typeof latLng.lat === 'function' ? latLng.lat() : latLng.lat;
@@ -143,7 +145,7 @@ export const GoogleMapsGeofence: React.FC<GoogleMapsGeofenceProps> = ({
         onCoordinatesChange(lat, lng);
       }
     },
-    [interactive, onCoordinatesChange]
+    [interactive, isLocked, onCoordinatesChange]
   );
 
   const handleGetCurrentLocation = () => {
@@ -224,9 +226,9 @@ export const GoogleMapsGeofence: React.FC<GoogleMapsGeofenceProps> = ({
             {/* Marker Pusat Zona Madrasah / Pondok */}
             <Marker
               position={zoneCenter}
-              title={`Pusat Zona: ${zoneName}`}
-              draggable={interactive}
-              onDragEnd={interactive ? handleMarkerDragEnd : undefined}
+              title={`Pusat Zona: ${zoneName}${isLocked ? ' (Terkunci)' : ''}`}
+              draggable={interactive && !isLocked}
+              onDragEnd={interactive && !isLocked ? handleMarkerDragEnd : undefined}
             />
 
             {/* Marker Posisi Ustadz / Pengguna Saat Ini */}
@@ -261,8 +263,22 @@ export const GoogleMapsGeofence: React.FC<GoogleMapsGeofenceProps> = ({
           </div>
 
           {interactive && (
-            <div className="bg-amber-950/90 text-amber-200 border border-amber-500/50 px-2.5 py-1 rounded-lg text-[10px] font-bold shadow pointer-events-auto">
-              Klik / Geser Pin untuk ubah lokasi pusat zona
+            <div className={`px-2.5 py-1 rounded-lg text-[10px] font-bold shadow pointer-events-auto flex items-center gap-1.5 ${
+              isLocked
+                ? 'bg-emerald-950/95 text-emerald-200 border border-emerald-500/60'
+                : 'bg-amber-950/90 text-amber-200 border border-amber-500/50'
+            }`}>
+              {isLocked ? (
+                <>
+                  <Lock className="w-3 h-3 text-emerald-400" />
+                  <span>🔒 Lokasi Terkunci Otomatis</span>
+                </>
+              ) : (
+                <>
+                  <Unlock className="w-3 h-3 text-amber-400" />
+                  <span>Klik / Geser Pin untuk Menentukan Koordinat</span>
+                </>
+              )}
             </div>
           )}
         </div>

@@ -13,6 +13,7 @@ import {
   BookmarkCheck, CheckSquare, RefreshCw, GraduationCap, MapPin, Compass, Crosshair, Navigation
 } from 'lucide-react';
 import { BrandLogos } from './BrandLogos';
+import { PWAInstallButton } from './PWAInstallButton';
 import { GoogleMapsGeofence } from './GoogleMapsGeofence';
 import { validateGeofence, DEFAULT_GEOFENCE_ZONE } from '../lib/geofencing';
 import { 
@@ -818,22 +819,23 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     <div className="min-h-screen bg-[#020e08] text-slate-100 flex flex-col font-sans selection:bg-[#d4af37] selection:text-black">
       {/* Top Navbar */}
       <header className="build-header sticky top-0 z-50 bg-[#052216]/95 backdrop-blur border-b border-[#d4af37]/30 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 min-h-[4rem] py-2.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
             <BrandLogos settings={settings} size="xs" gap="gap-1.5" idPrefix="pengurus-header" />
-            <div>
-              <h1 className="text-sm sm:text-base font-extrabold text-white text-gold-3d leading-tight">
+            <div className="overflow-hidden">
+              <h1 className="text-xs sm:text-base font-extrabold text-white text-gold-3d leading-tight truncate">
                 {settings.portal_title || settings.nama_pesantren || 'MADRASAH DINIYAH SALAFIYAH'}
               </h1>
-              <p className="text-[10px] sm:text-xs text-emerald-300 font-mono flex items-center gap-1.5">
-                <span>Portal Khusus Pengurus & Asatidz</span>
+              <p className="text-[10px] sm:text-xs text-emerald-300 font-mono flex items-center gap-1.5 truncate">
+                <span className="truncate">Portal Khusus Pengurus & Asatidz</span>
                 <span>•</span>
-                <span className="text-[#d4af37] font-bold">{pengurus.jabatan}</span>
+                <span className="text-[#d4af37] font-bold shrink-0">{pengurus.jabatan}</span>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0 ml-auto">
+            <PWAInstallButton />
             {/* Pengurus Profile Chip */}
             <div 
               onClick={() => setShowEditModal(true)}
@@ -855,20 +857,20 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
             <button
               onClick={() => setShowIzinModal(true)}
-              className="btn-3d-yellow px-3.5 py-1.5 text-xs font-black shadow"
+              className="btn-3d-yellow px-3 py-1.5 text-xs font-black shadow flex items-center gap-1.5"
               title="Ajukan Izin Tidak Mengajar"
             >
-              <Send className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Ajukan Izin</span>
+              <Send className="w-3.5 h-3.5 shrink-0" />
+              <span>Ajukan Izin</span>
             </button>
 
             <button
               onClick={onLogout}
-              className="btn-3d-yellow px-3.5 py-1.5 text-xs font-black shadow"
+              className="btn-3d-yellow px-3 py-1.5 text-xs font-black shadow flex items-center gap-1.5"
               title="Keluar dari Portal Pengurus"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Keluar</span>
+              <LogOut className="w-3.5 h-3.5 shrink-0" />
+              <span>Keluar</span>
             </button>
           </div>
         </div>
@@ -1171,31 +1173,31 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               </div>
 
               {/* TABS MODE: [ ABSENSI NORMAL ] vs [ ABSENSI PENGGANTI ] */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#03140c] p-2.5 rounded-2xl border border-[#d4af37]/35 shadow-inner">
-                <div className="flex space-x-2.5">
+              <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-[#03140c] p-2.5 sm:p-3 rounded-2xl border border-[#d4af37]/35 shadow-inner">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
                   <button
                     type="button"
                     onClick={() => setAbsensiMode('normal')}
-                    className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 ${
+                    className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 ${
                       absensiMode === 'normal'
                         ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
                         : 'text-slate-300 hover:text-white hover:bg-emerald-950/40 border border-transparent'
                     }`}
                   >
-                    <UserCheck className="w-4 h-4" />
+                    <UserCheck className="w-4 h-4 shrink-0" />
                     <span>[ ABSENSI NORMAL ]</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setAbsensiMode('pengganti')}
-                    className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 ${
+                    className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 ${
                       absensiMode === 'pengganti'
                         ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
                         : 'text-amber-300/80 hover:text-amber-200 hover:bg-amber-950/40 border border-transparent'
                     }`}
                   >
-                    <Users className="w-4 h-4" />
+                    <Users className="w-4 h-4 shrink-0" />
                     <span>[ ABSENSI PENGGANTI ]</span>
                     {penggantiRequestList.filter(r => r.status === 'Disetujui' && r.ustadzPengganti.toLowerCase().trim() === pengurus.nama.toLowerCase().trim()).length > 0 && (
                       <span className="px-1.5 py-0.5 rounded-full bg-black text-amber-300 text-[10px] font-mono font-bold">
@@ -1205,21 +1207,21 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2 text-xs">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
                   <button
                     type="button"
                     onClick={() => setShowAjukanPenggantiModal(true)}
-                    className="btn-3d-yellow px-3 py-1.5 text-xs font-bold"
+                    className="btn-3d-yellow px-3.5 py-2 text-xs font-bold flex items-center gap-1.5"
                   >
-                    <PlusCircle className="w-3.5 h-3.5" />
+                    <PlusCircle className="w-3.5 h-3.5 shrink-0" />
                     <span>Ajukan Pengganti Ustadz</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowIzinModal(true)}
-                    className="px-3 py-1.5 rounded-xl bg-[#0a2f1e] hover:bg-[#0f402a] border-t border-white/30 border-b border-black text-[#fef08a] font-bold text-xs flex items-center gap-1.5 transition shadow"
+                    className="px-3.5 py-2 rounded-xl bg-[#0a2f1e] hover:bg-[#0f402a] border-t border-white/30 border-b border-black text-[#fef08a] font-bold text-xs flex items-center gap-1.5 transition shadow"
                   >
-                    <Send className="w-3.5 h-3.5 text-amber-400" />
+                    <Send className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <span>Izin Mengajar</span>
                   </button>
                 </div>
@@ -1307,7 +1309,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                         <button
                           type="button"
                           onClick={handleHadirNormal}
-                          className="btn-3d-hadir-yellow w-full max-w-md text-center flex items-center justify-center gap-3 py-4 shadow-2xl"
+                          className="btn-3d-hadir-yellow w-full max-w-md text-center flex items-center justify-center gap-3"
                         >
                           <Check className="w-6 h-6 stroke-[3.5] text-[#1a1202]" />
                           <span className="text-base sm:text-lg font-black tracking-wider uppercase">
@@ -1382,7 +1384,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                           <button
                             type="button"
                             onClick={handleHadirPengganti}
-                            className="btn-3d-hadir-yellow w-full max-w-md text-center flex items-center justify-center gap-3 py-4 shadow-2xl"
+                            className="btn-3d-hadir-yellow w-full max-w-md text-center flex items-center justify-center gap-3"
                           >
                             <Check className="w-6 h-6 stroke-[3.5] text-[#1a1202]" />
                             <span className="text-base sm:text-lg font-black tracking-wider uppercase">
@@ -1409,14 +1411,14 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                           </div>
                         </div>
 
-                        <div className="pt-2">
+                        <div className="pt-2 flex flex-wrap items-center">
                           <button
                             type="button"
                             onClick={() => setShowAjukanPenggantiModal(true)}
-                            className="btn-3d-yellow px-4 py-2.5 text-xs font-black shadow-lg"
+                            className="btn-3d-yellow px-4 py-2.5 text-xs font-black shadow-lg flex items-center gap-2 max-w-full text-center"
                           >
-                            <PlusCircle className="w-4 h-4" />
-                            <span>Ajukan & Daftarkan Pengganti Ustadz Sekarang</span>
+                            <PlusCircle className="w-4 h-4 shrink-0" />
+                            <span className="leading-normal">Ajukan & Daftarkan Pengganti Ustadz Sekarang</span>
                           </button>
                         </div>
                       </div>
@@ -1696,8 +1698,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                     <span className="text-[#d4af37] font-mono text-[11px]">{todayStr}</span>
                   </div>
 
-                  <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25">
-                    <table className="w-full text-xs text-left">
+                  <div className="table-container-3d overflow-x-auto rounded-xl border border-[#d4af37]/30">
+                    <table className="w-full text-xs text-left table-luxury-3d">
                       <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                         <tr>
                           <th className="p-2.5">Tanggal</th>
@@ -1842,8 +1844,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 <span className="text-xs text-[#d4af37] font-mono">Total: {myIzinList.length} Pengajuan</span>
               </h3>
 
-              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
-                <table className="w-full text-xs text-left">
+              <div className="table-container-3d overflow-x-auto rounded-2xl border border-[#d4af37]/30">
+                <table className="w-full text-xs text-left table-luxury-3d">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
                       <th className="p-3">Tanggal Izin</th>
@@ -1998,8 +2000,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
-                <table className="w-full text-xs text-left">
+              <div className="table-container-3d overflow-x-auto rounded-2xl border border-[#d4af37]/30">
+                <table className="w-full text-xs text-left table-luxury-3d">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
                       <th className="p-3">Santri & NIS</th>
@@ -2036,7 +2038,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                             Rp {(s.saldoUangSaku || 0).toLocaleString('id-ID')}
                           </td>
                           <td className="p-3">
-                            <div className="flex items-center gap-1">
+                            <div className="flex flex-wrap items-center gap-1 min-w-[155px]">
                               {(['Hadir', 'Izin', 'Sakit', 'Alpha'] as const).map(st => (
                                 <button
                                   key={st}
@@ -2069,8 +2071,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 <span className="text-xs text-emerald-300 font-mono">Terkoneksi Database Admin</span>
               </h3>
 
-              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
-                <table className="w-full text-xs text-left min-w-[650px]">
+              <div className="table-container-3d overflow-x-auto rounded-2xl border border-[#d4af37]/30">
+                <table className="w-full text-xs text-left min-w-[650px] table-luxury-3d">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
                       <th className="p-3">Hari</th>
@@ -2189,10 +2191,10 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 <button
                   type="button"
                   onClick={handleSaveAllSantriAttendance}
-                  className="btn-3d-gold px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow"
+                  className="btn-3d-gold px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow max-w-full"
                 >
-                  <CheckCheck className="w-4 h-4 text-black" />
-                  <span>Simpan Presensi Santri Manual ke Admin</span>
+                  <CheckCheck className="w-4 h-4 text-black shrink-0" />
+                  <span className="leading-normal">Simpan Presensi Santri Manual ke Admin</span>
                 </button>
               </div>
             </div>
@@ -2224,8 +2226,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             </div>
 
             {/* Tabel Input Presensi Santri Interaktif */}
-            <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
-              <table className="w-full text-xs text-left min-w-[750px]">
+            <div className="table-container-3d overflow-x-auto rounded-2xl border border-[#d4af37]/30">
+              <table className="w-full text-xs text-left min-w-[750px] table-luxury-3d">
                 <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                   <tr>
                     <th className="p-3 w-12 text-center">NO</th>
@@ -2389,8 +2391,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-2xl border border-emerald-500/30 shadow-xl">
-                <table className="w-full text-xs text-left min-w-[750px]">
+              <div className="table-container-3d overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-xl">
+                <table className="w-full text-xs text-left min-w-[750px] table-luxury-3d">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
                       <th className="p-3">Hari</th>
@@ -2509,8 +2511,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-2xl border border-indigo-500/30 shadow-xl">
-                <table className="w-full text-xs text-left min-w-[750px]">
+              <div className="table-container-3d overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-xl">
+                <table className="w-full text-xs text-left min-w-[750px] table-luxury-3d">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
                       <th className="p-3">Hari (Format Malam)</th>
@@ -2652,8 +2654,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30">
-                <table className="w-full text-xs text-left min-w-[1050px]">
+              <div className="table-container-3d overflow-x-auto rounded-2xl border border-[#d4af37]/30">
+                <table className="w-full text-xs text-left min-w-[1050px] table-luxury-3d">
                   <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                     <tr>
                       <th className="p-3">Nama Ustadz Pengampu</th>
@@ -2939,7 +2941,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                         />
                       </div>
 
-                      <div className="flex justify-end gap-2 pt-3 border-t border-[#d4af37]/20">
+                      <div className="flex flex-wrap justify-end gap-2 pt-3 border-t border-[#d4af37]/20 w-full">
                         <button
                           type="button"
                           onClick={() => setShowAddSilabusModal(false)}
@@ -2974,8 +2976,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               </p>
             </div>
 
-            <div className="card-3d rounded-2xl p-5 border border-[#d4af37]/30 overflow-x-auto">
-              <table className="w-full text-xs text-left min-w-[850px]">
+            <div className="table-container-3d card-3d rounded-2xl p-5 border border-[#d4af37]/30 overflow-x-auto">
+              <table className="w-full text-xs text-left min-w-[850px] table-luxury-3d">
                 <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                   <tr>
                     <th className="p-3">Santri & NIS</th>
@@ -3197,7 +3199,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </p>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-[#d4af37]/20">
+              <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-[#d4af37]/20 w-full">
                 <button
                   type="button"
                   onClick={() => setShowIzinModal(false)}
@@ -3318,7 +3320,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-[#d4af37]/20">
+              <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-[#d4af37]/20 w-full">
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
@@ -3439,7 +3441,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 ℹ️ <b>Aturan Pengganti:</b> Ustadz pengganti tetap wajib berada di radius lokasi madrasah dengan GPS valid untuk dapat menekan tombol <b>[ HADIR SEBAGAI PENGGANTI ]</b>.
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-[#d4af37]/20">
+              <div className="flex flex-wrap justify-end gap-2 pt-2 border-t border-[#d4af37]/20 w-full">
                 <button
                   type="button"
                   onClick={() => setShowAjukanPenggantiModal(false)}
@@ -3542,7 +3544,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => setValidationAlertModal(null)}
-                className="btn-3d-hadir-yellow w-full max-w-xs text-center font-black text-xs sm:text-sm py-3 shadow-xl"
+                className="btn-3d-hadir-yellow w-full max-w-xs text-center font-black"
               >
                 <span>[ SAYA MENGERTI / TUTUP ]</span>
               </button>

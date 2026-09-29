@@ -58,7 +58,24 @@ export const DEFAULT_SETTINGS: AppSettings = {
   btn_reset_dashboard_color: '#000000',
   show_quick_sync_button: true,
   show_export_csv_button: true,
-  show_reset_dashboard_button: true
+  show_reset_dashboard_button: true,
+
+  // Media Sosial & WhatsApp Resmi (Bisa diedit manual di Option Panel)
+  link_instagram: 'https://instagram.com/pesantrensalafalmaliki',
+  link_tiktok: 'https://tiktok.com/@pesantrensalafalmaliki',
+  link_youtube: 'https://youtube.com/@salafalmaliki',
+  link_wa: 'https://wa.me/6281234567890',
+
+  // Geofencing & Google Maps Lokasi Terkunci Otomatis
+  geofencing_enabled: true,
+  geofencing_locked: true,
+  geofencing_zone_name: 'Kompleks Pondok Pesantren & Madrasah Diniyah',
+  geofencing_latitude: -7.428623,
+  geofencing_longitude: 112.441234,
+  geofencing_radius_meters: 100,
+  geofencing_max_gps_accuracy: 50,
+  toleransi_keterlambatan_menit: 15,
+  pengganti_enabled: true
 };
 
 export const INITIAL_SANTRI_LIST: Santri[] = [

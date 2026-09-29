@@ -6,11 +6,32 @@
     color-scheme: dark;
   }
   
+  html {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+  
   body {
     background-color: #02120a;
     color: #f3e5ab;
+    max-width: 100vw;
     overflow-x: hidden;
     letter-spacing: -0.01em;
+  }
+
+  /* Playfair Display for Official Titles, Headers, and Card Headings */
+  .font-display,
+  .font-serif,
+  .font-playfair,
+  h1, h2, h3, h4, h5, h6,
+  th,
+  .table-luxury-3d th,
+  .table-header,
+  .dialog-title,
+  .card-title,
+  .official-heading {
+    font-family: 'Playfair Display', Georgia, Cambria, 'Times New Roman', serif;
+    letter-spacing: 0.02em;
   }
 
   /* Custom Luxury Scrollbar */
@@ -119,34 +140,47 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    font-size: 0.75rem; /* 12px */
+    gap: 0.45rem;
+    font-size: 0.75rem;
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border-radius: 0.75rem; /* rounded-xl (12px) */
-    padding: 0.625rem 1.125rem;
+    letter-spacing: 0.03em;
+    border-radius: 0.625rem;
+    padding: 0.5rem 0.95rem;
+    width: auto;
+    max-width: 100%;
+    min-width: fit-content;
+    line-height: 1.3;
+    text-align: center;
     cursor: pointer;
     user-select: none;
-    white-space: nowrap;
     outline: none;
-    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
-    overflow: hidden;
+  }
+
+  @media (min-width: 640px) {
+    .btn-base {
+      font-size: 0.8125rem;
+      padding: 0.525rem 1.15rem;
+      word-break: keep-all;
+      text-wrap: balance;
+    }
   }
 
   .btn-base:hover {
-    transform: translateY(-2px);
+    transform: translateY(-1px);
   }
 
   .btn-base:active {
-    transform: translateY(1px) scale(0.985);
+    transform: translateY(1.5px);
   }
 
   /* ==========================================================
-     AUTHENTIC 3D LIGHT GOLD / YELLOW EMBOSSED TACTILE BUTTONS (MATCHING USER SPEC)
-     Warna dasar kuning muda (light gold), efek bayangan timbul (drop shadow) lebih dalam,
-     aksen garis putih bercahaya (glowing highlight) pada sisi atas untuk kilau elegan tanpa menyilaukan.
+     REFINED 3D GOLD / YELLOW BUTTON SYSTEM
+     Clean, Simple, Elegan, 3D halus, sedikit highlight putih halus,
+     warna utama Kuning/Gold, proporsional dengan panjang teks.
      ========================================================== */
   .btn-3d-gold,
   .btn-luxury-gold,
@@ -156,391 +190,521 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
+    gap: 0.45rem;
+    width: auto;
+    max-width: 100%;
+    min-width: fit-content;
+    padding: 0.5rem 0.95rem;
     font-size: 0.75rem;
-    font-weight: 900;
+    line-height: 1.3;
+    font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    border-radius: 0.875rem; /* rounded pill cushion */
-    padding: 0.6rem 1.25rem;
-    background: linear-gradient(180deg, #ffffff 0%, #fefce8 12%, #fef08a 42%, #fde047 75%, #eab308 100%);
+    letter-spacing: 0.03em;
+    border-radius: 0.625rem;
+    background: linear-gradient(180deg, #fef08a 0%, #facc15 50%, #eab308 100%);
     color: #1a1202;
-    border-top: 1.5px solid rgba(255, 255, 255, 0.95);
-    border-left: 1px solid rgba(254, 240, 138, 0.75);
-    border-right: 1px solid rgba(254, 240, 138, 0.75);
-    border-bottom: 3.5px solid #854d0e;
+    border: 1px solid rgba(180, 130, 20, 0.65);
+    border-top: 1px solid rgba(255, 255, 255, 0.65);
     box-shadow: 
-      0 5px 0 #713f12,
-      0 10px 20px -2px rgba(0, 0, 0, 0.65),
-      inset 0 2px 2.5px 0 rgba(255, 255, 255, 0.95),
-      inset 0 -2px 3px 0 rgba(113, 63, 18, 0.35);
-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+      0 2px 0 #854d0e,
+      0 3px 6px -1px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.45);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
     cursor: pointer;
     user-select: none;
     transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
+    box-sizing: border-box;
+    text-align: center;
+    word-break: keep-all;
+    text-wrap: balance;
   }
+
+  @media (min-width: 640px) {
+    .btn-3d-gold,
+    .btn-luxury-gold,
+    .btn-gold-3d,
+    .btn-3d-yellow,
+    .btn-pill-gold-3d {
+      font-size: 0.8125rem;
+      padding: 0.525rem 1.15rem;
+      word-break: keep-all;
+      text-wrap: balance;
+    }
+  }
+
   .btn-3d-gold:hover,
   .btn-luxury-gold:hover,
   .btn-gold-3d:hover,
   .btn-3d-yellow:hover,
   .btn-pill-gold-3d:hover {
-    background: linear-gradient(180deg, #ffffff 0%, #fffbeb 15%, #fef08a 45%, #fde047 75%, #facc15 100%);
-    border-top-color: #ffffff;
+    background: linear-gradient(180deg, #fef9c3 0%, #fde047 50%, #eab308 100%);
+    border-top-color: rgba(255, 255, 255, 0.85);
     box-shadow: 
-      0 7px 0 #713f12,
-      0 14px 24px -2px rgba(0, 0, 0, 0.7),
-      0 0 15px rgba(254, 240, 138, 0.55),
-      inset 0 2.5px 3.5px 0 rgba(255, 255, 255, 1),
-      inset 0 -2px 4px 0 rgba(113, 63, 18, 0.4);
-    transform: translateY(-2px);
+      0 3px 0 #854d0e,
+      0 5px 10px -1px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.6);
+    transform: translateY(-1px);
     filter: brightness(1.03);
   }
+
   .btn-3d-gold:active,
   .btn-luxury-gold:active,
   .btn-gold-3d:active,
   .btn-3d-yellow:active,
   .btn-pill-gold-3d:active {
-    transform: translateY(3px) scale(0.99);
-    border-bottom: 1.5px solid #854d0e;
+    transform: translateY(2px);
     box-shadow: 
-      0 1px 0 #713f12,
-      0 3px 8px rgba(0, 0, 0, 0.75),
-      inset 0 2px 5px rgba(0, 0, 0, 0.25),
-      inset 0 -1px 2px rgba(255, 255, 255, 0.3);
+      0 0.5px 0 #854d0e,
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      inset 0 1px 2px rgba(0, 0, 0, 0.15);
   }
 
-  /* Big Prominent 3D Light-Yellow Hadir Button */
+  /* Big Prominent 3D Light Gold Hadir Button - Clean, Elegant & Proportional */
   .btn-3d-hadir-yellow {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.65rem;
-    font-size: 1rem;
+    gap: 0.6rem;
+    font-size: 0.9375rem;
     font-weight: 900;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border-radius: 1.125rem;
-    padding: 0.95rem 2rem;
-    background: linear-gradient(180deg, #ffffff 0%, #fefce8 12%, #fef08a 42%, #fde047 75%, #eab308 100%);
+    letter-spacing: 0.05em;
+    border-radius: 0.75rem;
+    padding: 0.75rem 1.6rem;
+    width: auto;
+    max-width: 100%;
+    min-width: fit-content;
+    background: linear-gradient(180deg, #fef08a 0%, #facc15 45%, #ca8a04 100%);
     color: #1a1202;
-    border-top: 2px solid rgba(255, 255, 255, 0.98);
-    border-left: 1.5px solid rgba(254, 240, 138, 0.85);
-    border-right: 1.5px solid rgba(254, 240, 138, 0.85);
-    border-bottom: 4.5px solid #854d0e;
+    border: 1px solid rgba(161, 98, 7, 0.75);
+    border-top: 1.5px solid rgba(255, 255, 255, 0.75);
     box-shadow: 
-      0 6px 0 #713f12,
-      0 14px 26px -2px rgba(0, 0, 0, 0.7),
-      0 0 16px rgba(254, 240, 138, 0.45),
-      inset 0 2.5px 3.5px 0 rgba(255, 255, 255, 0.98),
-      inset 0 -2.5px 4px 0 rgba(113, 63, 18, 0.35);
-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+      0 3px 0 #78350f,
+      0 4px 10px -1px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.5);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
     cursor: pointer;
     user-select: none;
     transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
+    box-sizing: border-box;
+    text-align: center;
   }
+
+  @media (min-width: 640px) {
+    .btn-3d-hadir-yellow {
+      font-size: 1.0625rem;
+      padding: 0.85rem 2rem;
+      word-break: keep-all;
+      text-wrap: balance;
+    }
+  }
+
   .btn-3d-hadir-yellow:hover {
-    background: linear-gradient(180deg, #ffffff 0%, #fffbeb 15%, #fef08a 45%, #fde047 72%, #facc15 100%);
+    background: linear-gradient(180deg, #fef9c3 0%, #fde047 45%, #d97706 100%);
+    border-top-color: rgba(255, 255, 255, 0.9);
     box-shadow: 
-      0 8px 0 #713f12,
-      0 18px 30px -2px rgba(0, 0, 0, 0.75),
-      0 0 24px rgba(254, 240, 138, 0.65),
-      inset 0 3px 4px 0 rgba(255, 255, 255, 1),
-      inset 0 -3px 5px 0 rgba(113, 63, 18, 0.4);
-    transform: translateY(-2px);
-    filter: brightness(1.04);
+      0 4px 0 #78350f,
+      0 6px 14px -1px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.65);
+    transform: translateY(-1px);
+    filter: brightness(1.03);
   }
+
   .btn-3d-hadir-yellow:active {
-    transform: translateY(4px) scale(0.99);
-    border-bottom: 1.5px solid #854d0e;
+    transform: translateY(2.5px);
     box-shadow: 
-      0 1px 0 #713f12,
-      0 3px 8px rgba(0, 0, 0, 0.8),
-      inset 0 3px 6px rgba(0, 0, 0, 0.25);
+      0 0.5px 0 #78350f,
+      0 1px 3px rgba(0, 0, 0, 0.35),
+      inset 0 1.5px 2px rgba(0, 0, 0, 0.2);
   }
 
-  /* Inactive 3D Pill State */
-  .btn-pill-dark-3d {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    font-size: 0.75rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    border-radius: 0.875rem;
-    padding: 0.55rem 1.15rem;
-    background: linear-gradient(180deg, #092c1c 0%, #03170e 100%);
-    color: #f3e5ab;
-    border: 1.5px solid rgba(212, 175, 55, 0.35);
-    box-shadow: 
-      0 4px 10px -2px rgba(0, 0, 0, 0.7),
-      inset 0 1px 1.5px 0 rgba(212, 175, 55, 0.35),
-      inset 0 -2px 3px 0 rgba(0, 0, 0, 0.8);
-    cursor: pointer;
-    user-select: none;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .btn-pill-dark-3d:hover {
-    border-color: rgba(250, 204, 21, 0.8);
-    color: #ffffff;
-    background: linear-gradient(180deg, #0d3d27 0%, #052215 100%);
-    box-shadow: 
-      0 6px 14px -2px rgba(0, 0, 0, 0.8),
-      0 0 10px rgba(212, 175, 55, 0.3),
-      inset 0 1.5px 2px 0 rgba(255, 245, 205, 0.5);
-    transform: translateY(-1.5px);
-  }
-
-  /* 2. BERHASIL / HADIR / AKTIF -> HIJAU EMERALD */
-  .btn-3d-emerald,
-  .btn-luxury-emerald {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    font-size: 0.75rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border-radius: 0.75rem;
-    padding: 0.625rem 1.125rem;
-    background: linear-gradient(180deg, #34d399 0%, #059669 50%, #047857 100%);
-    color: #ffffff;
-    border: 1px solid rgba(167, 243, 208, 0.6);
-    box-shadow: 
-      0 6px 16px -2px rgba(0, 0, 0, 0.65),
-      0 3px 8px rgba(16, 185, 129, 0.35),
-      inset 0 1.5px 1px rgba(255, 255, 255, 0.5),
-      inset 0 -2.5px 3px rgba(2, 44, 34, 0.7);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-    cursor: pointer;
-    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .btn-3d-emerald:hover,
-  .btn-luxury-emerald:hover {
-    background: linear-gradient(180deg, #6ee7b7 0%, #10b981 50%, #059669 100%);
-    box-shadow: 
-      0 10px 22px -2px rgba(0, 0, 0, 0.75),
-      0 4px 12px rgba(16, 185, 129, 0.55),
-      inset 0 2px 2px rgba(255, 255, 255, 0.65);
-    transform: translateY(-2px);
-    filter: brightness(1.06);
-  }
-  .btn-3d-emerald:active,
-  .btn-luxury-emerald:active {
-    transform: translateY(1px) scale(0.985);
-    box-shadow: 
-      0 2px 6px rgba(0, 0, 0, 0.65),
-      inset 0 2.5px 4px rgba(2, 44, 34, 0.7);
-  }
-
-  /* 3. INFORMASI -> BIRU */
-  .btn-luxury-blue {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    font-size: 0.75rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border-radius: 0.75rem;
-    padding: 0.625rem 1.125rem;
-    background: linear-gradient(180deg, #60a5fa 0%, #2563eb 50%, #1d4ed8 100%);
-    color: #ffffff;
-    border: 1px solid rgba(191, 219, 254, 0.55);
-    box-shadow: 
-      0 6px 16px -2px rgba(0, 0, 0, 0.65),
-      0 3px 8px rgba(37, 99, 235, 0.35),
-      inset 0 1.5px 1px rgba(255, 255, 255, 0.5),
-      inset 0 -2.5px 3px rgba(15, 23, 42, 0.7);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-    cursor: pointer;
-    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .btn-luxury-blue:hover {
-    background: linear-gradient(180deg, #93c5fd 0%, #3b82f6 50%, #2563eb 100%);
-    box-shadow: 0 10px 22px -2px rgba(0, 0, 0, 0.75), 0 4px 12px rgba(59, 130, 246, 0.55);
-    transform: translateY(-2px);
-  }
-  .btn-luxury-blue:active {
-    transform: translateY(1px) scale(0.985);
-    box-shadow: inset 0 2.5px 4px rgba(15, 23, 42, 0.7);
-  }
-
-  /* 4. EDIT / PERUBAHAN DATA -> ORANYE */
-  .btn-luxury-orange {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    font-size: 0.75rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border-radius: 0.75rem;
-    padding: 0.625rem 1.125rem;
-    background: linear-gradient(180deg, #fb923c 0%, #ea580c 50%, #c2410c 100%);
-    color: #ffffff;
-    border: 1px solid rgba(254, 215, 170, 0.6);
-    box-shadow: 
-      0 6px 16px -2px rgba(0, 0, 0, 0.65),
-      0 3px 8px rgba(234, 88, 12, 0.35),
-      inset 0 1.5px 1px rgba(255, 255, 255, 0.5),
-      inset 0 -2.5px 3px rgba(67, 20, 7, 0.7);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-    cursor: pointer;
-    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .btn-luxury-orange:hover {
-    background: linear-gradient(180deg, #fdba74 0%, #f97316 50%, #ea580c 100%);
-    box-shadow: 0 10px 22px -2px rgba(0, 0, 0, 0.75), 0 4px 12px rgba(249, 115, 22, 0.55);
-    transform: translateY(-2px);
-  }
-  .btn-luxury-orange:active {
-    transform: translateY(1px) scale(0.985);
-    box-shadow: inset 0 2.5px 4px rgba(67, 20, 7, 0.7);
-  }
-
-  /* 5. PERINGATAN -> AMBER */
-  .btn-luxury-amber {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    font-size: 0.75rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border-radius: 0.75rem;
-    padding: 0.625rem 1.125rem;
-    background: linear-gradient(180deg, #fbbf24 0%, #d97706 50%, #b45309 100%);
-    color: #1a1003;
-    border: 1px solid rgba(254, 240, 138, 0.7);
-    box-shadow: 
-      0 6px 16px -2px rgba(0, 0, 0, 0.65),
-      0 3px 8px rgba(217, 119, 6, 0.35),
-      inset 0 1.5px 1px rgba(255, 255, 255, 0.6),
-      inset 0 -2.5px 3px rgba(120, 53, 15, 0.7);
-    cursor: pointer;
-    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .btn-luxury-amber:hover {
-    background: linear-gradient(180deg, #fde68a 0%, #f59e0b 50%, #d97706 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 10px 22px -2px rgba(0, 0, 0, 0.75), 0 4px 12px rgba(245, 158, 11, 0.5);
-  }
-  .btn-luxury-amber:active {
-    transform: translateY(1px) scale(0.985);
-    box-shadow: inset 0 2.5px 4px rgba(120, 53, 15, 0.7);
-  }
-
-  /* 6. HAPUS / RESET / DANGER -> MERAH */
-  .btn-luxury-danger {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    font-size: 0.75rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border-radius: 0.75rem;
-    padding: 0.625rem 1.125rem;
-    background: linear-gradient(180deg, #f87171 0%, #dc2626 50%, #b91c1c 100%);
-    color: #ffffff;
-    border: 1px solid rgba(254, 202, 202, 0.55);
-    box-shadow: 
-      0 6px 16px -2px rgba(0, 0, 0, 0.65),
-      0 3px 8px rgba(220, 38, 38, 0.35),
-      inset 0 1.5px 1px rgba(255, 255, 255, 0.5),
-      inset 0 -2.5px 3px rgba(69, 10, 10, 0.75);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-    cursor: pointer;
-    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .btn-luxury-danger:hover {
-    background: linear-gradient(180deg, #fca5a5 0%, #ef4444 50%, #dc2626 100%);
-    box-shadow: 0 10px 22px -2px rgba(0, 0, 0, 0.75), 0 4px 12px rgba(239, 68, 68, 0.55);
-    transform: translateY(-2px);
-  }
-  .btn-luxury-danger:active {
-    transform: translateY(1px) scale(0.985);
-    box-shadow: inset 0 2.5px 4px rgba(69, 10, 10, 0.75);
-  }
-
-  /* 7. KEMBALI / BATAL -> ABU-ABU GELAP / DEEP DARK */
+  /* Inactive / Dark 3D Pill State - Clean 3D */
+  .btn-pill-dark-3d,
+  .btn-3d-pill-inactive,
   .btn-3d-dark,
   .btn-luxury-dark {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
+    gap: 0.45rem;
+    width: auto;
+    max-width: 100%;
+    min-width: fit-content;
     font-size: 0.75rem;
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border-radius: 0.75rem;
-    padding: 0.625rem 1.125rem;
-    background: linear-gradient(180deg, #0f4830 0%, #072619 100%);
-    color: #e2f4ea;
+    letter-spacing: 0.03em;
+    border-radius: 0.625rem;
+    padding: 0.5rem 0.95rem;
+    background: linear-gradient(180deg, #0d3824 0%, #061e13 100%);
+    color: #f3e5ab;
     border: 1px solid rgba(212, 175, 55, 0.35);
+    border-top: 1px solid rgba(255, 255, 255, 0.25);
     box-shadow: 
-      0 4px 12px rgba(0, 0, 0, 0.5),
-      inset 0 1px 1px rgba(212, 175, 55, 0.3),
-      inset 0 -2px 3px rgba(0, 0, 0, 0.7);
+      0 2px 0 #02120a,
+      0 2px 6px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
     cursor: pointer;
-    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .btn-3d-dark:hover,
-  .btn-luxury-dark:hover {
-    border-color: #d4af37;
-    background: linear-gradient(180deg, #165e3f 0%, #0c3926 100%);
-    color: #ffffff;
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.6), 0 0 12px rgba(212, 175, 55, 0.3);
-    transform: translateY(-2px);
-  }
-  .btn-3d-dark:active,
-  .btn-luxury-dark:active {
-    transform: translateY(1px) scale(0.985);
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+    user-select: none;
+    transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    text-align: center;
   }
 
-  /* 8. REFRESH / SINKRONISASI -> TEAL / CYAN */
+  @media (min-width: 640px) {
+    .btn-pill-dark-3d,
+    .btn-3d-pill-inactive,
+    .btn-3d-dark,
+    .btn-luxury-dark {
+      font-size: 0.8125rem;
+      padding: 0.525rem 1.15rem;
+      word-break: keep-all;
+      text-wrap: balance;
+    }
+  }
+
+  .btn-pill-dark-3d:hover,
+  .btn-3d-pill-inactive:hover,
+  .btn-3d-dark:hover,
+  .btn-luxury-dark:hover {
+    border-color: rgba(250, 204, 21, 0.7);
+    color: #ffffff;
+    background: linear-gradient(180deg, #134e32 0%, #08281a 100%);
+    box-shadow: 
+      0 3px 0 #02120a,
+      0 4px 10px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px);
+  }
+
+  .btn-pill-dark-3d:active,
+  .btn-3d-pill-inactive:active,
+  .btn-3d-dark:active,
+  .btn-luxury-dark:active {
+    transform: translateY(1.5px);
+    box-shadow: 0 0.5px 0 #02120a;
+  }
+
+  /* 2. BERHASIL / HADIR / AKTIF -> HIJAU EMERALD (Clean 3D) */
+  .btn-3d-emerald,
+  .btn-luxury-emerald {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    width: auto;
+    max-width: 100%;
+    min-width: fit-content;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border-radius: 0.625rem;
+    padding: 0.5rem 0.95rem;
+    background: linear-gradient(180deg, #10b981 0%, #059669 50%, #047857 100%);
+    color: #ffffff;
+    border: 1px solid rgba(4, 120, 87, 0.75);
+    border-top: 1px solid rgba(255, 255, 255, 0.45);
+    box-shadow: 
+      0 2px 0 #064e3b,
+      0 3px 6px -1px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.35);
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    text-align: center;
+  }
+
+  @media (min-width: 640px) {
+    .btn-3d-emerald,
+    .btn-luxury-emerald {
+      font-size: 0.8125rem;
+      padding: 0.525rem 1.15rem;
+      word-break: keep-all;
+      text-wrap: balance;
+    }
+  }
+
+  .btn-3d-emerald:hover,
+  .btn-luxury-emerald:hover {
+    background: linear-gradient(180deg, #34d399 0%, #10b981 50%, #059669 100%);
+    box-shadow: 
+      0 3px 0 #064e3b,
+      0 5px 10px -1px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.5);
+    transform: translateY(-1px);
+    filter: brightness(1.03);
+  }
+
+  .btn-3d-emerald:active,
+  .btn-luxury-emerald:active {
+    transform: translateY(2px);
+    box-shadow: 
+      0 0.5px 0 #064e3b,
+      0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+
+  /* 3. INFORMASI -> BIRU (Clean 3D) */
+  .btn-luxury-blue {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    width: auto;
+    max-width: 100%;
+    min-width: fit-content;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border-radius: 0.625rem;
+    padding: 0.5rem 0.95rem;
+    background: linear-gradient(180deg, #60a5fa 0%, #2563eb 50%, #1d4ed8 100%);
+    color: #ffffff;
+    border: 1px solid rgba(29, 78, 216, 0.75);
+    border-top: 1px solid rgba(255, 255, 255, 0.45);
+    box-shadow: 
+      0 2px 0 #1e3a8a,
+      0 3px 6px -1px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.4);
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    text-align: center;
+  }
+
+  @media (min-width: 640px) {
+    .btn-luxury-blue {
+      font-size: 0.8125rem;
+      padding: 0.525rem 1.15rem;
+      word-break: keep-all;
+      text-wrap: balance;
+    }
+  }
+
+  .btn-luxury-blue:hover {
+    background: linear-gradient(180deg, #93c5fd 0%, #3b82f6 50%, #2563eb 100%);
+    box-shadow: 0 3px 0 #1e3a8a, 0 5px 10px -1px rgba(0, 0, 0, 0.4);
+    transform: translateY(-1px);
+  }
+
+  .btn-luxury-blue:active {
+    transform: translateY(2px);
+    box-shadow: 0 0.5px 0 #1e3a8a, 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+
+  /* 4. EDIT / PERUBAHAN DATA -> ORANYE (Clean 3D) */
+  .btn-luxury-orange {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    width: auto;
+    max-width: 100%;
+    min-width: fit-content;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border-radius: 0.625rem;
+    padding: 0.5rem 0.95rem;
+    background: linear-gradient(180deg, #fb923c 0%, #ea580c 50%, #c2410c 100%);
+    color: #ffffff;
+    border: 1px solid rgba(194, 65, 12, 0.75);
+    border-top: 1px solid rgba(255, 255, 255, 0.45);
+    box-shadow: 
+      0 2px 0 #7c2d12,
+      0 3px 6px -1px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.4);
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    text-align: center;
+  }
+
+  @media (min-width: 640px) {
+    .btn-luxury-orange {
+      font-size: 0.8125rem;
+      padding: 0.525rem 1.15rem;
+      word-break: keep-all;
+      text-wrap: balance;
+    }
+  }
+
+  .btn-luxury-orange:hover {
+    background: linear-gradient(180deg, #fdba74 0%, #f97316 50%, #ea580c 100%);
+    box-shadow: 0 3px 0 #7c2d12, 0 5px 10px -1px rgba(0, 0, 0, 0.4);
+    transform: translateY(-1px);
+  }
+
+  .btn-luxury-orange:active {
+    transform: translateY(2px);
+    box-shadow: 0 0.5px 0 #7c2d12, 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+
+  /* 5. PERINGATAN -> AMBER (Clean 3D) */
+  .btn-luxury-amber {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    width: auto;
+    max-width: 100%;
+    min-width: fit-content;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border-radius: 0.625rem;
+    padding: 0.5rem 0.95rem;
+    background: linear-gradient(180deg, #fbbf24 0%, #d97706 50%, #b45309 100%);
+    color: #1a1003;
+    border: 1px solid rgba(180, 83, 9, 0.75);
+    border-top: 1px solid rgba(255, 255, 255, 0.55);
+    box-shadow: 
+      0 2px 0 #78350f,
+      0 3px 6px -1px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.45);
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    text-align: center;
+  }
+
+  @media (min-width: 640px) {
+    .btn-luxury-amber {
+      font-size: 0.8125rem;
+      padding: 0.525rem 1.15rem;
+      word-break: keep-all;
+      text-wrap: balance;
+    }
+  }
+
+  .btn-luxury-amber:hover {
+    background: linear-gradient(180deg, #fde68a 0%, #f59e0b 50%, #d97706 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 0 #78350f, 0 5px 10px -1px rgba(0, 0, 0, 0.4);
+  }
+
+  .btn-luxury-amber:active {
+    transform: translateY(2px);
+    box-shadow: 0 0.5px 0 #78350f, 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+
+  /* 6. HAPUS / RESET / DANGER / LOGOUT -> MERAH (Clean 3D) */
+  .btn-luxury-danger,
+  .btn-3d-red {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    width: auto;
+    max-width: 100%;
+    min-width: fit-content;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border-radius: 0.625rem;
+    padding: 0.5rem 0.95rem;
+    background: linear-gradient(180deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%);
+    color: #ffffff;
+    border: 1px solid rgba(185, 28, 28, 0.75);
+    border-top: 1px solid rgba(255, 255, 255, 0.45);
+    box-shadow: 
+      0 2px 0 #7f1d1d,
+      0 3px 6px -1px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.35);
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    text-align: center;
+  }
+
+  @media (min-width: 640px) {
+    .btn-luxury-danger,
+    .btn-3d-red {
+      font-size: 0.8125rem;
+      padding: 0.525rem 1.15rem;
+      word-break: keep-all;
+      text-wrap: balance;
+    }
+  }
+
+  .btn-luxury-danger:hover,
+  .btn-3d-red:hover {
+    background: linear-gradient(180deg, #f87171 0%, #ef4444 50%, #dc2626 100%);
+    box-shadow: 0 3px 0 #7f1d1d, 0 5px 10px -1px rgba(0, 0, 0, 0.4);
+    transform: translateY(-1px);
+    filter: brightness(1.03);
+  }
+
+  .btn-luxury-danger:active,
+  .btn-3d-red:active {
+    transform: translateY(2px);
+    box-shadow: 0 0.5px 0 #7f1d1d, 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+
+  /* 7. REFRESH / SINKRONISASI -> TEAL / CYAN (Clean 3D) */
   .btn-luxury-teal {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
+    gap: 0.45rem;
+    width: auto;
+    max-width: 100%;
+    min-width: fit-content;
     font-size: 0.75rem;
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border-radius: 0.75rem;
-    padding: 0.625rem 1.125rem;
+    letter-spacing: 0.03em;
+    border-radius: 0.625rem;
+    padding: 0.5rem 0.95rem;
     background: linear-gradient(180deg, #2dd4bf 0%, #0d9488 50%, #0f766e 100%);
     color: #ffffff;
-    border: 1px solid rgba(153, 246, 228, 0.55);
+    border: 1px solid rgba(15, 118, 110, 0.75);
+    border-top: 1px solid rgba(255, 255, 255, 0.45);
     box-shadow: 
-      0 6px 16px -2px rgba(0, 0, 0, 0.65),
-      0 3px 8px rgba(13, 148, 136, 0.35),
-      inset 0 1.5px 1px rgba(255, 255, 255, 0.5),
-      inset 0 -2.5px 3px rgba(4, 47, 46, 0.7);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+      0 2px 0 #042f2e,
+      0 3px 6px -1px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.4);
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
     cursor: pointer;
-    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    user-select: none;
+    transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    text-align: center;
   }
+
+  @media (min-width: 640px) {
+    .btn-luxury-teal {
+      font-size: 0.8125rem;
+      padding: 0.525rem 1.15rem;
+      word-break: keep-all;
+      text-wrap: balance;
+    }
+  }
+
   .btn-luxury-teal:hover {
     background: linear-gradient(180deg, #5eead4 0%, #14b8a6 50%, #0d9488 100%);
-    box-shadow: 0 10px 22px -2px rgba(0, 0, 0, 0.75), 0 4px 12px rgba(20, 184, 166, 0.55);
-    transform: translateY(-2px);
+    box-shadow: 0 3px 0 #042f2e, 0 5px 10px -1px rgba(0, 0, 0, 0.4);
+    transform: translateY(-1px);
   }
+
   .btn-luxury-teal:active {
-    transform: translateY(1px) scale(0.985);
-    box-shadow: inset 0 2.5px 4px rgba(4, 47, 46, 0.7);
+    transform: translateY(2px);
+    box-shadow: 0 0.5px 0 #042f2e, 0 1px 2px rgba(0, 0, 0, 0.3);
   }
 
   /* ==========================================================
@@ -573,6 +737,180 @@
     background: rgba(10, 52, 34, 0.45);
     border-left-color: rgba(212, 175, 55, 0.5);
     transform: translateX(2px);
+  }
+
+  /* ==========================================================
+     AUTHENTIC 3D LUXURY TABLE & COLUMN SYSTEM
+     (Admin + Pengurus + Wali Santri)
+     Table Surface + 1 Border + Soft Shadow + Subtle Gold Highlight
+     Clean, Elegant, Modern, Lightweight, Responsive
+     ========================================================== */
+
+  .table-container-3d,
+  .overflow-x-auto:has(> table),
+  .overflow-x-auto:has(table),
+  div[class*="overflow-x-auto"]:has(table),
+  div:has(> table.table-luxury-3d),
+  div:has(> table) {
+    background: linear-gradient(180deg, rgba(6, 26, 17, 0.96) 0%, rgba(3, 16, 10, 0.99) 100%) !important;
+    border: 1px solid rgba(212, 175, 55, 0.32) !important;
+    border-radius: 1rem !important;
+    box-shadow: 
+      0 12px 28px -6px rgba(0, 0, 0, 0.75),
+      0 4px 10px -2px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 238, 170, 0.2) !important;
+    position: relative;
+    max-width: 100%;
+    width: 100%;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 0.75rem;
+  }
+
+  /* Custom Table Scrollbar (Horizontal local scroll strictly inside table container) */
+  .table-container-3d::-webkit-scrollbar,
+  .overflow-x-auto:has(table)::-webkit-scrollbar,
+  div[class*="overflow-x-auto"]:has(table)::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+  }
+  .table-container-3d::-webkit-scrollbar-track,
+  .overflow-x-auto:has(table)::-webkit-scrollbar-track,
+  div[class*="overflow-x-auto"]:has(table)::-webkit-scrollbar-track {
+    background: rgba(2, 14, 9, 0.95);
+    border-radius: 9999px;
+  }
+  .table-container-3d::-webkit-scrollbar-thumb,
+  .overflow-x-auto:has(table)::-webkit-scrollbar-thumb,
+  div[class*="overflow-x-auto"]:has(table)::-webkit-scrollbar-thumb {
+    background: linear-gradient(90deg, #d4af37 0%, #10b981 100%);
+    border-radius: 9999px;
+    border: 1px solid rgba(212, 175, 55, 0.25);
+  }
+  .table-container-3d::-webkit-scrollbar-thumb:hover,
+  .overflow-x-auto:has(table)::-webkit-scrollbar-thumb:hover,
+  div[class*="overflow-x-auto"]:has(table)::-webkit-scrollbar-thumb:hover {
+    background: #facc15;
+  }
+
+  /* Table Baseline */
+  table,
+  .table-luxury-3d {
+    width: 100%;
+    min-width: 650px;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    text-align: left;
+    font-size: 0.775rem; /* ~12.4px */
+    letter-spacing: 0.01em;
+  }
+
+  /* Table Header - Elegan, Sedikit Gold/Brown, Highlight Tipis, Depth 3D */
+  thead {
+    background: linear-gradient(180deg, #2a1e0b 0%, #1c1407 55%, #110c04 100%) !important;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 3px 8px -2px rgba(0, 0, 0, 0.55) !important;
+  }
+
+  thead tr {
+    background: transparent !important;
+  }
+
+  th {
+    color: #fef3c7 !important;
+    font-family: 'Playfair Display', Georgia, Cambria, 'Times New Roman', serif !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.05em !important;
+    text-transform: uppercase !important;
+    font-size: 0.735rem !important; /* ~11.8px */
+    padding: 0.85rem 1rem !important;
+    border-bottom: 2px solid rgba(212, 175, 55, 0.45) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 240, 180, 0.22) !important;
+    white-space: nowrap !important;
+    vertical-align: middle !important;
+    background: transparent !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  }
+
+  th:not(:last-child) {
+    border-right: 1px solid rgba(212, 175, 55, 0.12) !important;
+  }
+
+  /* Table Body */
+  tbody {
+    background-color: transparent !important;
+  }
+
+  tbody tr {
+    transition: background-color 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease !important;
+    border-bottom: 1px solid rgba(212, 175, 55, 0.08) !important;
+    background-color: rgba(3, 20, 13, 0.45) !important;
+  }
+
+  tbody tr:nth-child(even) {
+    background-color: rgba(6, 32, 21, 0.3) !important;
+  }
+
+  /* Row Hover: Subtle Gold Highlight - Bukan Glow Berlebih */
+  tbody tr:hover {
+    background-color: rgba(212, 175, 55, 0.08) !important;
+    box-shadow: 
+      inset 3.5px 0 0 #d4af37, 
+      inset 0 1px 0 rgba(212, 175, 55, 0.14), 
+      inset 0 -1px 0 rgba(212, 175, 55, 0.14) !important;
+  }
+
+  td {
+    padding: 0.78rem 1rem !important;
+    color: #e6f6ee !important;
+    vertical-align: middle !important;
+    border-bottom: 1px solid rgba(212, 175, 55, 0.08) !important;
+    border-right: 1px solid rgba(212, 175, 55, 0.05) !important;
+    background: transparent !important;
+    font-size: 0.775rem !important;
+    line-height: 1.4 !important;
+  }
+
+  td:last-child {
+    border-right: none !important;
+  }
+
+  /* First & Last Corner Soft Radius Encapsulation */
+  thead tr:first-child th:first-child {
+    border-top-left-radius: 0.95rem;
+  }
+  thead tr:first-child th:last-child {
+    border-top-right-radius: 0.95rem;
+  }
+  tbody tr:last-child td:first-child {
+    border-bottom-left-radius: 0.95rem;
+  }
+  tbody tr:last-child td:last-child {
+    border-bottom-right-radius: 0.95rem;
+  }
+  tbody tr:last-child td {
+    border-bottom: none !important;
+  }
+
+  /* Mobile Responsive Table Safeguards */
+  @media (max-width: 768px) {
+    .table-container-3d,
+    .overflow-x-auto:has(table),
+    div:has(> table) {
+      border-radius: 0.75rem !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+    }
+    th {
+      padding: 0.7rem 0.8rem !important;
+      font-size: 0.7rem !important;
+    }
+    td {
+      padding: 0.65rem 0.8rem !important;
+      font-size: 0.725rem !important;
+    }
   }
 
   /* Header banner with beveled 3D reflection */
@@ -624,48 +962,57 @@
     animation: cameraGlide 20s ease-in-out infinite alternate;
   }
 
-  /* Extra 3D Pill Tabs */
+  /* Extra 3D Pill Tabs - Refined Clean 3D */
   .btn-3d-pill-active {
-    background: linear-gradient(180deg, #f6e07b 0%, #d4af37 45%, #997819 100%);
+    background: linear-gradient(180deg, #fef08a 0%, #facc15 50%, #eab308 100%);
     box-shadow: 
-      0 6px 14px -2px rgba(0, 0, 0, 0.7),
-      0 2px 4px rgba(212, 175, 55, 0.4),
-      inset 0 1.5px 1px rgba(255, 255, 255, 0.7),
-      inset 0 -2.5px 3px rgba(110, 80, 10, 0.85);
-    border: 1px solid rgba(255, 240, 180, 0.9);
-    color: #000000;
+      0 2px 0 #854d0e,
+      0 3px 6px -1px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0.5px rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(180, 130, 20, 0.65);
+    border-top: 1px solid rgba(255, 255, 255, 0.7);
+    color: #1a1202;
     font-weight: 800;
     transform: translateY(-1px);
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-3d-pill-active:hover {
+    background: linear-gradient(180deg, #fef9c3 0%, #fde047 50%, #eab308 100%);
+    box-shadow: 
+      0 3px 0 #854d0e,
+      0 5px 10px -1px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0.5px rgba(255, 255, 255, 0.65);
+    transform: translateY(-1.5px);
   }
   .btn-3d-pill-active:active {
     transform: translateY(1.5px);
     box-shadow: 
-      0 2px 4px rgba(0, 0, 0, 0.6),
-      inset 0 2px 4px rgba(0, 0, 0, 0.6);
+      0 0.5px 0 #854d0e,
+      inset 0 1px 2px rgba(0, 0, 0, 0.15);
   }
 
   .btn-3d-pill-inactive {
-    background: linear-gradient(180deg, #0f4830 0%, #072619 100%);
+    background: linear-gradient(180deg, #0d3824 0%, #061e13 100%);
     box-shadow: 
-      0 4px 10px rgba(0, 0, 0, 0.5),
-      inset 0 1px 1px rgba(212, 175, 55, 0.25),
-      inset 0 -2px 3px rgba(0, 0, 0, 0.8);
-    border: 1px solid rgba(212, 175, 55, 0.3);
+      0 2px 0 #02120a,
+      0 2px 6px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    border-top: 1px solid rgba(255, 255, 255, 0.25);
     color: #e2f4ea;
     font-weight: 700;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .btn-3d-pill-inactive:hover {
-    border-color: #d4af37;
-    background: linear-gradient(180deg, #165e3f 0%, #0c3926 100%);
+    border-color: rgba(250, 204, 21, 0.7);
+    background: linear-gradient(180deg, #134e32 0%, #08281a 100%);
     color: #ffffff;
     transform: translateY(-1px);
-    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.6), 0 0 10px rgba(212, 175, 55, 0.3);
+    box-shadow: 0 3px 0 #02120a, 0 4px 10px rgba(0, 0, 0, 0.5);
   }
   .btn-3d-pill-inactive:active {
-    transform: translateY(1px);
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7);
+    transform: translateY(1.5px);
+    box-shadow: 0 0.5px 0 #02120a;
   }
 
   /* ==========================================================
@@ -847,14 +1194,311 @@
 }
 
 .login-gold-btn {
-  background: linear-gradient(180deg, #fff2be 0%, #e7c65a 40%, #c79a24 100%);
-  border: 1px solid rgba(255,244,205,0.9);
-  box-shadow: 0 16px 40px -10px rgba(0,0,0,0.85), 0 0 30px rgba(212,175,55,0.35),
-              inset 0 2px 2px rgba(255,255,255,0.85), inset 0 -4px 6px rgba(120,85,10,0.6);
+  background: linear-gradient(180deg, #fef08a 0%, #facc15 50%, #eab308 100%);
+  color: #1a1202;
+  border: 1px solid rgba(180, 130, 20, 0.65);
+  border-top: 1.5px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 
+    0 2.5px 0 #854d0e,
+    0 4px 10px -1px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.5);
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.login-gold-btn:hover { box-shadow: 0 18px 45px -10px rgba(0,0,0,0.85), 0 0 46px rgba(212,175,55,0.55), inset 0 2px 2px rgba(255,255,255,0.9), inset 0 -4px 6px rgba(120,85,10,0.6); }
+.login-gold-btn:hover {
+  background: linear-gradient(180deg, #fef9c3 0%, #fde047 50%, #eab308 100%);
+  border-top-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 
+    0 3.5px 0 #854d0e,
+    0 6px 14px -1px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0.5px 0 rgba(255, 255, 255, 0.65);
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+}
+.login-gold-btn:active {
+  transform: translateY(2px);
+  box-shadow: 
+    0 0.5px 0 #854d0e,
+    0 1px 2px rgba(0, 0, 0, 0.3);
+}
 
 .login-logo-slot, .door-logo-frame { transition: transform 0.4s cubic-bezier(0.16,1,0.3,1); }
 .login-logo-slot:hover { transform: translateY(-4px) scale(1.03); }
 
 @media (prefers-reduced-motion: reduce) { .login-reveal { animation: none !important; } }
+
+/* ==========================================================
+   GLOBAL ADAPTIVE & RESPONSIVE RULES (ALL DEVICES)
+   Mobile (320px - 430px) -> Tablet (768px - 1024px) -> Desktop -> Ultrawide (2560px+)
+   ========================================================== */
+
+/* Universal No-Overflow Constraint */
+html, body, #root {
+  max-width: 100vw;
+  width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+/* Modals & Dialogs responsive constraint */
+.modal-backdrop,
+.fixed.inset-0 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 0.75rem;
+  box-sizing: border-box;
+}
+
+.modal-dialog,
+.fixed.inset-0 > div {
+  max-width: min(94vw, 780px);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+/* Fluid responsive typography */
+h1 {
+  font-size: clamp(1.15rem, 3.2vw, 1.85rem);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: clamp(1rem, 2.4vw, 1.5rem);
+  line-height: 1.3;
+}
+
+h3 {
+  font-size: clamp(0.875rem, 1.8vw, 1.25rem);
+  line-height: 1.35;
+}
+
+/* Mobile Small Devices (320px - 375px) */
+@media (max-width: 375px) {
+  body {
+    font-size: 13px;
+  }
+  
+  .p-5, .p-6, .p-8 {
+    padding: 0.75rem !important;
+  }
+  
+  .px-5, .px-6, .px-7, .px-8, .px-10 {
+    padding-left: 0.65rem !important;
+    padding-right: 0.65rem !important;
+  }
+
+  .gap-6, .gap-7, .gap-8 {
+    gap: 0.75rem !important;
+  }
+
+  .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.85rem !important;
+  }
+}
+
+/* Tablets (768px - 1024px) */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .max-w-7xl,
+  .max-w-6xl {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+}
+
+/* Large Screens (1600px - 1920px) */
+@media (min-width: 1600px) {
+  .max-w-7xl {
+    max-width: 1540px;
+  }
+  .max-w-6xl {
+    max-width: 1440px;
+  }
+}
+
+/* Ultrawide Screens (2560px+) */
+@media (min-width: 2560px) {
+  .max-w-7xl {
+    max-width: 2160px;
+  }
+  .max-w-6xl {
+    max-width: 1980px;
+  }
+}
+
+/* ==========================================================
+   UNIVERSAL RESPONSIVE BUTTON & ACTION CONTAINER SYSTEM
+   Prevents overflow, collision, and truncation across all devices
+   (Login, Admin, Pengurus, Wali Santri, Tables, Cards, Modals, Forms)
+   ========================================================== */
+
+/* Universal Button Baseline Constraint */
+button,
+[type="button"],
+[type="submit"],
+[type="reset"],
+.btn-base,
+.btn-3d-gold,
+.btn-luxury-gold,
+.btn-gold-3d,
+.btn-3d-yellow,
+.btn-pill-gold-3d,
+.btn-luxury-dark,
+.btn-3d-dark,
+.btn-luxury-emerald,
+.btn-3d-emerald,
+.btn-luxury-danger,
+.btn-3d-red,
+.btn-luxury-blue,
+.btn-luxury-orange,
+.btn-luxury-amber,
+.btn-luxury-teal,
+.btn-3d-hadir-yellow {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  word-break: keep-all !important;
+  text-wrap: balance !important;
+  white-space: normal;
+  touch-action: manipulation;
+}
+
+/* Any flex container holding buttons must auto-wrap and maintain proper gap (exclude grid) */
+.flex:has(> button),
+.inline-flex:has(> button),
+div:not([class*="grid"]):has(> button + button),
+div:not([class*="grid"]):has(> button + a),
+div:not([class*="grid"]):has(> a + button),
+div[class*="justify-end"]:not([class*="grid"]):has(> button),
+div[class*="justify-between"]:not([class*="grid"]):has(> button),
+form div:not([class*="grid"]):has(> button),
+.card-3d div:not([class*="grid"]):has(> button),
+.card-3d-glass div:not([class*="grid"]):has(> button),
+.modal-dialog div:not([class*="grid"]):has(> button),
+header div:not([class*="grid"]):has(> button) {
+  flex-wrap: wrap !important;
+  gap: 0.45rem !important;
+}
+
+/* Remove Tailwind space-x- negative/rigid margins that collide when buttons wrap */
+div:has(> button)[class*="space-x-"] > :not([hidden]) ~ :not([hidden]),
+.flex:has(> button)[class*="space-x-"] > :not([hidden]) ~ :not([hidden]) {
+  margin-left: 0 !important;
+}
+
+/* ==========================================================
+   LOGIN SCREEN ROLE BUTTONS (DESKTOP: 3 COLS, TABLET: 2+1, MOBILE: 1 COL)
+   Never overlap, zero collision, strictly separated areas
+   ========================================================== */
+.login-roles-container {
+  display: grid !important;
+  gap: 0.75rem !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+}
+
+@media (max-width: 639px) {
+  .login-roles-container {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 767px) {
+  .login-roles-container {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .login-roles-container {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+.login-role-btn {
+  width: 100% !important;
+  max-width: 100% !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+}
+
+/* ==========================================================
+   TABLE ACTION BUTTONS (NO OVERFLOW, NO COLLISION, NO CLIPPING)
+   ========================================================== */
+table td div:has(> button),
+.table-luxury-3d td div:has(> button),
+td div:has(> button) {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.35rem !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
+}
+
+table td button,
+.table-luxury-3d td button,
+td button {
+  max-width: 100% !important;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+  font-size: 0.725rem !important;
+  padding: 0.35rem 0.65rem !important;
+  line-height: 1.25 !important;
+  white-space: nowrap !important;
+}
+
+/* Action column header and cells auto-fit to content */
+th:last-child,
+td:last-child,
+th[class*="w-"],
+td[class*="w-"] {
+  min-width: fit-content;
+}
+
+/* ==========================================================
+   CARD & MODAL BUTTONS (ADAPTIVE WRAPPING & CLEAN ROWS)
+   ========================================================== */
+.card-3d,
+.card-3d-glass,
+.card-luxury {
+  overflow: hidden;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.card-3d button,
+.card-3d-glass button,
+.modal-dialog button,
+.fixed.inset-0 button {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Small Phones & Mobile Ergonomics (<= 640px) */
+@media (max-width: 640px) {
+  /* Big Hadir button on phone screens */
+  .btn-3d-hadir-yellow {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0.75rem 1.25rem !important;
+    font-size: 0.95rem !important;
+  }
+
+  /* Header action buttons on mobile */
+  header div:not([class*="grid"]):has(> button),
+  .build-header div:not([class*="grid"]):has(> button) {
+    gap: 0.4rem !important;
+  }
+
+  /* Action buttons inside table on mobile */
+  table td button,
+  td button {
+    font-size: 0.7rem !important;
+    padding: 0.3rem 0.55rem !important;
+  }
+}
+
+

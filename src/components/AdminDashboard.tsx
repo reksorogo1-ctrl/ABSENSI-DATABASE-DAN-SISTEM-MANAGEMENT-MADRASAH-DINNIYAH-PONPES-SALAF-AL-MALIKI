@@ -7,8 +7,10 @@ import {
   Type, Megaphone, Copy, FileSpreadsheet, Newspaper, CheckCheck, RotateCcw,
   CreditCard, Wallet, AlertTriangle, Phone, MessageCircle, ArrowDownLeft, ArrowUpRight, Trash2, GraduationCap,
   Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload, Play,
-  ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine, MapPin, Compass, Crosshair, Shield, Navigation
+  ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine, MapPin, Compass, Crosshair, Shield, Navigation,
+  Instagram, Youtube, Music2, Globe, Unlock, Menu
 } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Legend, 
   BarChart, Bar, CartesianGrid, PieChart, Pie, Cell 
@@ -147,6 +149,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteSantri,
   onTestIntro
 }) => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const classList = ['1 TSANAWIYAH', '2 TSANAWIYAH', '3 TSANAWIYAH', '1 ALIYAH', '2 ALIYAH', '3 ALIYAH'];
 
   // State filter untuk Absensi Guru
@@ -631,7 +634,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [activeControlSection, setActiveControlSection] = useState<
     'input_santri' | 'input_guru' | 'input_jadwal' | 'simpan_absensi' | 'geofencing_absensi' | 'kontrol_tombol' | 
     'visual_branding' | 'keamanan' | 'profil_santri' | 'kelola_syahriyah' | 'kelola_uang_saku' | 'kelola_kurikulum' |
-    'kelola_pengurus' | 'kelola_kalender' | 'kelola_ujian_kitab' | 'kelola_berita' | 'video_intro'
+    'kelola_pengurus' | 'kelola_kalender' | 'kelola_ujian_kitab' | 'kelola_berita' | 'video_intro' | 'sosial_media'
   >(() => {
     const target = localStorage.getItem('sim_target_control_section');
     if (target === 'video_intro') {
@@ -1029,7 +1032,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     btn_reset_dashboard_color: settings.btn_reset_dashboard_color || '#000000',
     show_quick_sync_button: settings.show_quick_sync_button !== false,
     show_export_csv_button: settings.show_export_csv_button !== false,
-    show_reset_dashboard_button: settings.show_reset_dashboard_button !== false
+    show_reset_dashboard_button: settings.show_reset_dashboard_button !== false,
+
+    // Media Sosial & WhatsApp Resmi
+    link_instagram: settings.link_instagram || 'https://instagram.com/pesantrensalafalmaliki',
+    link_tiktok: settings.link_tiktok || 'https://tiktok.com/@pesantrensalafalmaliki',
+    link_youtube: settings.link_youtube || 'https://youtube.com/@salafalmaliki',
+    link_wa: settings.link_wa || 'https://wa.me/6281234567890',
+    geofencing_locked: settings.geofencing_locked !== false
   });
 
   // Sinkronkan visualForm ketika props settings diperbarui dari Google Sheets / localStorage
@@ -1071,7 +1081,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       btn_reset_dashboard_color: settings.btn_reset_dashboard_color || '#000000',
       show_quick_sync_button: settings.show_quick_sync_button !== false,
       show_export_csv_button: settings.show_export_csv_button !== false,
-      show_reset_dashboard_button: settings.show_reset_dashboard_button !== false
+      show_reset_dashboard_button: settings.show_reset_dashboard_button !== false,
+
+      link_instagram: settings.link_instagram || 'https://instagram.com/pesantrensalafalmaliki',
+      link_tiktok: settings.link_tiktok || 'https://tiktok.com/@pesantrensalafalmaliki',
+      link_youtube: settings.link_youtube || 'https://youtube.com/@salafalmaliki',
+      link_wa: settings.link_wa || 'https://wa.me/6281234567890',
+      geofencing_locked: settings.geofencing_locked !== false
     });
   }, [settings]);
 
@@ -1189,11 +1205,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   return (
     <div 
-      className="min-h-screen bg-[#03140c] bg-cover bg-center text-[#f3e5ab] flex flex-col md:flex-row transition-all duration-300"
+      className="min-h-screen bg-[#03140c] bg-cover bg-center text-[#f3e5ab] flex flex-col md:flex-row transition-all duration-300 w-full overflow-x-hidden"
       style={settings.background_url ? { backgroundImage: `linear-gradient(rgba(3, 20, 12, 0.94), rgba(3, 20, 12, 0.97)), url(${settings.background_url})` } : undefined}
     >
+      {/* MOBILE TOP BAR (Phone & Small Screens) */}
+      <div className="md:hidden flex items-center justify-between p-3.5 bg-[#052216]/98 border-b border-[#d4af37]/30 backdrop-blur-md sticky top-0 z-40 w-full">
+        <div className="flex items-center gap-2.5 overflow-hidden">
+          <BrandLogos settings={settings} size="xs" idPrefix="admin-mob-header" />
+          <div className="overflow-hidden">
+            <h2 className="font-bold text-xs text-[#d4af37] truncate uppercase font-serif">
+              {settings.nama_pondok}
+            </h2>
+            <p className="text-[10px] text-emerald-300 truncate">
+              Panel Admin • {activeTab.replace('-', ' ').toUpperCase()}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <PWAInstallButton />
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="p-2 rounded-xl bg-[#03140c] border border-[#d4af37]/50 text-[#d4af37] hover:text-white transition"
+            aria-label="Toggle Menu Navigasi"
+          >
+            {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
+      </div>
+
       {/* SIDEBAR */}
-      <aside className="build-sidebar w-full md:w-72 bg-[#052216]/95 border-r border-[#d4af37]/30 p-5 flex flex-col justify-between shrink-0 shadow-2xl backdrop-blur-md">
+      <aside className={`build-sidebar w-full md:w-72 bg-[#052216]/95 border-r border-[#d4af37]/30 p-4 sm:p-5 flex flex-col justify-between shrink-0 shadow-2xl backdrop-blur-md ${isMobileMenuOpen ? 'flex' : 'hidden md:flex'}`}>
         <div className="space-y-6">
           {/* Logo & Header */}
           <div className="flex items-center gap-3 pb-4 border-b border-[#d4af37]/20">
@@ -1229,7 +1271,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setIsMobileMenuOpen(false);
+                  }}
                   className={`w-full text-left px-3.5 py-2.5 rounded-xl font-semibold text-xs flex items-center justify-between transition ${
                     isActive 
                       ? 'bg-[#d4af37]/20 text-white border-l-4 border-[#d4af37] shadow-md' 
@@ -1334,7 +1379,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center space-x-3 text-right">
+          <div className="flex flex-wrap items-center gap-2.5 text-right justify-end">
+            <PWAInstallButton variant="button" />
             <button
               onClick={() => onOpenSheetsModal ? onOpenSheetsModal() : setActiveTab('google-sheets')}
               className="px-3.5 py-2 rounded-xl bg-[#031c10] border border-[#d4af37]/60 text-xs font-bold text-[#f3e5ab] flex items-center gap-2 hover:bg-[#062c1b] transition shadow"
@@ -3269,7 +3315,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     setActiveTab('pengaturan');
                     setActiveControlSection('geofencing_absensi' as any);
                   }}
-                  className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-xs flex items-center gap-2 border border-amber-200/60 shadow transition"
+                  className="btn-3d-gold text-black flex items-center gap-2"
                 >
                   <MapPin className="w-3.5 h-3.5 text-black" />
                   <span>Pengaturan Geofencing & Pengganti</span>
@@ -3280,7 +3326,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     setActiveTab('pengaturan');
                     setActiveControlSection('simpan_absensi');
                   }}
-                  className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-xs flex items-center gap-2 border border-amber-200/60 shadow transition"
+                  className="btn-3d-gold text-black flex items-center gap-2"
                 >
                   <Save className="w-3.5 h-3.5 text-black" />
                   <span>{settings.btn_simpan_guru_text || 'SIMPAN DI OPTION PANEL'}</span>
@@ -4531,7 +4577,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex justify-end gap-2 pt-3 border-t border-[#d4af37]/20">
+                    <div className="flex flex-wrap justify-end gap-2 pt-3 border-t border-[#d4af37]/20 w-full">
                       <button
                         type="button"
                         onClick={() => setShowAddJadwalModal(false)}
@@ -4743,7 +4789,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       />
                     </div>
 
-                    <div className="flex justify-end gap-2 pt-3 border-t border-[#d4af37]/20">
+                    <div className="flex flex-wrap justify-end gap-2 pt-3 border-t border-[#d4af37]/20 w-full">
                       <button
                         type="button"
                         onClick={() => setShowAddSilabusModal(false)}
@@ -5909,6 +5955,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     { id: 'input_jadwal', label: 'Input Jadwal', icon: Calendar },
                     { id: 'kontrol_tombol', label: 'Tombol & Teks', icon: Settings2 },
                     { id: 'video_intro', label: 'Video Intro', icon: Film },
+                    { id: 'sosial_media', label: 'Media Sosial & WA', icon: MessageCircle },
                     { id: 'visual_branding', label: 'Logo & Visual', icon: Palette },
                     { id: 'keamanan', label: 'Kata Sandi Admin', icon: Lock }
                   ].map(sec => {
@@ -5963,16 +6010,178 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </button>
                     </div>
 
+                    {/* KARTU KONTROL KUNCI LOKASI OTOMATIS */}
+                    <div className="bg-[#031c10] border-2 border-emerald-500/50 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-emerald-500/30">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold shadow ${
+                            visualForm.geofencing_locked !== false
+                              ? 'bg-emerald-500 text-black'
+                              : 'bg-amber-500 text-black'
+                          }`}>
+                            {visualForm.geofencing_locked !== false ? (
+                              <Lock className="w-5 h-5" />
+                            ) : (
+                              <Unlock className="w-5 h-5" />
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h5 className="text-sm font-black text-white">
+                                Kunci Lokasi Geofencing Otomatis
+                              </h5>
+                              <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                                visualForm.geofencing_locked !== false
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400'
+                                  : 'bg-amber-500/20 text-amber-300 border border-amber-400'
+                              }`}>
+                                {visualForm.geofencing_locked !== false ? '🔒 Terkunci' : '🔓 Terbuka'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-emerald-200/90 mt-0.5">
+                              {visualForm.geofencing_locked !== false
+                                ? `Lokasi otomatis terkunci pada koordinat (${(visualForm.geofencing_latitude ?? DEFAULT_GEOFENCE_ZONE.latitude).toFixed(6)}, ${(visualForm.geofencing_longitude ?? DEFAULT_GEOFENCE_ZONE.longitude).toFixed(6)}). Pin peta aman dari pergeseran tidak sengaja.`
+                                : 'Lokasi dalam mode terbuka. Anda dapat menggeser pin di peta, mencari titik baru, atau menekan tombol kunci di bawah ini.'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div className="text-right">
+                          <span className="text-[10px] text-emerald-300/80 block font-mono">KOORDINAT TERKUNCI:</span>
+                          <span className="text-xs font-mono font-extrabold text-amber-300">
+                            {(visualForm.geofencing_latitude ?? DEFAULT_GEOFENCE_ZONE.latitude).toFixed(6)}, {(visualForm.geofencing_longitude ?? DEFAULT_GEOFENCE_ZONE.longitude).toFixed(6)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Tombol Aksi Kunci Lokasi */}
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        {/* Tombol 1: Kunci Lokasi Koordinat Terpilih */}
+                        <button
+                          type="button"
+                          data-testid="btn-lock-location"
+                          onClick={() => {
+                            const curLat = visualForm.geofencing_latitude ?? DEFAULT_GEOFENCE_ZONE.latitude;
+                            const curLng = visualForm.geofencing_longitude ?? DEFAULT_GEOFENCE_ZONE.longitude;
+                            const updated = {
+                              ...visualForm,
+                              geofencing_latitude: curLat,
+                              geofencing_longitude: curLng,
+                              geofencing_locked: true
+                            };
+                            setVisualForm(updated);
+                            onSaveSettings(updated);
+                            alert(`🔒 Lokasi berhasil dikunci secara otomatis di koordinat:\nLatitude: ${curLat.toFixed(6)}\nLongitude: ${curLng.toFixed(6)}\n\nKoordinat kini terkunci dan aman dari pergeseran.`);
+                          }}
+                          className="btn-3d-gold flex items-center gap-2 text-black"
+                          title="Kunci titik lokasi ke koordinat yang saat ini ditentukan"
+                        >
+                          <Lock className="w-4 h-4 text-black stroke-[2.5]" />
+                          <span>Kunci Lokasi (Koordinat Ini)</span>
+                        </button>
+
+                        {/* Tombol 2: Kunci Otomatis ke Titik Pondok Salaf Al-Maliki */}
+                        <button
+                          type="button"
+                          data-testid="btn-lock-pondok-default"
+                          onClick={() => {
+                            const updated = {
+                              ...visualForm,
+                              geofencing_latitude: DEFAULT_GEOFENCE_ZONE.latitude,
+                              geofencing_longitude: DEFAULT_GEOFENCE_ZONE.longitude,
+                              geofencing_zone_name: visualForm.geofencing_zone_name || DEFAULT_GEOFENCE_ZONE.zoneName,
+                              geofencing_locked: true
+                            };
+                            setVisualForm(updated);
+                            onSaveSettings(updated);
+                            alert(`🎯 Lokasi otomatis terkunci pada koordinat resmi Pondok Pesantren & Madrasah Diniyah Salaf Al-Maliki:\nLatitude: ${DEFAULT_GEOFENCE_ZONE.latitude}\nLongitude: ${DEFAULT_GEOFENCE_ZONE.longitude}`);
+                          }}
+                          className="btn-3d-gold flex items-center gap-2 text-black"
+                          title="Otomatis kunci ke koordinat resmi kompleks pesantren"
+                        >
+                          <Compass className="w-4 h-4 text-black" />
+                          <span>Kunci Otomatis ke Titik Pondok</span>
+                        </button>
+
+                        {/* Tombol 3: Ambil GPS Saat Ini & Kunci Otomatis */}
+                        <button
+                          type="button"
+                          data-testid="btn-lock-current-gps"
+                          onClick={() => {
+                            if (!navigator.geolocation) {
+                              alert('Browser tidak mendukung Geolocation GPS.');
+                              return;
+                            }
+                            navigator.geolocation.getCurrentPosition(
+                              (pos) => {
+                                const newLat = pos.coords.latitude;
+                                const newLng = pos.coords.longitude;
+                                const updated = {
+                                  ...visualForm,
+                                  geofencing_latitude: newLat,
+                                  geofencing_longitude: newLng,
+                                  geofencing_locked: true
+                                };
+                                setVisualForm(updated);
+                                onSaveSettings(updated);
+                                alert(`📍 Berhasil membaca sinyal GPS perangkat!\nLokasi otomatis terkunci pada koordinat saat ini:\nLatitude: ${newLat.toFixed(6)}\nLongitude: ${newLng.toFixed(6)}`);
+                              },
+                              (err) => {
+                                alert('Gagal mendeteksi lokasi GPS perangkat: ' + err.message);
+                              },
+                              { enableHighAccuracy: true, timeout: 10000 }
+                            );
+                          }}
+                          className="btn-3d-gold flex items-center gap-2 text-black"
+                          title="Deteksi posisi GPS perangkat Anda saat ini dan langsung kunci otomatis"
+                        >
+                          <Crosshair className="w-4 h-4 text-black" />
+                          <span>Ambil GPS & Kunci Otomatis</span>
+                        </button>
+
+                        {/* Tombol 4: Buka Kunci Lokasi */}
+                        {visualForm.geofencing_locked !== false && (
+                          <button
+                            type="button"
+                            data-testid="btn-unlock-location"
+                            onClick={() => {
+                              setVisualForm(prev => ({ ...prev, geofencing_locked: false }));
+                              alert('🔓 Kunci lokasi dibuka sementara. Anda dapat menggeser pin di Google Maps atau memasukkan angka koordinat baru, lalu tekan "Kunci Lokasi" kembali.');
+                            }}
+                            className="btn-3d-dark flex items-center gap-1.5 ml-auto"
+                            title="Buka kunci untuk memindahkan titik atau mengubah koordinat"
+                          >
+                            <Unlock className="w-4 h-4 text-amber-400" />
+                            <span>Buka Kunci Lokasi</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
                     {/* INTERACTIVE GOOGLE MAP */}
                     <div className="space-y-2">
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                         <span className="text-xs font-bold text-[#d4af37] flex items-center gap-1.5">
                           <Compass className="w-4 h-4 text-[#d4af37]" />
-                          <span>Peta Interaktif Google Maps (Klik / Geser Pin untuk Menentukan Pusat Lokasi Madrasah):</span>
+                          <span>Peta Interaktif Google Maps (Titik Pusat Absensi Santri & Ustadz):</span>
                         </span>
-                        <span className="text-[10px] text-emerald-300 font-mono">
-                          Google Maps JavaScript API Live
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {visualForm.geofencing_locked !== false ? (
+                            <span className="text-[10px] text-emerald-300 font-extrabold flex items-center gap-1 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/40">
+                              <Lock className="w-3 h-3 text-emerald-400" />
+                              PIN TERKUNCI (Tidak dapat bergeser)
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-amber-300 font-bold flex items-center gap-1 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-500/40">
+                              <Unlock className="w-3 h-3 text-amber-400" />
+                              Klik / Geser Pin untuk Menentukan Koordinat
+                            </span>
+                          )}
+                          <span className="text-[10px] text-emerald-300 font-mono">
+                            Google Maps API Live
+                          </span>
+                        </div>
                       </div>
 
                       <GoogleMapsGeofence
@@ -5981,8 +6190,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         radiusMeters={visualForm.geofencing_radius_meters ?? DEFAULT_GEOFENCE_ZONE.radiusMeters}
                         zoneName={visualForm.geofencing_zone_name || DEFAULT_GEOFENCE_ZONE.zoneName}
                         interactive={true}
+                        isLocked={visualForm.geofencing_locked !== false}
                         height="320px"
                         onCoordinatesChange={(newLat, newLng) => {
+                          if (visualForm.geofencing_locked !== false) return;
                           setVisualForm(prev => ({
                             ...prev,
                             geofencing_latitude: newLat,
@@ -5996,9 +6207,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Blok Kiri: Koordinat & Zona */}
                       <div className="bg-[#03140c] p-4 rounded-xl border border-[#d4af37]/30 space-y-3">
-                        <h5 className="text-xs font-bold text-emerald-300 border-b border-emerald-500/20 pb-1.5 flex items-center gap-1.5">
-                          <Shield className="w-3.5 h-3.5" />
-                          <span>1. Parameter Zona & Koordinat Geofencing</span>
+                        <h5 className="text-xs font-bold text-emerald-300 border-b border-emerald-500/20 pb-1.5 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
+                            <Shield className="w-3.5 h-3.5" />
+                            <span>1. Parameter Zona & Koordinat Geofencing</span>
+                          </span>
+                          {visualForm.geofencing_locked !== false && (
+                            <span className="text-[10px] text-emerald-400 font-mono font-bold flex items-center gap-1">
+                              <Lock className="w-3 h-3" /> Terkunci
+                            </span>
+                          )}
                         </h5>
 
                         <div>
@@ -6014,24 +6232,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className="text-[11px] font-bold text-emerald-300 block mb-1">Latitude (Garis Lintang):</label>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-[11px] font-bold text-emerald-300 block">Latitude (Lintang):</label>
+                              {visualForm.geofencing_locked !== false && (
+                                <Lock className="w-3 h-3 text-emerald-400" />
+                              )}
+                            </div>
                             <input
                               type="number"
                               step="0.000001"
+                              disabled={visualForm.geofencing_locked !== false}
                               value={visualForm.geofencing_latitude ?? DEFAULT_GEOFENCE_ZONE.latitude}
                               onChange={(e) => setVisualForm({ ...visualForm, geofencing_latitude: parseFloat(e.target.value) || DEFAULT_GEOFENCE_ZONE.latitude })}
-                              className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white font-mono"
+                              className={`w-full border rounded-xl p-2 text-xs font-mono ${
+                                visualForm.geofencing_locked !== false
+                                  ? 'bg-[#02130b] border-emerald-500/40 text-emerald-200 cursor-not-allowed opacity-90'
+                                  : 'bg-[#052216] border-[#d4af37]/40 text-white'
+                              }`}
                             />
+                            {visualForm.geofencing_locked !== false && (
+                              <span className="text-[9px] text-emerald-400/80 block mt-0.5">🔒 Koordinat terkunci</span>
+                            )}
                           </div>
                           <div>
-                            <label className="text-[11px] font-bold text-emerald-300 block mb-1">Longitude (Garis Bujur):</label>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-[11px] font-bold text-emerald-300 block">Longitude (Bujur):</label>
+                              {visualForm.geofencing_locked !== false && (
+                                <Lock className="w-3 h-3 text-emerald-400" />
+                              )}
+                            </div>
                             <input
                               type="number"
                               step="0.000001"
+                              disabled={visualForm.geofencing_locked !== false}
                               value={visualForm.geofencing_longitude ?? DEFAULT_GEOFENCE_ZONE.longitude}
                               onChange={(e) => setVisualForm({ ...visualForm, geofencing_longitude: parseFloat(e.target.value) || DEFAULT_GEOFENCE_ZONE.longitude })}
-                              className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white font-mono"
+                              className={`w-full border rounded-xl p-2 text-xs font-mono ${
+                                visualForm.geofencing_locked !== false
+                                  ? 'bg-[#02130b] border-emerald-500/40 text-emerald-200 cursor-not-allowed opacity-90'
+                                  : 'bg-[#052216] border-[#d4af37]/40 text-white'
+                              }`}
                             />
+                            {visualForm.geofencing_locked !== false && (
+                              <span className="text-[9px] text-emerald-400/80 block mt-0.5">🔒 Koordinat terkunci</span>
+                            )}
                           </div>
                         </div>
 
@@ -7802,7 +8046,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div className="text-right pt-2 border-t border-[#d4af37]/20">
                         <button
                           type="submit"
-                          className="btn-3d-gold px-8 py-3 text-black font-black text-xs rounded-xl flex items-center gap-2 ml-auto shadow-2xl active:scale-95"
+                          className="btn-3d-gold text-black flex items-center gap-2 ml-auto"
                         >
                           <CheckCircle2 className="w-4 h-4 text-black" />
                           <span>SIMPAN & SINKRONKAN KE DASHBOARD WALI SANTRI</span>
@@ -8950,6 +9194,228 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
+                {/* SECTION: PUSAT KONTROL MEDIA SOSIAL & WHATSAPP */}
+                {activeControlSection === 'sosial_media' && (
+                  <form onSubmit={handleSaveVisualAndSecurity} className="card-3d rounded-2xl p-5 space-y-5">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[#d4af37]/20">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 via-red-500 to-amber-500 text-white flex items-center justify-center font-bold shadow-lg shrink-0">
+                          <MessageCircle className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm sm:text-base font-bold text-white text-gold-3d">
+                            Pengaturan Media Sosial Resmi & WhatsApp Admin
+                          </h4>
+                          <p className="text-[11px] text-emerald-300">
+                            Input tautan akun media sosial resmi (Instagram, TikTok, YouTube, WhatsApp) secara manual untuk terhubung di halaman login, portal wali santri, dan dashboard pengurus.
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="btn-3d-gold px-6 py-2.5 text-black font-extrabold text-xs rounded-xl flex items-center gap-2"
+                        data-testid="save-social-links-btn"
+                      >
+                        <Save className="w-4 h-4 text-black" />
+                        <span>Simpan Tautan Media Sosial & WA</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* 1. Instagram */}
+                      <div className="card-3d-deep p-4 rounded-xl space-y-2 border border-pink-500/30 bg-[#031d13]">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs font-bold text-pink-400">
+                            <Instagram className="w-4 h-4" />
+                            <span>1. Link Akun Instagram Resmi</span>
+                          </div>
+                          {visualForm.link_instagram && (
+                            <a
+                              href={visualForm.link_instagram}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-2 py-0.5 rounded bg-pink-500/20 text-pink-300 hover:text-white text-[10px] font-bold flex items-center gap-1 transition"
+                            >
+                              <span>Buka</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                        <input
+                          type="url"
+                          data-testid="input-link-instagram"
+                          value={visualForm.link_instagram || ''}
+                          onChange={(e) => setVisualForm({ ...visualForm, link_instagram: e.target.value })}
+                          className="w-full bg-[#052216] border border-pink-500/40 rounded-xl p-2.5 text-xs text-white placeholder:text-emerald-400/30"
+                          placeholder="Contoh: https://instagram.com/pesantrensalafalmaliki"
+                        />
+                        <p className="text-[10px] text-emerald-300/80">
+                          Tautan ini akan tampil pada ikon Instagram di halaman login dan portal wali santri.
+                        </p>
+                      </div>
+
+                      {/* 2. TikTok */}
+                      <div className="card-3d-deep p-4 rounded-xl space-y-2 border border-sky-500/30 bg-[#031d13]">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs font-bold text-sky-400">
+                            <Music2 className="w-4 h-4" />
+                            <span>2. Link Akun TikTok Resmi</span>
+                          </div>
+                          {visualForm.link_tiktok && (
+                            <a
+                              href={visualForm.link_tiktok}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 hover:text-white text-[10px] font-bold flex items-center gap-1 transition"
+                            >
+                              <span>Buka</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                        <input
+                          type="url"
+                          data-testid="input-link-tiktok"
+                          value={visualForm.link_tiktok || ''}
+                          onChange={(e) => setVisualForm({ ...visualForm, link_tiktok: e.target.value })}
+                          className="w-full bg-[#052216] border border-sky-500/40 rounded-xl p-2.5 text-xs text-white placeholder:text-emerald-400/30"
+                          placeholder="Contoh: https://tiktok.com/@pesantrensalafalmaliki"
+                        />
+                        <p className="text-[10px] text-emerald-300/80">
+                          Tautan video dakwah dan kreasi santri madrasah di platform TikTok.
+                        </p>
+                      </div>
+
+                      {/* 3. YouTube */}
+                      <div className="card-3d-deep p-4 rounded-xl space-y-2 border border-red-500/30 bg-[#031d13]">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs font-bold text-red-400">
+                            <Youtube className="w-4 h-4" />
+                            <span>3. Link Channel YouTube Resmi</span>
+                          </div>
+                          {visualForm.link_youtube && (
+                            <a
+                              href={visualForm.link_youtube}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 hover:text-white text-[10px] font-bold flex items-center gap-1 transition"
+                            >
+                              <span>Buka</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                        <input
+                          type="url"
+                          data-testid="input-link-youtube"
+                          value={visualForm.link_youtube || ''}
+                          onChange={(e) => setVisualForm({ ...visualForm, link_youtube: e.target.value })}
+                          className="w-full bg-[#052216] border border-red-500/40 rounded-xl p-2.5 text-xs text-white placeholder:text-emerald-400/30"
+                          placeholder="Contoh: https://youtube.com/@salafalmaliki"
+                        />
+                        <p className="text-[10px] text-emerald-300/80">
+                          Saluran resmi kajian kitab kuning dan rekaman live streaming pengajian.
+                        </p>
+                      </div>
+
+                      {/* 4. WhatsApp */}
+                      <div className="card-3d-deep p-4 rounded-xl space-y-2 border border-emerald-500/30 bg-[#031d13]">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
+                            <MessageCircle className="w-4 h-4" />
+                            <span>4. Link WhatsApp / Nomor Layanan</span>
+                          </div>
+                          {visualForm.link_wa && (
+                            <a
+                              href={visualForm.link_wa.startsWith('http') ? visualForm.link_wa : `https://wa.me/${visualForm.link_wa.replace(/[^0-9]/g, '')}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 hover:text-white text-[10px] font-bold flex items-center gap-1 transition"
+                            >
+                              <span>Buka WA</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          data-testid="input-link-wa"
+                          value={visualForm.link_wa || ''}
+                          onChange={(e) => setVisualForm({ ...visualForm, link_wa: e.target.value })}
+                          className="w-full bg-[#052216] border border-emerald-500/40 rounded-xl p-2.5 text-xs text-white placeholder:text-emerald-400/30"
+                          placeholder="Contoh: https://wa.me/6281234567890 atau 081234567890"
+                        />
+                        <p className="text-[10px] text-emerald-300/80">
+                          Nomor atau tautan direct chat WhatsApp untuk layanan bantuan santri dan wali santri.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Live Preview Box */}
+                    <div className="p-4 bg-[#02130b] rounded-xl border border-[#d4af37]/30 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#d4af37] flex items-center gap-1.5">
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Preview Tampilan Tombol Media Sosial di Halaman Utama:</span>
+                        </span>
+                        <span className="text-[10px] text-emerald-300 font-mono">Live Sync</span>
+                      </div>
+                      <div className="flex items-center gap-3 pt-1">
+                        <a
+                          href={visualForm.link_instagram || '#'}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="w-10 h-10 rounded-full border-2 border-[#d4af37]/70 bg-[#031d12] text-[#faebaa] hover:bg-[#d4af37] hover:text-black flex items-center justify-center transition shadow"
+                          title="Instagram"
+                        >
+                          <Instagram className="w-4 h-4" />
+                        </a>
+                        <a
+                          href={visualForm.link_youtube || '#'}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="w-10 h-10 rounded-full border-2 border-[#d4af37]/70 bg-[#031d12] text-[#faebaa] hover:bg-[#d4af37] hover:text-black flex items-center justify-center transition shadow"
+                          title="YouTube"
+                        >
+                          <Youtube className="w-4 h-4" />
+                        </a>
+                        <a
+                          href={visualForm.link_tiktok || '#'}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="w-10 h-10 rounded-full border-2 border-[#d4af37]/70 bg-[#031d12] text-[#faebaa] hover:bg-[#d4af37] hover:text-black flex items-center justify-center transition shadow"
+                          title="TikTok"
+                        >
+                          <Music2 className="w-4 h-4" />
+                        </a>
+                        <a
+                          href={visualForm.link_wa || '#'}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="w-10 h-10 rounded-full border-2 border-[#d4af37]/70 bg-[#031d12] text-[#faebaa] hover:bg-[#d4af37] hover:text-black flex items-center justify-center transition shadow"
+                          title="WhatsApp"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                        </a>
+                        <span className="text-xs text-slate-300 italic ml-2">
+                          Klik untuk mencoba tautan yang telah diinput
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-right pt-2 border-t border-[#d4af37]/20">
+                      <button
+                        type="submit"
+                        className="btn-3d-gold px-6 py-2.5 text-black font-extrabold text-xs rounded-xl flex items-center gap-2 ml-auto shadow-lg"
+                      >
+                        <Save className="w-4 h-4 text-black" />
+                        <span>Simpan Pengaturan Media Sosial & WhatsApp</span>
+                      </button>
+                    </div>
+                  </form>
+                )}
+
                 {/* SECTION 5: PUSAT KONTROL VISUAL (BACKGROUND & LOGO PONDOK) */}
                 {activeControlSection === 'visual_branding' && (
                   <form onSubmit={handleSaveVisualAndSecurity} className="card-3d rounded-2xl p-5 space-y-5">
@@ -9011,6 +9477,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           type="text"
                           value={visualForm.nama_madrasah}
                           onChange={(e) => setVisualForm({ ...visualForm, nama_madrasah: e.target.value })}
+                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                        />
+                      </div>
+
+                      {/* Input Media Sosial di Visual Branding juga */}
+                      <div>
+                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">Instagram Resmi</label>
+                        <input
+                          type="text"
+                          value={visualForm.link_instagram || ''}
+                          onChange={(e) => setVisualForm({ ...visualForm, link_instagram: e.target.value })}
+                          placeholder="https://instagram.com/..."
+                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">TikTok Resmi</label>
+                        <input
+                          type="text"
+                          value={visualForm.link_tiktok || ''}
+                          onChange={(e) => setVisualForm({ ...visualForm, link_tiktok: e.target.value })}
+                          placeholder="https://tiktok.com/@..."
+                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">YouTube Resmi</label>
+                        <input
+                          type="text"
+                          value={visualForm.link_youtube || ''}
+                          onChange={(e) => setVisualForm({ ...visualForm, link_youtube: e.target.value })}
+                          placeholder="https://youtube.com/@..."
+                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">WhatsApp / No. Layanan</label>
+                        <input
+                          type="text"
+                          value={visualForm.link_wa || ''}
+                          onChange={(e) => setVisualForm({ ...visualForm, link_wa: e.target.value })}
+                          placeholder="https://wa.me/628... atau 081234567890"
                           className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
                         />
                       </div>
@@ -10027,7 +10538,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span>Unduh Bahan Rapat (.doc)</span>
                 </button>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 justify-end w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={() => setShowRapatPlenoModal(false)}

@@ -7,6 +7,7 @@ import { Santri, Pengurus, AppSettings } from '../types';
 import { resolveLogos } from '../brand';
 import { LogoFrame } from './BrandLogos';
 import { saveVideoFile } from '../lib/videoStorage';
+import { PWAInstallButton } from './PWAInstallButton';
 
 type LoginMode = 'wali' | 'pengurus' | 'admin';
 
@@ -49,19 +50,34 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
   const logos = resolveLogos(settings);
   const pickMode = (m: LoginMode) => { setLoginMode(m); setLoginError(''); };
 
-  const roleBtn = (m: LoginMode, label: string, Icon: React.ElementType) => (
+  const resolveWaUrl = (wa?: string) => {
+    if (!wa) return 'https://wa.me/6281234567890';
+    if (wa.startsWith('http')) return wa;
+    const digits = wa.replace(/[^0-9]/g, '');
+    const formatted = digits.startsWith('0') ? '62' + digits.slice(1) : digits;
+    return `https://wa.me/${formatted}`;
+  };
+
+  const socialLinks = [
+    { href: settings.link_instagram || 'https://instagram.com/pesantrensalafalmaliki', Icon: Instagram, t: 'Instagram', id: 'social-instagram' },
+    { href: settings.link_youtube || 'https://youtube.com/@salafalmaliki', Icon: Youtube, t: 'YouTube', id: 'social-youtube' },
+    { href: settings.link_tiktok || 'https://tiktok.com/@pesantrensalafalmaliki', Icon: Music2, t: 'TikTok', id: 'social-tiktok' },
+    { href: resolveWaUrl(settings.link_wa), Icon: MessageCircle, t: 'WhatsApp', id: 'social-whatsapp' },
+  ];
+
+  const roleBtn = (m: LoginMode, label: string, Icon: React.ElementType, colSpanCls = '') => (
     <button
       type="button"
       data-testid={`login-role-${m}`}
       onClick={() => pickMode(m)}
-      className={`login-role-btn flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl border transition-all duration-300 uppercase text-[10px] sm:text-[11px] font-black tracking-wider ${
+      className={`login-role-btn w-full flex flex-row sm:flex-col items-center justify-center gap-2 sm:gap-1.5 py-3 sm:py-3.5 px-3 rounded-2xl border transition-all duration-200 uppercase text-[11px] sm:text-xs font-black tracking-wider box-border ${colSpanCls} ${
         loginMode === m
-          ? 'btn-3d-gold text-black border-[#faebaa] scale-[1.03] shadow-[0_10px_25px_rgba(212,175,55,0.45)]'
-          : 'bg-[#03140c]/80 border-[#d4af37]/40 text-emerald-100 hover:border-[#d4af37] hover:bg-[#052216]'
+          ? 'btn-3d-gold text-black border-[#faebaa] shadow-[0_6px_20px_rgba(212,175,55,0.45)] ring-2 ring-[#faebaa]/90'
+          : 'bg-[#03140c]/85 border-[#d4af37]/40 text-emerald-100 hover:border-[#d4af37] hover:bg-[#052216]'
       }`}
     >
-      <Icon className="w-5 h-5" />
-      <span>{label}</span>
+      <Icon className="w-5 h-5 shrink-0" />
+      <span className="whitespace-normal text-center leading-tight">{label}</span>
     </button>
   );
 
@@ -101,7 +117,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
               <div className="p-3 rounded-xl bg-[#032214] border border-[#d4af37]/30"><b className="text-[#faebaa] block mb-1 uppercase">3. Administrator</b><p>Sandi bawaan <code>salaf123</code> dengan username <code>admin</code>.</p></div>
             </div>
             <div className="mt-5 pt-4 border-t border-[#d4af37]/20 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <a href="https://wa.me/6281234567890?text=Assalamu%27alaikum%20Admin%20Pesantren%20Salaf,%20saya%20butuh%20bantuan%20sandi%20login%20SIM" target="_blank" rel="noreferrer" className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow uppercase"><MessageCircle className="w-4 h-4" /><span>Hubungi Admin via WA</span></a>
+              <a href={`${resolveWaUrl(settings.link_wa)}?text=Assalamu%27alaikum%20Admin%20Pesantren%20Salaf,%20saya%20butuh%20bantuan%20sandi%20login%20SIM`} target="_blank" rel="noreferrer" className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow uppercase"><MessageCircle className="w-4 h-4" /><span>Hubungi Admin via WA</span></a>
               <button type="button" data-testid="forgot-close-btn" onClick={() => setShowForgotPasswordModal(false)} className="w-full sm:w-auto px-4 py-2.5 rounded-xl btn-3d-dark text-[#faebaa] font-bold text-xs uppercase">Tutup Panduan</button>
             </div>
           </div>
@@ -122,6 +138,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
               <span className="text-[11px] sm:text-xs font-bold tracking-[0.14em] text-[#faebaa]">TA 1447-1448 H / 2026-2027 M</span>
             </div>
             <div className="flex items-center gap-2 ml-auto">
+              <PWAInstallButton />
               <button type="button" data-testid="replay-intro-btn" onClick={onReplayIntro} title="Tonton Intro" className="w-10 h-10 rounded-full border border-[#d4af37]/60 bg-[#031d12]/70 backdrop-blur-md text-[#d4af37] hover:bg-[#d4af37] hover:text-black transition flex items-center justify-center"><Play className="w-4 h-4 fill-current" /></button>
               <label title="Pilih Video Intro MP4" className="w-10 h-10 rounded-full border border-[#d4af37]/60 bg-[#031d12]/70 backdrop-blur-md text-[#d4af37] hover:bg-[#d4af37] hover:text-black transition flex items-center justify-center cursor-pointer">
                 <Film className="w-4 h-4" />
@@ -188,10 +205,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
             <div className="mihrab-inner px-7 sm:px-10 pt-24 sm:pt-28 pb-8">
               <h2 className="text-center text-sm sm:text-base font-black tracking-[0.22em] text-[#faebaa] mb-4" data-testid="login-heading">Pilih Akses Login</h2>
 
-              <div className="grid grid-cols-3 gap-2.5 mb-6">
-                {roleBtn('wali', 'Wali Santri', User)}
-                {roleBtn('pengurus', 'Pengurus', Users)}
-                {roleBtn('admin', 'Admin', Lock)}
+              {/* Grid Responsif: Desktop 3 Kolom sejajar, Tablet 2+1, Mobile 1 Kolom vertikal */}
+              <div className="login-roles-container grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-6 w-full">
+                {roleBtn('admin', 'Login Admin', Lock, 'sm:col-span-1')}
+                {roleBtn('pengurus', 'Login Pengurus', Users, 'sm:col-span-1')}
+                {roleBtn('wali', 'Login Wali Santri', User, 'sm:col-span-2 md:col-span-1')}
               </div>
 
               <p className="text-xs sm:text-sm font-bold tracking-[0.12em] text-white mb-3">Masuk ke Akun Anda</p>
@@ -299,12 +317,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
             <div>
               <div className="text-[10px] font-bold tracking-[0.2em] text-[#faebaa]/85 mb-2">Media Sosial</div>
               <div className="flex items-center gap-2.5">
-                {[
-                  { href: 'https://instagram.com', Icon: Instagram, t: 'Instagram', id: 'social-instagram' },
-                  { href: 'https://youtube.com', Icon: Youtube, t: 'YouTube', id: 'social-youtube' },
-                  { href: 'https://tiktok.com', Icon: Music2, t: 'TikTok', id: 'social-tiktok' },
-                  { href: 'https://wa.me/6281234567890', Icon: MessageCircle, t: 'WhatsApp', id: 'social-whatsapp' },
-                ].map(({ href, Icon, t, id }) => (
+                {socialLinks.map(({ href, Icon, t, id }) => (
                   <a key={t} href={href} target="_blank" rel="noreferrer" title={t} data-testid={id} className="w-10 h-10 rounded-full border-2 border-[#d4af37]/70 bg-[#031d12]/60 text-[#faebaa] hover:bg-[#d4af37] hover:text-black flex items-center justify-center transition shadow"><Icon className="w-4 h-4" /></a>
                 ))}
                 <button type="button" title="Sinkronisasi Google Sheets" data-testid="sync-sheets-btn" onClick={onSyncSheets} className="w-10 h-10 rounded-full border-2 border-[#d4af37]/70 bg-[#031d12]/60 text-[#faebaa] hover:bg-[#d4af37] hover:text-black flex items-center justify-center transition shadow"><Globe className="w-4 h-4" /></button>

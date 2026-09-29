@@ -16,6 +16,12 @@ import {
 } from './data';
 import { GoogleSheetsService } from './sheetsService';
 import { googleSignIn, initAuth, getAccessToken, logoutGoogle } from './googleAuth';
+import { 
+  loadSettingsFromFirestore, 
+  saveSettingsToFirestore, 
+  subscribeSettingsFromFirestore,
+  signInWithGoogleFirebase 
+} from './firebase';
 import { broadcastAttendanceUpdate, subscribeAttendanceUpdates } from './serverTime';
 import { AdminDashboard } from './components/AdminDashboard';
 import { WaliSantriPortal } from './components/WaliSantriPortal';
@@ -27,8 +33,8 @@ import { LoginScreen } from './components/LoginScreen';
 import { GoogleSheetsModal } from './components/GoogleSheetsModal';
 
 export default function App() {
-  // Intro Video State
-  const [showIntro, setShowIntro] = useState<boolean>(true);
+  // Intro Video State - disabled to open dashboard login directly
+  const [showIntro, setShowIntro] = useState<boolean>(false);
 
   // Cinematic sliding-door transition played right after a successful login
   const [showDoors, setShowDoors] = useState<boolean>(false);
@@ -205,6 +211,23 @@ export default function App() {
         setIsGoogleConnected(false);
       }
     );
+
+    // Sync settings with Firebase Firestore
+    loadSettingsFromFirestore().then((remoteSettings) => {
+      if (remoteSettings) {
+        setSettings((prev) => ({ ...prev, ...remoteSettings }));
+      }
+    });
+
+    const unsubscribe = subscribeSettingsFromFirestore((remoteSettings) => {
+      if (remoteSettings) {
+        setSettings((prev) => ({ ...prev, ...remoteSettings }));
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   // Compute Dashboard Stats dynamically
@@ -386,13 +409,21 @@ export default function App() {
 
   const handleGoogleLoginFlow = async () => {
     try {
+      let fbEmail = '';
+      try {
+        const fbUser = await signInWithGoogleFirebase();
+        if (fbUser) fbEmail = fbUser.email || '';
+      } catch (fbErr) {
+        console.warn('Firebase popup sign in fallback:', fbErr);
+      }
+
       const res = await googleSignIn();
-      if (res?.user) {
+      if (res?.user || fbEmail) {
         setIsGoogleConnected(true);
         setShowDoors(true);
         setSession({
           role: 'admin',
-          identifier: res.user.email || res.user.displayName || 'admin_google'
+          identifier: fbEmail || res?.user?.email || res?.user?.displayName || 'admin_google'
         });
       }
     } catch (e: any) {
@@ -769,6 +800,10 @@ export default function App() {
   const handleSaveSettings = async (st: AppSettings) => {
     setSettings(st);
     localStorage.setItem('sim_settings', JSON.stringify(st));
+    // Persist to Firebase Firestore
+    saveSettingsToFirestore(st).catch((err) => {
+      console.warn('Could not save settings directly to Firestore:', err);
+    });
     if (isGoogleConnected) {
       try {
         await sheetsService.saveSettingsToSheet(st);
@@ -1071,38 +1106,6 @@ export default function App() {
             syahriyahList
           }}
           onDataImported={handleDataImported}
-        />
-      )}
-
-      {/* 4. Video Sinematik Intro Opening dengan Transisi Halus (Smooth Cross-fade) */}
-      {showIntro && (
-        <IntroOpening
-          onComplete={() => setShowIntro(false)}
-          appName={settings.portal_title || 'SIM SALAF AL-MALIKI'}
-          subTitle={settings.nama_pesantren || 'PONDOK PESANTREN SALAF AL-MALIKI'}
-          logoUrl={settings.logo_pondok}
-          videoSrc={settings.intro_video_url || '/assets/intro_salaf_almaliki.mp4'}
-          optionPassword={settings.password_option_panel || 'admin123'}
-          onVideoChange={(newUrl, newName) => {
-            const updated = {
-              ...settings,
-              intro_video_url: newUrl,
-              intro_video_name: newName || 'Video Intro Kustom'
-            };
-            setSettings(updated);
-            localStorage.setItem('sim_settings', JSON.stringify(updated));
-          }}
-          onOpenOptionPanelVideo={() => {
-            setShowIntro(false);
-            setSession({
-              role: 'admin',
-              identifier: 'admin'
-            });
-            setActiveTab('pengaturan');
-            localStorage.setItem('sim_option_unlocked', 'true');
-            localStorage.setItem('sim_target_control_section', 'video_intro');
-            setShowDoors(true);
-          }}
         />
       )}
     </>

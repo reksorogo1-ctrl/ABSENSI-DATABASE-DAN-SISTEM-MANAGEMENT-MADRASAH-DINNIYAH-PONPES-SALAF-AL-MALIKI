@@ -3,6 +3,7 @@
   "appId": "1:460079967969:web:cb45f2344ba6cc38f611a0",
   "apiKey": "AIzaSyA2IomEIhhGVhEDHnXI8IBkKXjohSjz620",
   "authDomain": "gold-card-583d0.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-absensidatabased-62fd9012-6580-4225-a96d-30d9ad0cca06",
   "storageBucket": "gold-card-583d0.firebasestorage.app",
   "messagingSenderId": "460079967969",
   "measurementId": "",

@@ -7,9 +7,11 @@ import {
   LogOut, BookOpen, Award, ShieldCheck, 
   MapPin, Home, UserCheck, CreditCard, Wallet, 
   AlertTriangle, MessageCircle, Phone, ArrowDownLeft, ArrowUpRight, 
-  CheckCircle2, Clock, Sparkles, GraduationCap, Check, FileText
+  CheckCircle2, Clock, Sparkles, GraduationCap, Check, FileText,
+  Instagram, Youtube, Music2
 } from 'lucide-react';
 import { BrandLogos } from './BrandLogos';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface WaliSantriPortalProps {
   santri: Santri;
@@ -111,13 +113,16 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onLogout}
-            className="flex items-center space-x-1.5 px-4 py-2 rounded-xl btn-3d-red text-white text-xs font-bold transition shadow-lg"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Keluar Portal</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <PWAInstallButton />
+            <button
+              onClick={onLogout}
+              className="btn-3d-gold flex items-center space-x-1.5 text-black"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Keluar Portal</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -218,7 +223,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
                     href={waUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center space-x-2 transition shadow-md"
+                    className="w-full btn-3d-gold text-black font-extrabold flex items-center justify-center space-x-2"
                   >
                     <MessageCircle className="w-3.5 h-3.5" />
                     <span>Hubungi via WhatsApp</span>
@@ -460,9 +465,9 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/20">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#052216] text-[#d4af37] border-b border-[#d4af37]/20 uppercase tracking-wider font-semibold">
+            <div className="table-container-3d overflow-x-auto rounded-2xl border border-[#d4af37]/25">
+              <table className="w-full text-left text-xs table-luxury-3d">
+                <thead className="border-b border-[#d4af37]/30 uppercase tracking-wider font-semibold">
                   <tr>
                     <th className="p-3.5">NO</th>
                     <th className="p-3.5">BULAN & TAHUN</th>
@@ -535,9 +540,9 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/20">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#052216] text-[#d4af37] border-b border-[#d4af37]/20 uppercase tracking-wider font-semibold">
+            <div className="table-container-3d overflow-x-auto rounded-2xl border border-[#d4af37]/25">
+              <table className="w-full text-left text-xs table-luxury-3d">
+                <thead className="border-b border-[#d4af37]/30 uppercase tracking-wider font-semibold">
                   <tr>
                     <th className="p-3.5">NO</th>
                     <th className="p-3.5">TANGGAL</th>
@@ -601,9 +606,9 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
               Belum ada data setoran nadzhom yang tercatat untuk santri ini.
             </p>
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/20">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#052216] text-[#d4af37] border-b border-[#d4af37]/20 uppercase tracking-wider font-semibold">
+            <div className="table-container-3d overflow-x-auto rounded-2xl border border-[#d4af37]/25">
+              <table className="w-full text-left text-xs table-luxury-3d">
+                <thead className="border-b border-[#d4af37]/30 uppercase tracking-wider font-semibold">
                   <tr>
                     <th className="p-3">TANGGAL</th>
                     <th className="p-3">KITAB</th>
@@ -645,9 +650,9 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
               Belum ada nilai ujian yang dirilis untuk santri ini.
             </p>
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/20">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#052216] text-[#d4af37] border-b border-[#d4af37]/20 uppercase tracking-wider font-semibold">
+            <div className="table-container-3d overflow-x-auto rounded-2xl border border-[#d4af37]/25">
+              <table className="w-full text-left text-xs table-luxury-3d">
+                <thead className="border-b border-[#d4af37]/30 uppercase tracking-wider font-semibold">
                   <tr>
                     <th className="p-3">MATA PELAJARAN</th>
                     <th className="p-3 text-center">NILAI ANGKA</th>
@@ -724,6 +729,68 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
               ))}
             </div>
           )}
+        </section>
+
+        {/* Media Sosial & Layanan Resmi Pesantren */}
+        <section className="bg-[#052216]/80 border border-[#d4af37]/30 rounded-2xl p-5 shadow-lg space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#d4af37]" />
+                <span>Saluran Informasi & Media Sosial Resmi Pesantren</span>
+              </h3>
+              <p className="text-[11px] text-emerald-200/80 mt-0.5">
+                Ikuti perkembangan kegiatan, rekaman kajian kitab kuning, dan pengumuman madrasah melalui saluran resmi.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              {settings?.link_instagram && (
+                <a
+                  href={settings.link_instagram}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Instagram Resmi"
+                  className="w-10 h-10 rounded-full border-2 border-pink-500/50 bg-[#031d12] text-pink-400 hover:bg-pink-600 hover:text-white flex items-center justify-center transition shadow"
+                >
+                  <Instagram className="w-4 h-4" />
+                </a>
+              )}
+              {settings?.link_youtube && (
+                <a
+                  href={settings.link_youtube}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="YouTube Resmi"
+                  className="w-10 h-10 rounded-full border-2 border-red-500/50 bg-[#031d12] text-red-400 hover:bg-red-600 hover:text-white flex items-center justify-center transition shadow"
+                >
+                  <Youtube className="w-4 h-4" />
+                </a>
+              )}
+              {settings?.link_tiktok && (
+                <a
+                  href={settings.link_tiktok}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="TikTok Resmi"
+                  className="w-10 h-10 rounded-full border-2 border-sky-500/50 bg-[#031d12] text-sky-400 hover:bg-sky-600 hover:text-white flex items-center justify-center transition shadow"
+                >
+                  <Music2 className="w-4 h-4" />
+                </a>
+              )}
+              {settings?.link_wa && (
+                <a
+                  href={settings.link_wa.startsWith('http') ? settings.link_wa : `https://wa.me/${settings.link_wa.replace(/\D/g, '')}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="WhatsApp Admin / Layanan"
+                  className="w-10 h-10 rounded-full border-2 border-emerald-500/50 bg-[#031d12] text-emerald-400 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition shadow"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                </a>
+              )}
+            </div>
+          </div>
         </section>
       </main>
     </div>

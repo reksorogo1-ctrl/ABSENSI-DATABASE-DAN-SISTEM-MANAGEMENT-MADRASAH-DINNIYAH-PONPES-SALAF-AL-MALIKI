@@ -329,8 +329,15 @@ export interface AppSettings {
   jam_aliyah_2_selesai?: string; // Default: '22:30' (setelah ini tombol/barcode non-aktif)
   bypass_jam_presensi_testing?: boolean; // Mode pengujian jam presensi bebas
 
+  // Pengaturan Media Sosial & Kontak Pesantren (Dapat diinput manual di Option Panel)
+  link_instagram?: string; // Link URL Instagram resmi (misal: https://instagram.com/pesantrensalafalmaliki)
+  link_tiktok?: string; // Link URL TikTok resmi (misal: https://tiktok.com/@pesantrensalafalmaliki)
+  link_youtube?: string; // Link URL YouTube resmi (misal: https://youtube.com/@salafalmaliki)
+  link_wa?: string; // Link URL WhatsApp atau nomor WhatsApp resmi
+
   // Pengaturan Geofencing & Google Maps Terintegrasi
   geofencing_enabled?: boolean; // Status Geofencing Aktif / Nonaktif
+  geofencing_locked?: boolean; // Status Kunci Koordinat Lokasi Geofencing
   geofencing_zone_name?: string; // Nama Zona (misal: "Kompleks Pondok Pesantren & Madrasah Diniyah")
   geofencing_latitude?: number; // Koordinat Latitude Pusat Zona
   geofencing_longitude?: number; // Koordinat Longitude Pusat Zona
