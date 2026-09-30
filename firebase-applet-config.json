@@ -1,12 +1,12 @@
 {
-  "projectId": "gold-card-583d0",
-  "appId": "1:460079967969:web:cb45f2344ba6cc38f611a0",
-  "apiKey": "AIzaSyA2IomEIhhGVhEDHnXI8IBkKXjohSjz620",
-  "authDomain": "gold-card-583d0.firebaseapp.com",
+  "projectId": "absensi-data-santri",
+  "appId": "1:220606876180:web:e6287820b325ed51e6b501",
+  "apiKey": "AIzaSyAsM1VRXNPExGNW75N9yl76z4qfY-cB748",
+  "authDomain": "absensi-data-santri.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-absensidatabased-62fd9012-6580-4225-a96d-30d9ad0cca06",
-  "storageBucket": "gold-card-583d0.firebasestorage.app",
-  "messagingSenderId": "460079967969",
+  "storageBucket": "absensi-data-santri.firebasestorage.app",
+  "messagingSenderId": "220606876180",
   "measurementId": "",
-  "oAuthClientId": "460079967969-05285gc2ks2puvmiek9m5att52ju3kp9.apps.googleusercontent.com",
+  "oAuthClientId": "220606876180-12jot08ss6v9v5evpl6i8722g2mkshca.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

@@ -12,6 +12,7 @@ import {
   isUnauthorizedDomainError, setManualAccessToken 
 } from '../googleAuth';
 import { AppSettings, Santri, GuruPengajar, JadwalPelajaran, NadzhomRecord, NilaiUjianRecord, AbsensiSantriRecord, AbsensiGuruRecord, SyahriyahRecord } from '../types';
+import firebaseConfig from '../../firebase-applet-config.json';
 
 interface GoogleSheetsModalProps {
   isOpen: boolean;
@@ -711,7 +712,7 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
                   <li>
                     Buka{' '}
                     <a
-                      href="https://console.firebase.google.com/project/gold-card-583d0/authentication/settings"
+                      href={`https://console.firebase.google.com/project/${firebaseConfig.projectId || 'absensi-data-santri'}/authentication/settings`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-blue-300 underline font-bold hover:text-blue-200 inline-flex items-center gap-1"
