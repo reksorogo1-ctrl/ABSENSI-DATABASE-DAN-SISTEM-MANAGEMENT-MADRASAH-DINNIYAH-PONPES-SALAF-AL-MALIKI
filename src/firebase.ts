@@ -11,8 +11,16 @@ import {
 import firebaseConfig from '../firebase-applet-config.json';
 import { AppSettings, AbsensiGuruRecord, AbsensiSantriRecord } from './types';
 
+// Nilai authDomain di dalam kode program harus selalu menggunakan domain bawaan Firebase (<projectId>.firebaseapp.com)
+export const defaultAuthDomain = firebaseConfig.projectId ? `${firebaseConfig.projectId}.firebaseapp.com` : firebaseConfig.authDomain;
+
+export const safeFirebaseConfig = {
+  ...firebaseConfig,
+  authDomain: defaultAuthDomain,
+};
+
 // Initialize Firebase App
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+const app = getApps().length === 0 ? initializeApp(safeFirebaseConfig) : getApps()[0];
 
 // CRITICAL: Must pass firebaseConfig.firestoreDatabaseId to getFirestore
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
