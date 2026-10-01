@@ -136,6 +136,9 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
     setIsProcessing(true);
     setStatusMessage(null);
     try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('sim_sheets_modal_open_on_return', 'true');
+      }
       const res = await googleSignIn();
       if (res) {
         setIsGoogleConnected(true);

@@ -1,5 +1,12 @@
-import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from './firebase';
+import { 
+  signInWithPopup, 
+  signInWithRedirect, 
+  getRedirectResult, 
+  GoogleAuthProvider, 
+  onAuthStateChanged, 
+  User 
+} from 'firebase/auth';
+import { auth, isMobileDevice } from './firebase';
 import firebaseConfig from '../firebase-applet-config.json';
 
 export { auth };
@@ -16,7 +23,7 @@ export const provider = new GoogleAuthProvider();
 SCOPES.forEach(scope => provider.addScope(scope));
 
 let isSigningIn = false;
-let cachedAccessToken: string | null = null;
+let cachedAccessToken: string | null = typeof window !== 'undefined' ? localStorage.getItem('sim_google_access_token') : null;
 let currentGoogleUser: User | null = null;
 
 declare global {
@@ -96,6 +103,9 @@ export const requestGISToken = (): Promise<{ user: User; accessToken: string }> 
  */
 export const setManualAccessToken = (token: string, email?: string): { user: User; accessToken: string } => {
   cachedAccessToken = token.trim();
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('sim_google_access_token', cachedAccessToken);
+  }
   const pseudoUser: any = {
     uid: 'google-manual-token',
     displayName: email || 'Google Account (Manual Token)',
@@ -107,17 +117,47 @@ export const setManualAccessToken = (token: string, email?: string): { user: Use
   return { user: pseudoUser, accessToken: cachedAccessToken };
 };
 
+/**
+ * Memeriksa apakah baru saja kembali dari signInWithRedirect pada browser HP
+ */
+export const checkGoogleAuthRedirectResult = async (): Promise<{ user: User; accessToken: string } | null> => {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result && result.user) {
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        cachedAccessToken = credential.accessToken;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('sim_google_access_token', credential.accessToken);
+        }
+      }
+      currentGoogleUser = result.user;
+      return { user: result.user, accessToken: cachedAccessToken || '' };
+    }
+  } catch (err: any) {
+    console.warn('Google redirect result check:', err);
+    throw err;
+  }
+  return null;
+};
+
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: () => void
 ) => {
+  // Cek redirect result terlebih dahulu saat aplikasi dimuat di HP
+  checkGoogleAuthRedirectResult().then((res) => {
+    if (res && onAuthSuccess) {
+      onAuthSuccess(res.user, res.accessToken);
+    }
+  }).catch(() => {});
+
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
       currentGoogleUser = user;
       if (cachedAccessToken) {
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else if (!isSigningIn) {
-        cachedAccessToken = null;
         if (onAuthFailure) onAuthFailure();
       }
     } else {
@@ -130,11 +170,18 @@ export const initAuth = (
   });
 };
 
-export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+export const googleSignIn = async (forceRedirect: boolean = false): Promise<{ user: User; accessToken: string } | null> => {
   try {
     isSigningIn = true;
     
-    // 1. Coba flow resmi Firebase Popup
+    // Pada HP/Mobile, langsung gunakan signInWithRedirect agar popup tidak diblokir dan tidak terjadi restart tab
+    if (forceRedirect || isMobileDevice()) {
+      console.info('Menggunakan signInWithRedirect untuk lingkungan browser HP/mobile...');
+      await signInWithRedirect(auth, provider);
+      return null;
+    }
+
+    // 1. Coba flow resmi Firebase Popup pada Desktop
     try {
       const result = await signInWithPopup(auth, provider);
       const credential = GoogleAuthProvider.credentialFromResult(result);
@@ -143,10 +190,20 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
       }
 
       cachedAccessToken = credential.accessToken;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('sim_google_access_token', credential.accessToken);
+      }
       currentGoogleUser = result.user;
       return { user: result.user, accessToken: cachedAccessToken };
     } catch (firebaseErr: any) {
       console.warn('Firebase signInWithPopup gagal, mengecek tipe error:', firebaseErr);
+
+      // Jika popup diblokir oleh browser, alihkan ke signInWithRedirect
+      if (firebaseErr?.code === 'auth/popup-blocked' || firebaseErr?.code === 'auth/popup-closed-by-user') {
+        console.warn('Popup terblokir, beralih ke signInWithRedirect...');
+        await signInWithRedirect(auth, provider);
+        return null;
+      }
 
       // Jika error adalah unauthorized-domain, coba Google Identity Services client-side langsung
       if (isUnauthorizedDomainError(firebaseErr)) {
@@ -154,6 +211,9 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
         if (typeof window !== 'undefined' && window.google?.accounts?.oauth2) {
           try {
             const gisResult = await requestGISToken();
+            if (gisResult?.accessToken && typeof window !== 'undefined') {
+              localStorage.setItem('sim_google_access_token', gisResult.accessToken);
+            }
             return gisResult;
           } catch (gisErr: any) {
             console.warn('GIS fallback juga memerlukan interaksi atau gagal:', gisErr);
@@ -173,6 +233,9 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
+  if (!cachedAccessToken && typeof window !== 'undefined') {
+    cachedAccessToken = localStorage.getItem('sim_google_access_token');
+  }
   return cachedAccessToken;
 };
 
@@ -186,4 +249,7 @@ export const logoutGoogle = async () => {
   } catch {}
   cachedAccessToken = null;
   currentGoogleUser = null;
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('sim_google_access_token');
+  }
 };

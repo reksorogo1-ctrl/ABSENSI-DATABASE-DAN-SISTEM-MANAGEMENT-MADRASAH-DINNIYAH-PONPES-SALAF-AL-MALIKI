@@ -15,12 +15,20 @@ import {
   INITIAL_IZIN_MENGAJAR_LIST, INITIAL_SILABUS_MEMAKNAI
 } from './data';
 import { GoogleSheetsService } from './sheetsService';
-import { googleSignIn, initAuth, getAccessToken, logoutGoogle } from './googleAuth';
+import { 
+  googleSignIn, 
+  initAuth, 
+  getAccessToken, 
+  logoutGoogle,
+  checkGoogleAuthRedirectResult 
+} from './googleAuth';
 import { 
   loadSettingsFromFirestore, 
   saveSettingsToFirestore, 
   subscribeSettingsFromFirestore,
-  signInWithGoogleFirebase 
+  signInWithGoogleFirebase,
+  checkFirebaseRedirectResult,
+  isMobileDevice
 } from './firebase';
 import { broadcastAttendanceUpdate, subscribeAttendanceUpdates } from './serverTime';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -39,8 +47,24 @@ export default function App() {
   // Cinematic sliding-door transition played right after a successful login
   const [showDoors, setShowDoors] = useState<boolean>(false);
 
-  // Session State
-  const [session, setSession] = useState<AuthSession | null>(null);
+  // Session State - dipersistensikan di localStorage agar sesi tidak restart / logout di HP
+  const [session, setSession] = useState<AuthSession | null>(() => {
+    try {
+      const saved = localStorage.getItem('sim_auth_session');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Otomatis simpan sesi ke localStorage
+  useEffect(() => {
+    if (session) {
+      localStorage.setItem('sim_auth_session', JSON.stringify(session));
+    } else {
+      localStorage.removeItem('sim_auth_session');
+    }
+  }, [session]);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
   // Remember Me & Forgot Password State
@@ -141,16 +165,17 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_IZIN_MENGAJAR_LIST;
   });
 
-  // Otomatis simpan rekap saat berganti hari dan reset harian ke nol (System Otomatis)
+  // Otomatis simpan rekap saat berganti hari dan pemeliharaan arsip harian
   useEffect(() => {
     const checkDayChange = () => {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const lastActiveDate = localStorage.getItem('sim_active_dashboard_date');
 
       if (!lastActiveDate) {
         localStorage.setItem('sim_active_dashboard_date', todayStr);
       } else if (lastActiveDate !== todayStr) {
-        // Hari telah berganti! Otomatis arsipkan data sebelumnya dan restart sesi harian aktif ke nol
+        // Hari telah berganti: simpan cadangan arsip ke riwayat lokal tanpa menghapus data aktif
         try {
           const currentGuru = JSON.parse(localStorage.getItem('sim_absensi_guru') || '[]');
           const currentSantri = JSON.parse(localStorage.getItem('sim_absensi_santri') || '[]');
@@ -164,18 +189,13 @@ export default function App() {
           }
         } catch {}
 
-        // Sesi absensi harian di-reset ke nol untuk hari baru
-        setAbsensiSantriList([]);
-        setAbsensiGuruList([]);
-        localStorage.setItem('sim_absensi_santri', JSON.stringify([]));
-        localStorage.setItem('sim_absensi_guru', JSON.stringify([]));
         localStorage.setItem('sim_active_dashboard_date', todayStr);
         localStorage.setItem('sim_last_active_date', todayStr);
       }
     };
 
     checkDayChange();
-    const timer = setInterval(checkDayChange, 10000);
+    const timer = setInterval(checkDayChange, 30000);
     return () => clearInterval(timer);
   }, []);
 
@@ -211,6 +231,36 @@ export default function App() {
         setIsGoogleConnected(false);
       }
     );
+
+    // Menangkap hasil login redirect (signInWithRedirect) saat browser HP kembali ke web app
+    const processRedirectLogin = async () => {
+      try {
+        const fbUser = await checkFirebaseRedirectResult();
+        const googleAuthRes = await checkGoogleAuthRedirectResult();
+        const email = fbUser?.email || googleAuthRes?.user?.email || '';
+
+        if (email || fbUser || googleAuthRes) {
+          console.info('Login redirect sukses di HP, memulihkan sesi admin:', email);
+          setIsGoogleConnected(true);
+          setShowDoors(true);
+          const newSession: AuthSession = {
+            role: 'admin',
+            identifier: email || 'admin_google'
+          };
+          setSession(newSession);
+          localStorage.setItem('sim_auth_session', JSON.stringify(newSession));
+
+          if (localStorage.getItem('sim_sheets_modal_open_on_return') === 'true') {
+            setShowSheetsModal(true);
+            localStorage.removeItem('sim_sheets_modal_open_on_return');
+          }
+        }
+      } catch (err) {
+        console.warn('Redirect login check error:', err);
+      }
+    };
+
+    processRedirectLogin();
 
     // Sync settings with Firebase Firestore
     loadSettingsFromFirestore().then((remoteSettings) => {
@@ -409,11 +459,23 @@ export default function App() {
 
   const handleGoogleLoginFlow = async () => {
     try {
+      if (isMobileDevice()) {
+        console.info('Lingkungan browser HP terdeteksi: menjalankan signInWithRedirect agar popup tidak diblokir/restart...');
+        await signInWithGoogleFirebase(true);
+        return;
+      }
+
+      // Pada Laptop/Desktop, coba Popup dengan fallback Redirect jika popup terblokir
       let fbEmail = '';
       try {
         const fbUser = await signInWithGoogleFirebase();
         if (fbUser) fbEmail = fbUser.email || '';
-      } catch (fbErr) {
+      } catch (fbErr: any) {
+        if (fbErr?.code === 'auth/popup-blocked') {
+          console.warn('Popup terblokir, mengalihkan ke signInWithRedirect...');
+          await signInWithGoogleFirebase(true);
+          return;
+        }
         console.warn('Firebase popup sign in fallback:', fbErr);
       }
 
@@ -421,10 +483,12 @@ export default function App() {
       if (res?.user || fbEmail) {
         setIsGoogleConnected(true);
         setShowDoors(true);
-        setSession({
+        const newSession: AuthSession = {
           role: 'admin',
           identifier: fbEmail || res?.user?.email || res?.user?.displayName || 'admin_google'
-        });
+        };
+        setSession(newSession);
+        localStorage.setItem('sim_auth_session', JSON.stringify(newSession));
       }
     } catch (e: any) {
       console.error('Google sign in error:', e);
@@ -522,6 +586,8 @@ export default function App() {
 
   const handleLogout = () => {
     setSession(null);
+    localStorage.removeItem('sim_auth_session');
+    setActiveTab('dashboard');
   };
 
   // Mutator actions

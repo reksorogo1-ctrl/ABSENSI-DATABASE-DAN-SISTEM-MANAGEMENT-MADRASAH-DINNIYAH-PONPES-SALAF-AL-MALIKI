@@ -1,5 +1,12 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { 
+  getAuth, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signInWithRedirect, 
+  getRedirectResult, 
+  signOut 
+} from 'firebase/auth';
 import { 
   getFirestore, 
   doc, 
@@ -10,6 +17,12 @@ import {
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import { AppSettings, AbsensiGuruRecord, AbsensiSantriRecord } from './types';
+
+// Helper deteksi perangkat HP / Mobile browser
+export const isMobileDevice = (): boolean => {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile|CriOS/i.test(navigator.userAgent) || window.innerWidth < 768;
+};
 
 // Nilai authDomain di dalam kode program harus selalu menggunakan domain bawaan Firebase (<projectId>.firebaseapp.com)
 export const defaultAuthDomain = firebaseConfig.projectId ? `${firebaseConfig.projectId}.firebaseapp.com` : firebaseConfig.authDomain;
@@ -94,13 +107,39 @@ export async function testConnection(): Promise<boolean> {
 // Auto-run connection test on boot
 testConnection();
 
-// Firebase Auth helper using Popup as instructed in skill
-export async function signInWithGoogleFirebase() {
+// Firebase Auth helper: otomatis menggunakan signInWithRedirect di HP agar tidak terblokir / restart
+export async function signInWithGoogleFirebase(forceRedirect: boolean = false) {
   try {
-    const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
-  } catch (error) {
+    if (forceRedirect || isMobileDevice()) {
+      console.info('Menggunakan signInWithRedirect untuk lingkungan browser HP/mobile constraints...');
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    } else {
+      const result = await signInWithPopup(auth, googleProvider);
+      return result.user;
+    }
+  } catch (error: any) {
+    if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/popup-closed-by-user') {
+      console.warn('Popup terblokir oleh browser HP, mengalihkan ke signInWithRedirect...');
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    }
     console.error('Firebase Google Sign-in error:', error);
+    throw error;
+  }
+}
+
+// Menangkap hasil login redirect setelah browser HP kembali ke aplikasi
+export async function checkFirebaseRedirectResult() {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result && result.user) {
+      console.info('Firebase redirect sign-in berhasil:', result.user.email);
+      return result.user;
+    }
+    return null;
+  } catch (error) {
+    console.error('Firebase checkFirebaseRedirectResult error:', error);
     throw error;
   }
 }
