@@ -10,7 +10,7 @@ import {
   CheckCircle2, AlertTriangle, Phone, MessageCircle, 
   Users, Newspaper, ShieldAlert, Sparkles, Sliders, CheckCheck,
   Send, FileText, UserX, ChevronRight, Check, X, Shield, PlusCircle, Plus,
-  BookmarkCheck, CheckSquare, RefreshCw, GraduationCap, MapPin, Compass, Crosshair, Navigation
+  BookmarkCheck, CheckSquare, RefreshCw, GraduationCap, MapPin, Compass, Crosshair, Navigation, Menu
 } from 'lucide-react';
 import { BrandLogos } from './BrandLogos';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -78,6 +78,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [showIzinModal, setShowIzinModal] = useState<boolean>(false);
+  const [showMobileMenu, setShowMobileMenu] = useState<boolean>(false);
   const [editedPengurus, setEditedPengurus] = useState<Pengurus>({ ...pengurus });
 
   // Staggered build only on first mount (not on every tab switch)
@@ -816,73 +817,185 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#020e08] text-slate-100 flex flex-col font-sans selection:bg-[#d4af37] selection:text-black">
-      {/* Top Navbar */}
-      <header className="build-header sticky top-0 z-50 bg-[#052216]/95 backdrop-blur border-b border-[#d4af37]/30 shadow-lg">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 min-h-[4rem] py-2.5 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
-            <BrandLogos settings={settings} size="xs" gap="gap-1.5" idPrefix="pengurus-header" />
-            <div className="overflow-hidden">
-              <h1 className="text-xs sm:text-base font-extrabold text-white text-gold-3d leading-tight truncate">
-                {settings.portal_title || settings.nama_pesantren || 'MADRASAH DINIYAH SALAFIYAH'}
-              </h1>
-              <p className="text-[10px] sm:text-xs text-emerald-300 font-mono flex items-center gap-1.5 truncate">
-                <span className="truncate">Portal Khusus Pengurus & Asatidz</span>
-                <span>•</span>
-                <span className="text-[#d4af37] font-bold shrink-0">{pengurus.jabatan}</span>
-              </p>
-            </div>
+    <div 
+      className="min-h-screen bg-[#03140c] bg-cover bg-center text-[#f3e5ab] flex flex-col transition-all duration-300 w-full overflow-x-hidden font-sans selection:bg-[#d4af37] selection:text-black"
+      style={settings.background_url ? { backgroundImage: `linear-gradient(rgba(3, 20, 12, 0.94), rgba(3, 20, 12, 0.97)), url(${settings.background_url})` } : undefined}
+    >
+      {/* MOBILE TOP BAR (Phone & Small Screens) - Format Layout Seragam dengan Admin */}
+      <div className="md:hidden flex items-center justify-between p-3.5 bg-[#052216]/98 border-b border-[#d4af37]/30 backdrop-blur-md sticky top-0 z-40 w-full">
+        <div className="flex items-center gap-2.5 overflow-hidden">
+          <BrandLogos settings={settings} size="xs" idPrefix="pengurus-mob-header" />
+          <div className="overflow-hidden">
+            <h2 className="font-bold text-xs text-[#d4af37] truncate uppercase font-serif">
+              {settings.portal_title || settings.nama_pesantren || 'SIM Pondok Pesantren'}
+            </h2>
+            <p className="text-[10px] text-emerald-300 truncate">
+              Panel Pengurus • {activeTab.replace('-', ' ').toUpperCase()}
+            </p>
           </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <PWAInstallButton />
+          <button
+            type="button"
+            onClick={() => setShowMobileMenu(!showMobileMenu)}
+            className="p-2 rounded-xl bg-[#03140c] border border-[#d4af37]/50 text-[#d4af37] hover:text-white transition"
+            aria-label="Toggle Menu Navigasi"
+          >
+            {showMobileMenu ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
 
-          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0 ml-auto">
-            <PWAInstallButton />
-            {/* Pengurus Profile Chip */}
-            <div 
-              onClick={() => setShowEditModal(true)}
-              className="hidden sm:flex items-center space-x-2 bg-[#03140c] border border-[#d4af37]/40 rounded-full px-3 py-1 cursor-pointer hover:border-[#d4af37] transition"
-              title="Klik untuk edit profil & biodata"
-            >
-              <div className="w-7 h-7 rounded-full overflow-hidden bg-[#0b3824] border border-[#d4af37]/50 shrink-0">
+      {/* MOBILE MENU DROPDOWN (Phone & Small Screens) */}
+      {showMobileMenu && (
+        <div className="md:hidden bg-[#041c12]/98 border-b border-[#d4af37]/30 backdrop-blur-xl p-4 space-y-3 z-30 shadow-2xl">
+          <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/20">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full overflow-hidden bg-[#0b3824] border border-[#d4af37]/50 shrink-0">
                 <img
                   src={pengurus.foto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'}
                   alt={pengurus.nama}
                   className="w-full h-full object-cover"
                 />
               </div>
-              <div className="text-left">
-                <span className="text-xs font-bold text-white block leading-none">{pengurus.nama}</span>
-                <span className="text-[9px] text-[#d4af37] block leading-none mt-0.5">{pengurus.jabatan}</span>
+              <div>
+                <span className="text-xs font-bold text-white block">{pengurus.nama}</span>
+                <span className="text-[10px] text-[#d4af37] block">{pengurus.jabatan}</span>
               </div>
             </div>
+            <button
+              onClick={() => { setShowEditModal(true); setShowMobileMenu(false); }}
+              className="px-2.5 py-1 rounded-lg bg-[#03140c] border border-[#d4af37]/40 text-[10px] font-bold text-[#d4af37]"
+            >
+              Edit Profil
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { id: 'dashboard', label: 'Dasbor Utama', icon: Sparkles },
+              { id: 'izin-mengajar', label: 'Izin Mengajar', icon: FileText, badge: myIzinList.filter(i => i.status === 'Menunggu').length || undefined },
+              { id: 'wali-kelas', label: `Wali Kelas (${waliKelasKelas})`, icon: GraduationCap },
+              { id: 'kalender', label: 'Kalender & Agenda', icon: Calendar, badge: urgentEvents.length || undefined },
+              { id: 'absensi-santri', label: 'Presensi Santri', icon: UserCheck },
+              { id: 'jadwal', label: 'Jadwal & Kitab', icon: BookOpen, badge: unreadSilabusUpdates.length ? 'Update' : undefined },
+              { id: 'ujian-kitab', label: 'Nilai Ujian', icon: Award },
+              { id: 'profil-saya', label: 'Biodata & Profil', icon: Users },
+            ].map(tab => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => { setActiveTab(tab.id); setShowMobileMenu(false); }}
+                  className={`p-2.5 rounded-xl text-xs font-bold flex items-center justify-between gap-1.5 transition ${
+                    isActive ? 'btn-3d-gold text-black' : 'bg-[#03140c] border border-[#d4af37]/25 text-[#f3e5ab]'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 truncate">
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{tab.label}</span>
+                  </div>
+                  {tab.badge && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-600 text-white font-mono shrink-0">
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex gap-2 pt-2 border-t border-[#d4af37]/20">
+            <button
+              onClick={() => { setShowIzinModal(true); setShowMobileMenu(false); }}
+              className="flex-1 py-2 rounded-xl btn-3d-yellow text-black font-bold text-xs flex items-center justify-center gap-1.5 shadow"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Ajukan Izin</span>
+            </button>
+            <button
+              onClick={onLogout}
+              className="flex-1 py-2 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-red-900 transition shadow"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Keluar</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MAIN CONTENT AREA - Format Layout, Margin, Padding & Spacing Seragam dengan Dashboard Admin */}
+      <main className={`${building ? 'build-sequence' : ''} flex-1 p-4 md:p-6 overflow-y-auto space-y-6 w-full max-w-7xl mx-auto`}>
+        {/* Top Header - 3D Luxury Beveled Banner (Sama persis struktur dan proporsi Dashboard Admin) */}
+        <header className="build-header header-3d-banner rounded-2xl p-5 backdrop-blur flex flex-col md:flex-row justify-between items-start md:items-center gap-4 w-full shadow-2xl">
+          <div className="flex items-center gap-3.5">
+            <BrandLogos settings={settings} size="sm" gap="gap-2" idPrefix="pengurus-main-header" />
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold font-serif text-[#d4af37] text-gold-3d tracking-wide leading-tight">
+                {settings.header_title || settings.portal_title || settings.nama_pesantren || 'SIM Pondok Pesantren Salaf Al-Maliki'}
+              </h1>
+              <p className="text-xs text-emerald-200/90 mt-1 flex items-center gap-2 flex-wrap">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block shrink-0" />
+                <span className="font-medium">{settings.header_subtitle || 'Portal Khusus Pengurus & Asatidz Madrasah Diniyah'}</span>
+                <span className="text-emerald-400/40">•</span>
+                <span className="text-[#d4af37] font-bold font-mono">{pengurus.nama} ({pengurus.jabatan})</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Action Buttons: PWA Install, Profil Pengurus, Ajukan Izin, Keluar */}
+          <div className="flex flex-wrap items-center gap-2.5 text-right justify-start md:justify-end w-full md:w-auto">
+            <PWAInstallButton variant="button" />
+            
+            <button
+              type="button"
+              onClick={() => setShowEditModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-[#031c10] border border-[#d4af37]/60 text-xs font-bold text-[#f3e5ab] flex items-center gap-2 hover:bg-[#062c1b] transition shadow"
+              title="Edit Biodata & Profil"
+            >
+              <div className="w-5 h-5 rounded-full overflow-hidden bg-[#0b3824] border border-[#d4af37]/50 shrink-0">
+                <img
+                  src={pengurus.foto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'}
+                  alt={pengurus.nama}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <span className="truncate max-w-[130px]">{pengurus.nama}</span>
+            </button>
 
             <button
+              type="button"
               onClick={() => setShowIzinModal(true)}
-              className="btn-3d-yellow px-3 py-1.5 text-xs font-black shadow flex items-center gap-1.5"
+              className="btn-3d-yellow px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow"
               title="Ajukan Izin Tidak Mengajar"
             >
-              <Send className="w-3.5 h-3.5 shrink-0" />
+              <Send className="w-3.5 h-3.5 text-black shrink-0" />
               <span>Ajukan Izin</span>
             </button>
 
             <button
+              type="button"
               onClick={onLogout}
-              className="btn-3d-yellow px-3 py-1.5 text-xs font-black shadow flex items-center gap-1.5"
+              className="px-4 py-2 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs font-bold flex items-center gap-2 hover:bg-red-900 transition shadow"
               title="Keluar dari Portal Pengurus"
             >
               <LogOut className="w-3.5 h-3.5 shrink-0" />
               <span>Keluar</span>
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* Tab Navigation Menu */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-[#d4af37]/15 overflow-x-auto">
-          <nav className="flex space-x-2 py-2.5 text-xs">
+        {/* Tab Navigation Menu - Sejajar & Selaras Format Menu Tab Dashboard Admin */}
+        <div className="card-3d-glass rounded-2xl p-2.5 border border-[#d4af37]/30 shadow-lg overflow-x-auto no-scrollbar">
+          <nav className="flex items-center gap-2 min-w-max">
             <button
+              type="button"
               onClick={() => setActiveTab('dashboard')}
-              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'dashboard'
-                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
@@ -891,59 +1004,63 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab('izin-mengajar')}
-              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'izin-mengajar'
-                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
               <span>Izin Mengajar</span>
               {myIzinList.filter(i => i.status === 'Menunggu').length > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full bg-black text-[#fef08a] font-mono text-[9px] font-bold">
+                <span className="ml-1 px-2 py-0.5 rounded-full bg-black text-[#fef08a] font-mono text-[9px] font-bold border border-yellow-300/40">
                   {myIzinList.filter(i => i.status === 'Menunggu').length}
                 </span>
               )}
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab('wali-kelas')}
-              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'wali-kelas'
-                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
               <GraduationCap className="w-3.5 h-3.5" />
               <span>Kelas Bimbingan (Wali Kelas)</span>
-              <span className="px-1.5 py-0.5 rounded-full bg-emerald-900 border border-emerald-500/40 text-[9px] text-emerald-300 font-bold">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-900 border border-emerald-500/40 text-[9px] text-emerald-300 font-bold">
                 {waliKelasKelas}
               </span>
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab('kalender')}
-              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'kalender'
-                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
               <Calendar className="w-3.5 h-3.5" />
               <span>Kalender & Agenda</span>
               {urgentEvents.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full bg-red-600 text-white font-mono text-[9px] animate-pulse">
+                <span className="ml-1 px-2 py-0.5 rounded-full bg-red-600 text-white font-mono text-[9px] animate-pulse">
                   {urgentEvents.length}
                 </span>
               )}
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab('absensi-santri')}
-              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'absensi-santri'
-                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
@@ -952,10 +1069,11 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab('jadwal')}
-              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'jadwal'
-                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
@@ -963,16 +1081,17 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               <span>Jadwal & Kitab</span>
               {unreadSilabusUpdates.length > 0 && (
                 <span className="ml-1 px-2 py-0.5 rounded-full bg-black text-[#fef08a] font-black text-[9px] animate-pulse border border-yellow-200 shadow-md">
-                  ⚡ {unreadSilabusUpdates.length} Update Silabus
+                  ⚡ {unreadSilabusUpdates.length} Update
                 </span>
               )}
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab('ujian-kitab')}
-              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'ujian-kitab'
-                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
@@ -981,10 +1100,11 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             </button>
 
             <button
+              type="button"
               onClick={() => setActiveTab('profil-saya')}
-              className={`px-3.5 py-2 rounded-xl font-black transition whitespace-nowrap flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'profil-saya'
-                  ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
+                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
@@ -993,10 +1113,6 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             </button>
           </nav>
         </div>
-      </header>
-
-      {/* Main Content Area */}
-      <main className={`${building ? 'build-sequence' : ''} flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6`}>
         {/* ===================== NOTIFIKASI REAL-TIME UPDATE MATERI SILABUS GURU ===================== */}
         {unreadSilabusUpdates.length > 0 && (
           <div className="card-3d-glass rounded-3xl p-5 border-2 border-amber-400/80 bg-gradient-to-r from-[#2a1b05] via-[#1a1204] to-[#2a1b05] shadow-2xl relative overflow-hidden">
