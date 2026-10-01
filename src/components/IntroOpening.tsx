@@ -11,10 +11,12 @@ export const IntroOpening: React.FC<IntroOpeningProps> = ({
   onComplete,
   videoSrc = '/assets/intro_salaf_almaliki.mp4'
 }) => {
+  const fallbackSrc = '/assets/intro_salaf_almaliki.mp4';
+  const cleanInitialSrc = (videoSrc && videoSrc.trim()) || fallbackSrc;
   const [fadingOut, setFadingOut] = useState<boolean>(false);
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [activeSrc, setActiveSrc] = useState<string>(videoSrc);
+  const [activeSrc, setActiveSrc] = useState<string>(cleanInitialSrc);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const prevXRef = useRef<number | null>(null);
@@ -24,10 +26,9 @@ export const IntroOpening: React.FC<IntroOpeningProps> = ({
 
   // Sync active source whenever videoSrc prop changes
   useEffect(() => {
-    if (videoSrc) {
-      setActiveSrc(videoSrc);
-      hasCompletedRef.current = false;
-    }
+    const next = (videoSrc && videoSrc.trim()) || fallbackSrc;
+    setActiveSrc(next);
+    hasCompletedRef.current = false;
   }, [videoSrc]);
 
   // Entrance animation

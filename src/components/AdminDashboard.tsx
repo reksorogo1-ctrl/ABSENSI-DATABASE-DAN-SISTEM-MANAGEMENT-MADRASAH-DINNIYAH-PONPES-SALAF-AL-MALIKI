@@ -9,9 +9,20 @@ import {
   Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload, Play,
   ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine, MapPin, Compass, Crosshair, Shield, Navigation,
   Instagram, Youtube, Music2, Globe, Unlock, Menu,
-  Folder, FolderPlus, FolderCheck, CheckSquare, Square, Layers, FileUp, Camera
+  Folder, FolderPlus, FolderCheck, CheckSquare, Square, Layers, FileUp, Camera,
+  HardDrive, Search, ChevronLeft, History
 } from 'lucide-react';
 import { compressImageFile, parseFileNameForSantri } from '../lib/imageCompression';
+import { Storage5TBManager } from './Storage5TBManager';
+import { KenaikanKelasModal } from './KenaikanKelasModal';
+import { EditSantriModal } from './EditSantriModal';
+import { TabUjianMuhafadzoh } from './TabUjianMuhafadzoh';
+import { TabUjianBacaKitab } from './TabUjianBacaKitab';
+import { TabUjianKoreksianKitab } from './TabUjianKoreksianKitab';
+import { ModalInputNilaiUjian } from './ModalInputNilaiUjian';
+import { getOrCreateSantriHistory } from '../lib/kenaikanKelasService';
+import { queryPaginatedData } from '../lib/scalableDatabase';
+import { formatBytes, TOTAL_CAPACITY_5TB } from '../lib/scalableStorage';
 import { PWAInstallButton } from './PWAInstallButton';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Legend, 
@@ -74,7 +85,8 @@ interface AdminDashboardProps {
   onSaveNilai: (nilai: NilaiUjianRecord) => void;
   onSaveSettings: (settings: AppSettings) => void;
   onSaveDashboardAndReset: () => void;
-  onUpdateSantriProfile?: (updatedSantri: Santri) => void;
+  onUpdateSantriProfile?: (updatedSantri: Santri, oldId?: string) => void;
+  onBatchUpdateSantri?: (updatedList: Santri[], updatedSettings?: Partial<AppSettings>) => void;
   onSaveSyahriyah?: (record: SyahriyahRecord) => void;
   onSaveUangSaku?: (record: UangSakuRecord) => void;
   onSaveKurikulum?: (record: KurikulumKitabRecord) => void;
@@ -136,6 +148,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onSaveSettings,
   onSaveDashboardAndReset,
   onUpdateSantriProfile,
+  onBatchUpdateSantri,
   onSaveSyahriyah,
   onSaveUangSaku,
   onSaveKurikulum,
@@ -634,7 +647,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [optionPasswordInput, setOptionPasswordInput] = useState<string>('');
   const [optionPasswordError, setOptionPasswordError] = useState<string>('');
   const [activeControlSection, setActiveControlSection] = useState<
-    'input_santri' | 'input_guru' | 'input_jadwal' | 'simpan_absensi' | 'geofencing_absensi' | 'kontrol_tombol' | 
+    'kelola_storage_5tb' | 'kenaikan_kelas' | 'input_santri' | 'input_guru' | 'input_jadwal' | 'simpan_absensi' | 'geofencing_absensi' | 'kontrol_tombol' | 
     'visual_branding' | 'keamanan' | 'profil_santri' | 'kelola_syahriyah' | 'kelola_uang_saku' | 'kelola_kurikulum' |
     'kelola_pengurus' | 'kelola_kalender' | 'kelola_ujian_kitab' | 'kelola_berita' | 'video_intro' | 'sosial_media'
   >(() => {
@@ -645,6 +658,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     return 'simpan_absensi';
   });
+
+  // Modal Kenaikan Kelas Otomatis & Detail Riwayat Santri
+  const [showKenaikanKelasModal, setShowKenaikanKelasModal] = useState<boolean>(false);
+  const [santriDetailHistory, setSantriDetailHistory] = useState<Santri | null>(null);
+
+  // Modal Edit / Setting Data Santri
+  const [editingSantri, setEditingSantri] = useState<Santri | null>(null);
+
+  // Modal Input / Edit Nilai Ujian Santri
+  const [ujianModalTarget, setUjianModalTarget] = useState<{ santri: Santri; type: 'muhafadzoh' | 'baca' | 'koreksian' | 'all' } | null>(null);
 
   // Video Intro Management States in Option Panel
   const [adminVideoInfo, setAdminVideoInfo] = useState<VideoInfo>({
@@ -936,6 +959,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const singleFolderInputRef = useRef<HTMLInputElement>(null);
   const batchFolderInputRef = useRef<HTMLInputElement>(null);
   const batchGalleryInputRef = useRef<HTMLInputElement>(null);
+
+  // State Paginasi & Pencarian Cepat Tab Santri (Skalabilitas 5 TB & Jutaan Record)
+  const [santriTabSearch, setSantriTabSearch] = useState<string>('');
+  const [santriTabPage, setSantriTabPage] = useState<number>(1);
+  const [santriTabPageSize, setSantriTabPageSize] = useState<number>(15);
+  const [santriHighResPreview, setSantriHighResPreview] = useState<Santri | null>(null);
+
+  // State Paginasi Tabel Boyong Santri di Option Panel
+  const [boyongSearch, setBoyongSearch] = useState<string>('');
+  const [boyongPage, setBoyongPage] = useState<number>(1);
+  const [boyongPageSize, setBoyongPageSize] = useState<number>(10);
+
+  // Memoized Paginated Queries (Arsitektur 5 TB & Jutaan Record Cepat di Browser)
+  const paginatedSantriTabResult = useMemo(() => {
+    return queryPaginatedData(santriList, {
+      filterClass: selectedAngkatanSantri,
+      search: santriTabSearch,
+      page: santriTabPage,
+      pageSize: santriTabPageSize
+    });
+  }, [santriList, selectedAngkatanSantri, santriTabSearch, santriTabPage, santriTabPageSize]);
+
+  const paginatedBoyongResult = useMemo(() => {
+    return queryPaginatedData(santriList, {
+      search: boyongSearch,
+      page: boyongPage,
+      pageSize: boyongPageSize
+    });
+  }, [santriList, boyongSearch, boyongPage, boyongPageSize]);
 
   // State untuk Tab Integrasi Google Sheets
   const [sheetsPreviewTab, setSheetsPreviewTab] = useState<'santri' | 'guru' | 'absensi-guru' | 'absensi-santri' | 'jadwal' | 'nadzhom' | 'nilai' | 'syahriyah'>('absensi-guru');
@@ -1552,7 +1604,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {[
               { id: 'dashboard', label: 'Dashboard Utama', icon: Users },
               { id: 'kalender', label: 'Kalender Akademik', icon: Calendar, badge: 'Agenda' },
-              { id: 'ujian-kitab', label: 'Ujian Muhafadzoh & Kitab', icon: Award },
+              { id: 'ujian-muhafadzoh', label: '1. Tab Muhafadzoh', icon: Award, badge: 'Ujian' },
+              { id: 'ujian-baca-kitab', label: '2. Tab Baca Kitab', icon: BookOpen, badge: 'Ujian' },
+              { id: 'ujian-koreksian-kitab', label: '3. Tab Koreksian Kitab', icon: CheckSquare, badge: 'Ujian' },
               { id: 'absensi-santri', label: settings.text_absensi_santri_title || 'Absensi Santri', icon: UserCheck },
               { id: 'absensi-guru', label: settings.text_absensi_guru_title || 'Absensi Ustadz / Guru', icon: Clock },
               { id: 'jadwal', label: settings.text_jadwal_title || 'Jadwal Pelajaran', icon: Calendar },
@@ -1564,7 +1618,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               { id: 'pengaturan', label: 'Option Panel (Pusat Kontrol)', icon: Sliders, badge: 'Password' }
             ].map(tab => {
               const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
+              const isActive = activeTab === tab.id || (tab.id === 'ujian-muhafadzoh' && activeTab === 'ujian-kitab');
               return (
                 <button
                   key={tab.id}
@@ -1709,7 +1763,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-12 gap-0">
                 <div className="md:col-span-5 relative h-48 sm:h-56 md:h-auto min-h-[190px] overflow-hidden group">
                   <img
-                    src={settings.berita_image_url || 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=1200&auto=format&fit=crop&q=80'}
+                    src={(settings.berita_image_url && settings.berita_image_url.trim()) || 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=1200&auto=format&fit=crop&q=80'}
                     alt="Berita Terkini Pondok"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                     onError={(e) => {
@@ -2115,10 +2169,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </thead>
                   <tbody className="divide-y divide-amber-500/20">
                     {izinList.length > 0 ? (
-                      izinList.map(item => {
+                      izinList.map((item, idx) => {
                         const currentPengganti = penggantiSelected[item.id] || item.ustadzPengganti || guruList[0]?.nama || 'Ust. M. Rizqi Fadlillah, S.Pd.';
                         return (
-                          <tr key={item.id} className="hover:bg-amber-500/10 transition">
+                          <tr key={`${item.id}-${idx}`} className="hover:bg-amber-500/10 transition">
                             <td className="p-3 font-mono font-bold text-emerald-300 whitespace-nowrap">
                               {item.tanggal}
                               <span className="text-[10px] text-amber-200/70 block">Jam Ke-{item.jamKe || 1}</span>
@@ -2326,7 +2380,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </thead>
                     <tbody className="divide-y divide-[#d4af37]/10 bg-[#02130b]">
                       {rekapBulananSantri.map((s, idx) => (
-                        <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
+                        <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
                           <td className="p-3 text-center text-emerald-300 font-mono">{idx + 1}</td>
                           <td className="p-3 font-mono text-[#d4af37] font-bold">{s.id}</td>
                           <td className="p-3 font-bold text-white">{s.nama}</td>
@@ -2676,7 +2730,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         return true;
                       })
                       .map((s, idx) => (
-                        <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
+                        <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
                           <td className="p-3 text-center">
                             <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full font-bold font-mono text-xs ${
                               idx === 0 ? 'bg-[#d4af37] text-black shadow-lg shadow-[#d4af37]/40 ring-2 ring-[#f5e298]' :
@@ -2690,7 +2744,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <td className="p-3">
                             <div className="flex items-center space-x-2.5">
                               <img
-                                src={s.foto || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=80&auto=format&fit=crop&q=80'}
+                                src={(s.foto && s.foto.trim()) || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=80&auto=format&fit=crop&q=80'}
                                 alt={s.nama}
                                 className="w-8 h-8 rounded-full object-cover border border-[#d4af37]/40"
                               />
@@ -2801,7 +2855,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/80">
                     {santriList.slice(0, 10).map((s, idx) => (
-                      <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
+                      <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
                         <td className="p-3 text-center text-emerald-300 font-mono">{idx + 1}</td>
                         <td className="p-3">
                           <span className="font-bold text-white block">{s.nama}</span>
@@ -3128,184 +3182,92 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB: UJIAN MUHAFADZOH, KOREKSIAN KITAB, & BACA KITAB */}
-        {activeTab === 'ujian-kitab' && (
+        {/* BAGIAN UJIAN: 3 TAB TERPISAH (TAB MUHAFAZHOH, TAB BACA KITAB, TAB KOREKSIAN KITAB) */}
+        {(activeTab === 'ujian-muhafadzoh' || activeTab === 'ujian-baca-kitab' || activeTab === 'ujian-koreksian-kitab' || activeTab === 'ujian-kitab') && (
           <div className="space-y-6">
-            <div className="card-3d rounded-3xl p-6 backdrop-blur flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border border-[#d4af37]/30">
-              <div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#0b3824] border border-[#d4af37]/50 flex items-center justify-center text-[#d4af37] shadow">
-                    <Award className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-white text-gold-3d">
-                      Rekap Ujian Muhafadzoh, Koreksian Kitab, & Baca Kitab
-                    </h2>
-                    <p className="text-xs text-emerald-200/90">
-                      Terkoneksi langsung ke Dashboard Wali Santri di kolom bawah profil anak. Diatur dan dinilai melalui Option Panel.
-                    </p>
-                  </div>
+            {/* SUBTAB SWITCHER BAR DI ATAS KETIGA TAB */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-gradient-to-r from-[#03150c] via-[#020e08] to-[#041d11] border-2 border-[#d4af37]/50 shadow-xl">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black text-[#f5e298] uppercase tracking-wider flex items-center gap-1.5 px-2">
+                  <Award className="w-4 h-4 text-[#d4af37]" />
+                  <span>MENU BAGIAN UJIAN:</span>
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('ujian-muhafadzoh')}
+                    className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow ${
+                      activeTab === 'ujian-muhafadzoh' || activeTab === 'ujian-kitab'
+                        ? 'bg-gradient-to-r from-[#d4af37] via-[#f5e298] to-[#c59e2b] text-black ring-2 ring-[#f5e298]/80 scale-102 font-extrabold'
+                        : 'bg-black/50 text-[#f3e5ab]/80 hover:bg-[#d4af37]/20 hover:text-white border border-[#d4af37]/30'
+                    }`}
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>1. TAB MUHAFAZHOH</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('ujian-baca-kitab')}
+                    className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow ${
+                      activeTab === 'ujian-baca-kitab'
+                        ? 'bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white ring-2 ring-blue-300 scale-102 font-extrabold'
+                        : 'bg-black/50 text-blue-200/80 hover:bg-blue-500/20 hover:text-white border border-blue-500/30'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>2. TAB BACA KITAB</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('ujian-koreksian-kitab')}
+                    className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow ${
+                      activeTab === 'ujian-koreksian-kitab'
+                        ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-black ring-2 ring-amber-300 scale-102 font-extrabold'
+                        : 'bg-black/50 text-amber-200/80 hover:bg-amber-500/20 hover:text-white border border-amber-500/30'
+                    }`}
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>3. TAB KOREKSIAN KITAB</span>
+                  </button>
                 </div>
               </div>
 
               <button
+                type="button"
                 onClick={() => {
                   setActiveTab('pengaturan');
                   setActiveControlSection('kelola_ujian_kitab');
                 }}
-                className="btn-3d-gold px-4 py-2.5 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow"
+                className="px-3.5 py-1.5 rounded-xl bg-[#0b3824] hover:bg-[#0e482e] border border-[#d4af37]/50 text-[#f5e298] text-xs font-bold flex items-center gap-1.5 transition shadow"
               >
-                <Sliders className="w-4 h-4 text-black" />
-                <span>Input / Edit Nilai di Option Panel</span>
+                <Sliders className="w-3.5 h-3.5 text-[#d4af37]" />
+                <span>Pengaturan Nilai (Option Panel)</span>
               </button>
             </div>
 
-            {/* Quick Cards Rata-Rata */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <div className="card-3d-glass rounded-2xl p-5 border border-[#d4af37]/40 space-y-1">
-                <span className="text-xs text-[#d4af37] font-bold block">1. Rata-rata Nilai Koreksian Kitab</span>
-                <div className="text-2xl font-black text-white font-mono">
-                  {(santriList.reduce((acc, s) => acc + Number(s.nilaiKoreksianKitab ?? 88), 0) / (santriList.length || 1)).toFixed(1)} / 100
-                </div>
-                <span className="text-[11px] text-emerald-300">Pemeriksaan Makna Gandul & Catatan Pegon</span>
-              </div>
+            {/* KONTEN MASING-MASING TAB */}
+            {(activeTab === 'ujian-muhafadzoh' || activeTab === 'ujian-kitab') && (
+              <TabUjianMuhafadzoh
+                santriList={santriList}
+                onOpenInputModal={(s) => setUjianModalTarget({ santri: s, type: 'muhafadzoh' })}
+              />
+            )}
 
-              <div className="card-3d-glass rounded-2xl p-5 border border-emerald-500/40 space-y-1">
-                <span className="text-xs text-emerald-300 font-bold block">2. Rata-rata Nilai Muhafadzoh</span>
-                <div className="text-2xl font-black text-emerald-300 font-mono">
-                  {(santriList.reduce((acc, s) => acc + Number(s.nilaiMuhafadzoh ?? 90), 0) / (santriList.length || 1)).toFixed(1)} / 100
-                </div>
-                <span className="text-[11px] text-emerald-200/90">Hafalan Matan Nadzhom Diniyah</span>
-              </div>
+            {activeTab === 'ujian-baca-kitab' && (
+              <TabUjianBacaKitab
+                santriList={santriList}
+                onOpenInputModal={(s) => setUjianModalTarget({ santri: s, type: 'baca' })}
+              />
+            )}
 
-              <div className="card-3d-glass rounded-2xl p-5 border border-blue-500/40 space-y-1">
-                <span className="text-xs text-blue-300 font-bold block">3. Rata-rata Nilai Baca Kitab</span>
-                <div className="text-2xl font-black text-blue-300 font-mono">
-                  {(santriList.reduce((acc, s) => acc + Number(s.nilaiBacaKitab ?? 86), 0) / (santriList.length || 1)).toFixed(1)} / 100
-                </div>
-                <span className="text-[11px] text-slate-300">Qira'atul Kutub & Fahmul Tarkib</span>
-              </div>
-            </div>
-
-            {/* Tabel Santri dengan 3 Nilai Utama */}
-            <div className="card-3d rounded-2xl p-5 border border-[#d4af37]/30 space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <h3 className="text-sm font-bold text-white text-gold-3d">
-                  Daftar Nilai Santri Lengkap (Terkoneksi ke Wali Santri)
-                </h3>
-                <span className="text-xs text-[#d4af37] font-mono">
-                  Total: {santriList.length} Santri Terdaftar
-                </span>
-              </div>
-
-              <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25">
-                <table className="w-full text-xs text-left min-w-[900px]">
-                  <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
-                    <tr>
-                      <th className="p-3">Santri & Angkatan</th>
-                      <th className="p-3">Nilai Koreksian Kitab</th>
-                      <th className="p-3">Nilai Muhafadzoh</th>
-                      <th className="p-3">Nilai Baca Kitab</th>
-                      <th className="p-3">Penguji & Tanggal</th>
-                      <th className="p-3 text-center">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                    {santriList.map(s => (
-                      <tr key={s.id} className="hover:bg-[#d4af37]/5">
-                        <td className="p-3">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-full overflow-hidden bg-[#0b3824] border border-[#d4af37]/40 shrink-0">
-                              <img
-                                src={s.foto || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=100&auto=format&fit=crop&q=80'}
-                                alt={s.nama}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  (e.target as HTMLElement).setAttribute('src', 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=100&auto=format&fit=crop&q=80');
-                                }}
-                              />
-                            </div>
-                            <div>
-                              <span className="font-bold text-white block">{s.nama}</span>
-                              <span className="text-[10px] text-[#d4af37] font-mono">NIS: {s.id} • {s.kelas}</span>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Nilai Koreksian Kitab */}
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            <span className="px-2 py-0.5 rounded bg-[#d4af37]/20 border border-[#d4af37]/50 text-[#d4af37] font-mono font-black text-sm">
-                              {s.nilaiKoreksianKitab ?? 90}
-                            </span>
-                            <div>
-                              <span className="text-[10px] font-bold text-white block">
-                                {s.predikatKoreksianKitab || 'Mumtaz'}
-                              </span>
-                              <span className="text-[9px] text-slate-400 block truncate max-w-[150px]">
-                                Makna Gandul Sah & Lengkap
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Nilai Muhafadzoh */}
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 font-mono font-black text-sm">
-                              {s.nilaiMuhafadzoh ?? 92}
-                            </span>
-                            <div>
-                              <span className="text-[10px] font-bold text-white block">
-                                {s.predikatMuhafadzoh || 'Mumtaz'}
-                              </span>
-                              <span className="text-[9px] text-slate-400 block truncate max-w-[150px]">
-                                Hafalan Mutqin
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Nilai Baca Kitab */}
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            <span className="px-2 py-0.5 rounded bg-blue-500/20 border border-blue-500/50 text-blue-300 font-mono font-black text-sm">
-                              {s.nilaiBacaKitab ?? 88}
-                            </span>
-                            <div>
-                              <span className="text-[10px] font-bold text-white block">
-                                {s.predikatBacaKitab || 'Jayyid Jiddan'}
-                              </span>
-                              <span className="text-[9px] text-slate-400 block truncate max-w-[150px]">
-                                Tarkib & I'rob Fashih
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td className="p-3">
-                          <span className="text-slate-300 block font-medium">{s.ustadzPengujiKitab || 'Ust. Ilyas'}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">{s.tanggalUjianKitab || '2026-09-22'}</span>
-                        </td>
-
-                        <td className="p-3 text-center">
-                          <button
-                            onClick={() => {
-                              setSelectedUjianSantriId(s.id);
-                              setActiveTab('pengaturan');
-                              setActiveControlSection('kelola_ujian_kitab');
-                            }}
-                            className="px-2.5 py-1 bg-[#d4af37]/20 hover:bg-[#d4af37] text-[#d4af37] hover:text-black font-bold rounded-lg transition"
-                          >
-                            Atur Nilai
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            {activeTab === 'ujian-koreksian-kitab' && (
+              <TabUjianKoreksianKitab
+                santriList={santriList}
+                onOpenInputModal={(s) => setUjianModalTarget({ santri: s, type: 'koreksian' })}
+              />
+            )}
           </div>
         )}
 
@@ -3440,13 +3402,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {santriInClass.map(santri => {
+                      {santriInClass.map((santri, idx) => {
                         const cur = santriAbsensiState[santri.id] || { status: 'Hadir', ket: '' };
                         return (
-                          <div key={santri.id} className="card-3d-deep rounded-xl p-3.5 space-y-3">
+                          <div key={`${santri.id}-${idx}`} className="card-3d-deep rounded-xl p-3.5 space-y-3">
                             <div className="flex items-center space-x-3">
                               <img
-                                src={santri.foto}
+                                src={(santri.foto && santri.foto.trim()) || 'https://via.placeholder.com/70x90'}
                                 alt={santri.nama}
                                 className="w-12 h-14 object-cover rounded-lg border border-[#d4af37]/40 shadow"
                                 onError={(e) => { (e.target as HTMLElement).setAttribute('src', 'https://via.placeholder.com/70x90'); }}
@@ -3550,7 +3512,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10">
                     {rekapBulananSantri.map((s, idx) => (
-                      <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
+                      <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
                         <td className="p-3 text-center text-emerald-300 font-mono">{idx + 1}</td>
                         <td className="p-3 font-mono text-[#d4af37]">{s.id}</td>
                         <td className="p-3 font-bold text-white">{s.nama}</td>
@@ -5197,7 +5159,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <td className="p-3 text-center font-bold text-[#d4af37]">{i + 1}</td>
                           <td className="p-3">
                             <div className="flex items-center space-x-2.5">
-                              {g.foto && (
+                              {g.foto && g.foto.trim() !== '' && (
                                 <img
                                   src={g.foto}
                                   alt={g.nama}
@@ -5260,16 +5222,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </p>
               </div>
 
-              <button
-                onClick={() => {
-                  setActiveTab('pengaturan');
-                  setActiveControlSection('input_santri');
-                }}
-                className="btn-3d-gold px-4 py-2 text-black font-extrabold text-xs rounded-xl flex items-center gap-2"
-              >
-                <PlusCircle className="w-3.5 h-3.5 text-black" />
-                <span>Input Santri via Option Panel</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowKenaikanKelasModal(true)}
+                  className="btn-3d-gold px-4 py-2 text-black font-black text-xs rounded-xl flex items-center gap-2 shadow-[0_6px_20px_rgba(212,175,55,0.45)] hover:scale-105 transition"
+                  title="Buka sistem kenaikan kelas otomatis seluruh jenjang santri"
+                >
+                  <GraduationCap className="w-4 h-4 text-black stroke-[2.4]" />
+                  <span>PROSES KENAIKAN KELAS</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab('pengaturan');
+                    setActiveControlSection('input_santri');
+                  }}
+                  className="btn-3d-dark px-3.5 py-2 text-[#f3e5ab] font-bold text-xs rounded-xl flex items-center gap-2 border border-[#d4af37]/40 hover:border-[#d4af37]"
+                >
+                  <PlusCircle className="w-3.5 h-3.5 text-[#d4af37]" />
+                  <span>Input Santri Manual</span>
+                </button>
+              </div>
             </div>
 
             {/* TAB FILTER ANGKATAN SANTRI DENGAN STYLING 3D MEWAH */}
@@ -5299,14 +5273,72 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               })}
             </div>
 
-            {/* Tabel Data Santri Khusus Angkatan Terpilih */}
+            {/* SEARCH & PAGINATION CONTROLS BAR (ARSITEKTUR SKALABEL 5 TB) */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-2xl bg-[#03170d] border border-[#d4af37]/30 shadow-inner">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={santriTabSearch}
+                  onChange={(e) => {
+                    setSantriTabSearch(e.target.value);
+                    setSantriTabPage(1);
+                  }}
+                  placeholder={`Cari nama, NIS, kamar, atau asal di kelas ${selectedAngkatanSantri}...`}
+                  className="w-full bg-[#020e08] border border-[#d4af37]/30 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#d4af37]"
+                />
+                {santriTabSearch && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSantriTabSearch('');
+                      setSantriTabPage(1);
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-1.5 text-xs text-zinc-300">
+                  <span className="text-[11px] text-zinc-400">Tampilkan:</span>
+                  <select
+                    value={santriTabPageSize}
+                    onChange={(e) => {
+                      setSantriTabPageSize(Number(e.target.value));
+                      setSantriTabPage(1);
+                    }}
+                    className="bg-[#020e08] border border-[#d4af37]/30 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                  >
+                    <option value={10}>10 Baris</option>
+                    <option value={15}>15 Baris</option>
+                    <option value={25}>25 Baris</option>
+                    <option value={50}>50 Baris</option>
+                    <option value={100}>100 Baris</option>
+                  </select>
+                </div>
+
+                <span className="text-xs text-emerald-300 font-mono hidden md:inline">
+                  Total Terdaftar: {santriList.filter(s => s.kelas === selectedAngkatanSantri).length} Santri
+                </span>
+              </div>
+            </div>
+
+            {/* Tabel Data Santri Khusus Angkatan Terpilih (PAGINATED & LAZY LOADED) */}
             <div className="space-y-3">
               <div className="flex justify-between items-center p-3 rounded-xl bg-[#052216] border border-[#d4af37]/20">
                 <span className="text-xs font-bold text-white">
                   Daftar Santri: <span className="text-[#d4af37]">{selectedAngkatanSantri}</span>
+                  {santriTabSearch && (
+                    <span className="ml-2 text-[11px] text-amber-300 font-normal">
+                      (Filter: "{santriTabSearch}")
+                    </span>
+                  )}
                 </span>
                 <span className="text-xs text-emerald-300 font-mono">
-                  {santriList.filter(s => s.kelas === selectedAngkatanSantri).length} Santri Terdaftar
+                  {paginatedSantriTabResult.totalCount} Santri Ditemukan
                 </span>
               </div>
 
@@ -5320,42 +5352,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3">NAMA LENGKAP SANTRI</th>
                       <th className="p-3">KAMAR PONDOK</th>
                       <th className="p-3">ALAMAT ASAL</th>
-                      <th className="p-3 w-32 text-center">STATUS SANTRI</th>
-                      <th className="p-3 w-32 text-center">AKSI / HAPUS</th>
+                      <th className="p-3 w-36 text-center">STATUS & RIWAYAT</th>
+                      <th className="p-3 w-48 text-center">AKSI & PENGATURAN</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10">
-                    {santriList
-                      .filter(s => s.kelas === selectedAngkatanSantri)
-                      .map((s, idx) => (
-                        <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
-                          <td className="p-3 text-center font-bold text-[#d4af37]">{idx + 1}</td>
-                          <td className="p-2 text-center">
-                            <div className="w-10 h-12 mx-auto rounded overflow-hidden border border-[#d4af37]/30 shadow">
-                              <img
-                                src={s.foto}
-                                alt={s.nama}
-                                className="w-full h-full object-cover"
-                                onError={(e) => { (e.target as HTMLElement).setAttribute('src', 'https://via.placeholder.com/70x90'); }}
-                              />
+                    {paginatedSantriTabResult.items.map((s, idx) => (
+                      <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
+                        <td className="p-3 text-center font-bold text-[#d4af37]">
+                          {(paginatedSantriTabResult.page - 1) * paginatedSantriTabResult.pageSize + idx + 1}
+                        </td>
+                        <td className="p-2 text-center">
+                          <div 
+                            onClick={() => setSantriHighResPreview(s)}
+                            className="w-10 h-12 mx-auto rounded overflow-hidden border border-[#d4af37]/30 shadow cursor-pointer group relative"
+                            title="Klik untuk melihat foto resolusi penuh dari Cloud Storage"
+                          >
+                            <img
+                              src={((s.fotoThumbnail && s.fotoThumbnail.trim()) || (s.foto && s.foto.trim())) || 'https://via.placeholder.com/70x90'}
+                              alt={s.nama}
+                              loading="lazy"
+                              className="w-full h-full object-cover transition transform group-hover:scale-110"
+                              onError={(e) => { (e.target as HTMLElement).setAttribute('src', 'https://via.placeholder.com/70x90'); }}
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                              <Eye className="w-3 h-3 text-white" />
                             </div>
-                          </td>
-                          <td className="p-3 font-mono font-bold text-[#d4af37]">{s.id}</td>
-                          <td className="p-3 font-bold text-white text-sm">
-                            <div className="flex items-center space-x-2">
-                              <span>{s.nama}</span>
-                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Santri Aktif Mondok" />
-                            </div>
-                          </td>
-                          <td className="p-3 text-emerald-300 font-medium">{s.kamar || '-'}</td>
-                          <td className="p-3 text-emerald-200/80">{s.alamat || '-'}</td>
-                          <td className="p-3 text-center">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 shadow">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                              <span>Aktif Mondok</span>
+                          </div>
+                        </td>
+                        <td className="p-3 font-mono font-bold text-[#d4af37]">{s.id}</td>
+                        <td className="p-3 font-bold text-white text-sm">
+                          <div className="flex items-center space-x-2">
+                            <span>{s.nama}</span>
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Santri Aktif Mondok" />
+                          </div>
+                        </td>
+                        <td className="p-3 text-emerald-300 font-medium">{s.kamar || '-'}</td>
+                        <td className="p-3 text-emerald-200/80">{s.alamat || '-'}</td>
+                        <td className="p-3 text-center">
+                          <div className="flex flex-col items-center gap-1.5">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow ${
+                              s.statusSantri === 'Lulus'
+                                ? 'bg-amber-950/80 border border-amber-500/40 text-[#f5e298]'
+                                : s.statusSantri === 'Tetap di Kelas'
+                                ? 'bg-orange-950/80 border border-orange-500/40 text-orange-300'
+                                : s.statusSantri === 'Mutasi / Keluar'
+                                ? 'bg-rose-950/80 border border-rose-500/40 text-rose-300'
+                                : 'bg-emerald-950/80 border border-emerald-500/40 text-emerald-300'
+                            }`}>
+                              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                              <span>{s.statusSantri || 'Aktif Mondok'}</span>
                             </span>
-                          </td>
-                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setSantriDetailHistory(s)}
+                              className="text-[10px] text-[#d4af37] hover:text-white flex items-center gap-1 font-semibold underline underline-offset-2 transition"
+                              title="Lihat riwayat perjalanan kelas santri dari tahun ke tahun"
+                            >
+                              <History className="w-3 h-3 text-[#d4af37]" />
+                              <span>Lihat Riwayat</span>
+                            </button>
+                          </div>
+                        </td>
+                        <td className="p-3 text-center">
+                          <div className="flex items-center justify-center gap-1.5 flex-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => setEditingSantri(s)}
+                              className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/30 hover:from-amber-500/40 hover:to-amber-600/50 border border-[#d4af37]/60 text-[#f5e298] hover:text-white text-xs font-bold inline-flex items-center gap-1.5 transition shadow active:scale-95 cursor-pointer"
+                              title="Edit data santri: nama, NIS, foto, alamat, kamar, wali, dsb."
+                            >
+                              <Sliders className="w-3.5 h-3.5 text-[#d4af37]" />
+                              <span>Edit / Setting</span>
+                            </button>
+
                             <button
                               type="button"
                               onClick={() => {
@@ -5365,26 +5435,120 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   }
                                 }
                               }}
-                              className="px-3 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-800 border border-red-500/50 text-red-200 text-xs font-bold inline-flex items-center gap-1.5 transition shadow active:scale-95"
+                              className="px-2.5 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-800 border border-red-500/50 text-red-200 text-xs font-bold inline-flex items-center gap-1.5 transition shadow active:scale-95 cursor-pointer"
                               title="Hapus data santri yang sudah tidak mondok (boyong)"
                             >
                               <Trash2 className="w-3.5 h-3.5 text-red-400" />
                               <span>Hapus</span>
                             </button>
-                          </td>
-                        </tr>
-                      ))}
-                    {santriList.filter(s => s.kelas === selectedAngkatanSantri).length === 0 && (
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {paginatedSantriTabResult.totalCount === 0 && (
                       <tr>
                         <td colSpan={8} className="p-8 text-center text-emerald-300">
-                          Belum ada data santri yang tercatat untuk angkatan {selectedAngkatanSantri}.
+                          {santriTabSearch
+                            ? `Tidak ada santri yang cocok dengan pencarian "${santriTabSearch}" pada kelas ${selectedAngkatanSantri}.`
+                            : `Belum ada data santri yang tercatat untuk angkatan ${selectedAngkatanSantri}.`}
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
+
+              {/* BOTTOM PAGINATION NAV CONTROLLER */}
+              {paginatedSantriTabResult.totalCount > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-[#d4af37]/20 text-xs">
+                  <span className="text-zinc-400 font-mono text-[11px]">
+                    Menampilkan {(paginatedSantriTabResult.page - 1) * paginatedSantriTabResult.pageSize + 1} - {Math.min(paginatedSantriTabResult.page * paginatedSantriTabResult.pageSize, paginatedSantriTabResult.totalCount)} dari {paginatedSantriTabResult.totalCount} santri
+                  </span>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={santriTabPage <= 1}
+                      onClick={() => setSantriTabPage(prev => Math.max(1, prev - 1))}
+                      className="px-3 py-1.5 rounded-xl bg-[#052216] border border-[#d4af37]/30 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#d4af37] flex items-center gap-1"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <span>Sebelumnya</span>
+                    </button>
+
+                    <span className="px-3 py-1 rounded-xl bg-[#03170d] font-mono text-[#d4af37] font-bold border border-[#d4af37]/20">
+                      Hal {paginatedSantriTabResult.page} / {paginatedSantriTabResult.totalPages}
+                    </span>
+
+                    <button
+                      type="button"
+                      disabled={santriTabPage >= paginatedSantriTabResult.totalPages}
+                      onClick={() => setSantriTabPage(prev => Math.min(paginatedSantriTabResult.totalPages, prev + 1))}
+                      className="px-3 py-1.5 rounded-xl bg-[#052216] border border-[#d4af37]/30 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#d4af37] flex items-center gap-1"
+                    >
+                      <span>Selanjutnya</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* MODAL PREVIEW FOTO RESOLUSI PENUH (CLOUD OBJECT STORAGE) */}
+            {santriHighResPreview && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+                <div className="bg-[#041a10] border-2 border-[#d4af37] rounded-3xl p-5 sm:p-6 max-w-md w-full flex flex-col items-center space-y-4 shadow-2xl">
+                  <div className="flex items-center justify-between w-full border-b border-[#d4af37]/20 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Image className="w-4 h-4 text-[#d4af37]" />
+                      <h4 className="text-sm font-bold text-white">Foto Cloud Asli: {santriHighResPreview.nama}</h4>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSantriHighResPreview(null)}
+                      className="w-8 h-8 rounded-full bg-black/40 text-zinc-300 hover:text-white flex items-center justify-center"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="w-56 h-72 rounded-2xl overflow-hidden border-2 border-[#d4af37] shadow-xl bg-black">
+                    <img
+                      src={(santriHighResPreview.foto && santriHighResPreview.foto.trim()) || 'https://via.placeholder.com/300x400?text=Foto+Santri'}
+                      alt={santriHighResPreview.nama}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  <div className="w-full p-3 rounded-xl bg-[#020e08] border border-[#d4af37]/25 text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">NIS:</span>
+                      <span className="font-mono text-[#d4af37] font-bold">{santriHighResPreview.id}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">Kelas:</span>
+                      <span className="text-emerald-300 font-bold">{santriHighResPreview.kelas}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">Kamar:</span>
+                      <span className="text-white">{santriHighResPreview.kamar || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">Asal:</span>
+                      <span className="text-white">{santriHighResPreview.alamat || '-'}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setSantriHighResPreview(null)}
+                    className="w-full py-2 rounded-xl bg-zinc-800 text-zinc-200 text-xs font-bold hover:bg-zinc-700"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -6235,8 +6399,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               /* KONTEN UTAMA OPTION PANEL KETIKA TERBUKA */
               <div className="space-y-6">
                 {/* SUB MENU PUSAT KONTROL - 3D BEVELED TILES */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-2 bg-[#052216]/90 p-2.5 rounded-2xl border border-[#d4af37]/35 shadow-inner">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-9 gap-2 bg-[#052216]/90 p-2.5 rounded-2xl border border-[#d4af37]/35 shadow-inner">
                   {[
+                    { id: 'kenaikan_kelas', label: 'Kenaikan Kelas', icon: GraduationCap },
+                    { id: 'kelola_storage_5tb', label: 'Storage 5 TB & Cloud', icon: HardDrive },
                     { id: 'geofencing_absensi', label: 'Geofencing & Pengganti', icon: MapPin },
                     { id: 'simpan_absensi', label: 'Absensi Ustadz', icon: Save },
                     { id: 'kelola_berita', label: 'Berita & Caption', icon: Newspaper },
@@ -6275,6 +6441,115 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     );
                   })}
                 </div>
+
+                {/* SECTION KENAIKAN KELAS OTOMATIS */}
+                {activeControlSection === 'kenaikan_kelas' && (
+                  <div className="card-3d rounded-2xl p-5 space-y-6">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#d4af37]/20">
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#f5e298] via-[#d4af37] to-[#7a5410] flex items-center justify-center text-black shadow-lg">
+                          <GraduationCap className="w-6 h-6 stroke-[2.2]" />
+                        </div>
+                        <div>
+                          <h3 className="text-base font-extrabold text-[#f5e298] text-gold-3d">
+                            Sistem Kenaikan Kelas & Manajemen Tahun Ajaran Santri
+                          </h3>
+                          <p className="text-xs text-emerald-200/90 mt-0.5">
+                            Memindahkan seluruh santri ke jenjang berikutnya secara otomatis tanpa input ulang data.
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowKenaikanKelasModal(true)}
+                        className="btn-3d-gold px-5 py-2.5 rounded-xl text-black font-black text-xs shadow-xl flex items-center gap-2 hover:scale-105 transition"
+                      >
+                        <GraduationCap className="w-4 h-4 text-black stroke-[2.4]" />
+                        <span>BUKA PROSES KENAIKAN KELAS</span>
+                      </button>
+                    </div>
+
+                    {/* Ringkasan Status Saat Ini */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="p-4 rounded-xl bg-[#03150d] border border-[#d4af37]/30">
+                        <span className="text-[11px] font-bold text-zinc-400 block uppercase">Tahun Ajaran Aktif:</span>
+                        <div className="text-lg font-black text-white font-mono mt-1">
+                          {settings.tahun_ajaran || '2026/2027'}
+                        </div>
+                        <span className="text-[11px] text-emerald-300">Semester: {settings.semester_aktif || 'Semester Ganjil'}</span>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-[#03150d] border border-[#d4af37]/30">
+                        <span className="text-[11px] font-bold text-zinc-400 block uppercase">Total Santri Terdaftar:</span>
+                        <div className="text-lg font-black text-[#f5e298] font-mono mt-1">
+                          {santriList.length} Santri
+                        </div>
+                        <span className="text-[11px] text-emerald-300">Tersimpan Permanen di Database</span>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-[#03150d] border border-[#d4af37]/30">
+                        <span className="text-[11px] font-bold text-zinc-400 block uppercase">Prinsip Database:</span>
+                        <div className="text-xs font-bold text-emerald-400 mt-1">
+                          ID / NIS Tetap Sama
+                        </div>
+                        <span className="text-[11px] text-zinc-400">Seluruh riwayat absensi & nilai tetap terhubung</span>
+                      </div>
+                    </div>
+
+                    {/* Diagram Alur Kenaikan Kelas */}
+                    <div className="p-4 rounded-xl bg-[#020e08] border border-[#d4af37]/20 space-y-3">
+                      <span className="text-xs font-black text-[#f5e298] block uppercase tracking-wider">
+                        Jenjang Kenaikan Kelas Otomatis Salaf Al-Maliki:
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs">
+                        {[
+                          { from: '1 TSANAWIYAH', to: '2 TSANAWIYAH' },
+                          { from: '2 TSANAWIYAH', to: '3 TSANAWIYAH' },
+                          { from: '3 TSANAWIYAH', to: '1 ALIYAH' },
+                          { from: '1 ALIYAH', to: '2 ALIYAH' },
+                          { from: '2 ALIYAH', to: '3 ALIYAH' },
+                          { from: '3 ALIYAH', to: 'Lulus / Alumni' }
+                        ].map((j, i) => (
+                          <div key={i} className="p-2.5 rounded-lg bg-[#052216] border border-[#d4af37]/20 flex items-center justify-between">
+                            <span className="font-bold text-white">{j.from}</span>
+                            <ArrowRight className="w-3.5 h-3.5 text-[#d4af37]" />
+                            <span className="font-bold text-[#f5e298]">{j.to}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SECTION 5TB: MONITORING & ARSITEKTUR CLOUD STORAGE 5 TB */}
+                {activeControlSection === 'kelola_storage_5tb' && (
+                  <Storage5TBManager
+                    allDatabaseData={{
+                      santri: santriList,
+                      guru: guruList,
+                      jadwal: jadwalList,
+                      absensiSantri: absensiSantriList,
+                      absensiGuru: absensiGuruList,
+                      syahriyah: syahriyahList,
+                      uangSaku: uangSakuList,
+                      pengurus: pengurusList,
+                      kurikulum: kurikulumList,
+                      silabus: silabusList,
+                      kalender: kalenderList,
+                      ujian: ujianList,
+                      settings: settings
+                    }}
+                    onNotify={(msg) => {
+                      setRealtimeAlert({
+                        type: 'santri',
+                        title: 'Storage 5 TB & Cloud',
+                        detail: msg,
+                        time: new Date().toLocaleTimeString('id-ID')
+                      });
+                    }}
+                  />
+                )}
 
                 {/* SECTION 0: PENGATURAN GEOFENCING, GOOGLE MAPS, DAN USTADZ PENGGANTI */}
                 {activeControlSection === 'geofencing_absensi' && (
@@ -7528,7 +7803,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div className="grid grid-cols-1 md:grid-cols-12 rounded-xl overflow-hidden border border-[#d4af37]/30 bg-[#03150d]">
                         <div className="md:col-span-5 h-36 md:h-auto overflow-hidden">
                           <img
-                            src={visualForm.berita_image_url || 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=1200&auto=format&fit=crop&q=80'}
+                            src={(visualForm.berita_image_url && visualForm.berita_image_url.trim()) || 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=1200&auto=format&fit=crop&q=80'}
                             alt="Preview Berita"
                             className="w-full h-full object-cover"
                             onError={(e) => {
@@ -8102,8 +8377,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onChange={(e) => setSelectedUjianSantriId(e.target.value)}
                         className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
                       >
-                        {santriList.map(s => (
-                          <option key={s.id} value={s.id}>
+                        {santriList.map((s, idx) => (
+                          <option key={`${s.id}-${idx}`} value={s.id}>
                             {s.nama} ({s.id} — {s.kelas})
                           </option>
                         ))}
@@ -8470,7 +8745,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="relative group shrink-0">
                               <div className="w-28 h-36 rounded-2xl overflow-hidden border-2 border-[#d4af37] shadow-[0_8px_25px_rgba(0,0,0,0.6)] bg-[#020e08] flex items-center justify-center relative">
                                 <img
-                                  src={inputSantriForm.foto}
+                                  src={(inputSantriForm.foto && inputSantriForm.foto.trim()) || 'https://via.placeholder.com/150x200?text=Foto+Santri'}
                                   alt="Foto Santri"
                                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                                   onError={(e) => {
@@ -8904,7 +9179,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       </td>
                                       <td className="p-2 text-center">
                                         <div className="w-10 h-12 mx-auto rounded overflow-hidden border border-[#d4af37]/40 shadow bg-black">
-                                          <img src={item.foto} alt={item.nama} className="w-full h-full object-cover" />
+                                          <img src={(item.foto && item.foto.trim()) || 'https://via.placeholder.com/70x90'} alt={item.nama} className="w-full h-full object-cover" />
                                         </div>
                                       </td>
                                       <td className="p-2.5">
@@ -9046,7 +9321,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               >
                                 <div className="w-full h-28 rounded-lg overflow-hidden bg-black mb-2 relative">
                                   <img
-                                    src={photo.dataUrl}
+                                    src={(photo.dataUrl && photo.dataUrl.trim()) || 'https://via.placeholder.com/150x200'}
                                     alt={photo.name}
                                     className="w-full h-full object-cover group-hover:scale-105 transition"
                                   />
@@ -9082,8 +9357,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     )}
 
-                    {/* DAFTAR & PENGHAPUSAN MANUAL SANTRI TIDAK MONDOK (BOYONG) */}
-                    <div className="card-3d rounded-2xl p-5 space-y-3">
+                    {/* DAFTAR & PENGHAPUSAN MANUAL SANTRI TIDAK MONDOK (BOYONG) - PAGINATED */}
+                    <div className="card-3d rounded-2xl p-5 space-y-3.5">
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                         <div>
                           <h5 className="text-xs sm:text-sm font-bold text-white text-gold-3d flex items-center gap-1.5">
@@ -9095,14 +9370,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </p>
                         </div>
                         <span className="text-[11px] text-[#d4af37] font-mono px-3 py-1 rounded-lg bg-[#03170d] border border-[#d4af37]/30">
-                          Total: {santriList.length} Santri
+                          Total: {santriList.length} Santri Terdaftar
                         </span>
+                      </div>
+
+                      {/* Search Bar Boyong */}
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-1">
+                        <div className="relative flex-1 w-full">
+                          <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={boyongSearch}
+                            onChange={(e) => {
+                              setBoyongSearch(e.target.value);
+                              setBoyongPage(1);
+                            }}
+                            placeholder="Cari nama atau NIS santri yang ingin dihapus/boyong..."
+                            className="w-full bg-[#020e08] border border-[#d4af37]/30 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#d4af37]"
+                          />
+                        </div>
+
+                        <div className="text-xs text-zinc-400 flex items-center gap-1.5 shrink-0">
+                          <span>Per Halaman:</span>
+                          <select
+                            value={boyongPageSize}
+                            onChange={(e) => {
+                              setBoyongPageSize(Number(e.target.value));
+                              setBoyongPage(1);
+                            }}
+                            className="bg-[#020e08] border border-[#d4af37]/30 rounded-lg px-2 py-1 text-xs text-white"
+                          >
+                            <option value={10}>10</option>
+                            <option value={25}>25</option>
+                            <option value={50}>50</option>
+                          </select>
+                        </div>
                       </div>
 
                       <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25 max-h-80 overflow-y-auto">
                         <table className="w-full text-xs text-left">
                           <thead className="bg-[#03170d] text-[#d4af37] sticky top-0 z-10 border-b border-[#d4af37]/30">
                             <tr>
+                              <th className="p-2.5 w-12 text-center">NO</th>
                               <th className="p-2.5">NIS</th>
                               <th className="p-2.5">NAMA SANTRI</th>
                               <th className="p-2.5">ANGKATAN</th>
@@ -9112,8 +9421,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/80">
-                            {santriList.map((s) => (
-                              <tr key={s.id} className="hover:bg-[#d4af37]/5">
+                            {paginatedBoyongResult.items.map((s, idx) => (
+                              <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5">
+                                <td className="p-2.5 text-center font-bold text-[#d4af37]">
+                                  {(paginatedBoyongResult.page - 1) * paginatedBoyongResult.pageSize + idx + 1}
+                                </td>
                                 <td className="p-2.5 font-mono text-[#d4af37] font-bold">{s.id}</td>
                                 <td className="p-2.5 font-bold text-white">{s.nama}</td>
                                 <td className="p-2.5 text-emerald-300">{s.kelas}</td>
@@ -9142,9 +9454,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 </td>
                               </tr>
                             ))}
+                            {paginatedBoyongResult.totalCount === 0 && (
+                              <tr>
+                                <td colSpan={7} className="p-6 text-center text-zinc-400">
+                                  {boyongSearch ? `Tidak ada santri yang cocok dengan "${boyongSearch}".` : 'Belum ada data santri.'}
+                                </td>
+                              </tr>
+                            )}
                           </tbody>
                         </table>
                       </div>
+
+                      {/* Pagination Controller Boyong */}
+                      {paginatedBoyongResult.totalCount > 0 && (
+                        <div className="flex items-center justify-between text-xs pt-2 border-t border-[#d4af37]/20">
+                          <span className="text-zinc-400 font-mono text-[11px]">
+                            Menampilkan {(paginatedBoyongResult.page - 1) * paginatedBoyongResult.pageSize + 1} - {Math.min(paginatedBoyongResult.page * paginatedBoyongResult.pageSize, paginatedBoyongResult.totalCount)} dari {paginatedBoyongResult.totalCount} santri
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={boyongPage <= 1}
+                              onClick={() => setBoyongPage(prev => Math.max(1, prev - 1))}
+                              className="px-2.5 py-1 rounded-lg bg-[#020e08] border border-[#d4af37]/30 text-white font-bold disabled:opacity-40"
+                            >
+                              Prev
+                            </button>
+                            <span className="px-2.5 py-1 rounded-lg bg-[#03170d] font-mono text-[#d4af37] font-bold border border-[#d4af37]/20">
+                              {paginatedBoyongResult.page} / {paginatedBoyongResult.totalPages}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={boyongPage >= paginatedBoyongResult.totalPages}
+                              onClick={() => setBoyongPage(prev => Math.min(paginatedBoyongResult.totalPages, prev + 1))}
+                              className="px-2.5 py-1 rounded-lg bg-[#020e08] border border-[#d4af37]/30 text-white font-bold disabled:opacity-40"
+                            >
+                              Next
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -9465,7 +9814,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             className="w-full bg-[#03140c] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white"
                             placeholder="https://images.unsplash.com/..."
                           />
-                          {visualForm.berita_image_url && (
+                          {visualForm.berita_image_url && visualForm.berita_image_url.trim() !== '' && (
                             <div className="mt-2 h-24 rounded-lg overflow-hidden border border-[#d4af37]/30">
                               <img src={visualForm.berita_image_url} alt="Preview Berita" className="w-full h-full object-cover" />
                             </div>
@@ -9914,17 +10263,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span className="text-xs font-bold text-[#d4af37] block uppercase tracking-wider">
                         Pratinjau Video (Live Video Preview):
                       </span>
-                      <div className="relative aspect-video max-h-72 w-full rounded-xl overflow-hidden bg-black border border-[#d4af37]/40 shadow-inner">
-                        <video
-                          key={adminVideoInfo.src}
-                          src={adminVideoInfo.src}
-                          controls
-                          playsInline
-                          className="w-full h-full object-cover"
-                        >
-                          <source src={adminVideoInfo.src} type="video/mp4" />
-                        </video>
-                      </div>
+                      {adminVideoInfo.src && adminVideoInfo.src.trim() !== '' ? (
+                        <div className="relative aspect-video max-h-72 w-full rounded-xl overflow-hidden bg-black border border-[#d4af37]/40 shadow-inner">
+                          <video
+                            key={adminVideoInfo.src}
+                            src={adminVideoInfo.src}
+                            controls
+                            playsInline
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="p-6 text-center text-xs text-zinc-400 bg-black/40 rounded-xl border border-[#d4af37]/20">
+                          Belum ada video dipilih
+                        </div>
+                      )}
                     </div>
 
                     {/* Two Input Methods Grid */}
@@ -10594,8 +10947,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onChange={(e) => setSelectedProfileSantriId(e.target.value)}
                         className="w-full bg-[#0a301f] border border-[#d4af37]/50 rounded-xl p-3 text-sm text-white font-semibold"
                       >
-                        {santriList.map(s => (
-                          <option key={s.id} value={s.id}>
+                        {santriList.map((s, idx) => (
+                          <option key={`${s.id}-${idx}`} value={s.id}>
                             {s.nama} — NIS: {s.id} ({s.kelas})
                           </option>
                         ))}
@@ -10823,8 +11176,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             onChange={(e) => setInputSyahriyahForm({ ...inputSyahriyahForm, idSantri: e.target.value })}
                             className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
                           >
-                            {santriList.map(s => (
-                              <option key={s.id} value={s.id}>{s.nama} ({s.id})</option>
+                            {santriList.map((s, idx) => (
+                              <option key={`${s.id}-${idx}`} value={s.id}>{s.nama} ({s.id})</option>
                             ))}
                           </select>
                         </div>
@@ -10917,10 +11270,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                            {syahriyahList.slice(0, 10).map((sy) => {
+                            {syahriyahList.slice(0, 10).map((sy, idx) => {
                               const sObj = santriList.find(s => s.id === sy.idSantri);
                               return (
-                                <tr key={sy.id} className="hover:bg-[#d4af37]/5">
+                                <tr key={`${sy.id}-${idx}`} className="hover:bg-[#d4af37]/5">
                                   <td className="p-3 font-bold text-white">
                                     {sObj?.nama || sy.idSantri} <span className="text-[10px] text-emerald-400 font-mono">({sy.idSantri})</span>
                                   </td>
@@ -11006,8 +11359,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             onChange={(e) => setInputUangSakuForm({ ...inputUangSakuForm, idSantri: e.target.value })}
                             className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
                           >
-                            {santriList.map(s => (
-                              <option key={s.id} value={s.id}>
+                            {santriList.map((s, idx) => (
+                              <option key={`${s.id}-${idx}`} value={s.id}>
                                 {s.nama} (Saldo: Rp {(s.saldoUangSaku ?? 0).toLocaleString('id-ID')})
                               </option>
                             ))}
@@ -11087,10 +11440,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                            {uangSakuList.slice(0, 10).map((us) => {
+                            {uangSakuList.slice(0, 10).map((us, idx) => {
                               const sObj = santriList.find(s => s.id === us.idSantri);
                               return (
-                                <tr key={us.id} className="hover:bg-[#d4af37]/5">
+                                <tr key={`${us.id}-${idx}`} className="hover:bg-[#d4af37]/5">
                                   <td className="p-3 font-mono text-emerald-300">{us.tanggal}</td>
                                   <td className="p-3 font-bold text-white">{sObj?.nama || us.idSantri}</td>
                                   <td className="p-3">
@@ -11229,8 +11582,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             onChange={(e) => setInputKurikulumForm({ ...inputKurikulumForm, ustadzPengampu: e.target.value })}
                             className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
                           >
-                            {guruList.map(g => (
-                              <option key={g.id} value={g.nama}>{g.nama} ({g.mapel})</option>
+                            {guruList.map((g, idx) => (
+                              <option key={`${g.id}-${idx}`} value={g.nama}>{g.nama} ({g.mapel})</option>
                             ))}
                           </select>
                         </div>
@@ -11264,8 +11617,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                            {kurikulumList.map((k) => (
-                              <tr key={k.id} className="hover:bg-[#d4af37]/5">
+                            {kurikulumList.map((k, idx) => (
+                              <tr key={`${k.id}-${idx}`} className="hover:bg-[#d4af37]/5">
                                 <td className="p-3 font-semibold text-[#d4af37]">{k.kelas}</td>
                                 <td className="p-3 text-white font-bold">{k.mapel}</td>
                                 <td className="p-3 font-extrabold text-white text-sm">{k.kitab}</td>
@@ -11492,6 +11845,207 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </form>
           </div>
         </div>
+      )}
+      {/* MODAL SISTEM KENAIKAN KELAS OTOMATIS */}
+      {showKenaikanKelasModal && (
+        <KenaikanKelasModal
+          isOpen={showKenaikanKelasModal}
+          onClose={() => setShowKenaikanKelasModal(false)}
+          santriList={santriList}
+          settings={settings}
+          onSavePromotion={(updatedList, updatedSettings) => {
+            if (onBatchUpdateSantri) {
+              onBatchUpdateSantri(updatedList, updatedSettings);
+            } else {
+              localStorage.setItem('sim_santri', JSON.stringify(updatedList));
+              if (updatedSettings) {
+                onSaveSettings({ ...settings, ...updatedSettings });
+              }
+            }
+          }}
+          onNotify={(msg) => {
+            setRealtimeAlert({
+              type: 'santri',
+              title: 'Kenaikan Kelas Otomatis',
+              detail: msg,
+              time: new Date().toLocaleTimeString('id-ID')
+            });
+          }}
+        />
+      )}
+
+      {/* MODAL RIWAYAT PERJALANAN KELAS SANTRI (TAHUN AJARAN → KELAS → STATUS SANTRI) */}
+      {santriDetailHistory && (
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+          <div className="relative w-full max-w-xl rounded-3xl bg-[#041d13] border-2 border-[#d4af37] p-6 text-white shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/30">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-14 rounded-xl overflow-hidden bg-black border border-[#d4af37] shrink-0">
+                  <img
+                    src={(santriDetailHistory.fotoThumbnail && santriDetailHistory.fotoThumbnail.trim()) || (santriDetailHistory.foto && santriDetailHistory.foto.trim()) || 'https://via.placeholder.com/60x80?text=Foto'}
+                    alt={santriDetailHistory.nama}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div>
+                  <h4 className="text-base font-extrabold text-[#f5e298]">
+                    {santriDetailHistory.nama}
+                  </h4>
+                  <span className="text-xs font-mono text-emerald-300 block">
+                    NIS: {santriDetailHistory.id} • Kelas Saat Ini: {santriDetailHistory.kelas}
+                  </span>
+                  <span className="text-[11px] text-zinc-400 block">
+                    Kamar: {santriDetailHistory.kamar || '-'} • Asal: {santriDetailHistory.alamat || '-'}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSantriDetailHistory(null)}
+                className="w-8 h-8 rounded-lg bg-black/40 border border-white/20 text-zinc-400 hover:text-white flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[#f5e298] uppercase tracking-wider flex items-center gap-1.5">
+                  <History className="w-4 h-4 text-[#d4af37]" />
+                  <span>Riwayat Perjalanan Santri dari Tahun ke Tahun:</span>
+                </span>
+                <span className="text-[10px] text-zinc-400 font-mono">
+                  TAHUN AJARAN → KELAS → STATUS
+                </span>
+              </div>
+
+              {/* TIMELINE RIWAYAT: TAHUN AJARAN → KELAS → STATUS SANTRI */}
+              <div className="relative pl-6 space-y-3 max-h-72 overflow-y-auto before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#d4af37]/40">
+                {getOrCreateSantriHistory(santriDetailHistory, settings.tahun_ajaran || '2026/2027').map((item, idx) => (
+                  <div key={idx} className="relative group">
+                    <div className="absolute -left-6 top-1.5 w-3.5 h-3.5 rounded-full bg-[#d4af37] border-2 border-black shadow" />
+                    
+                    <div className="p-3 rounded-xl bg-[#020e08] border border-[#d4af37]/25 space-y-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-mono font-bold text-xs text-[#f5e298]">
+                          Tahun Ajaran: {item.tahunAjaran}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          item.status === 'Naik Kelas'
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                            : item.status === 'Lulus'
+                            ? 'bg-amber-950 text-[#f5e298] border border-amber-500/40'
+                            : item.status === 'Tetap di Kelas'
+                            ? 'bg-orange-950 text-orange-300 border border-orange-500/40'
+                            : 'bg-blue-950 text-blue-300 border border-blue-500/40'
+                        }`}>
+                          {item.status}
+                        </span>
+                      </div>
+
+                      <div className="text-xs font-semibold text-white">
+                        Jenjang / Kelas: <span className="text-emerald-300">{item.kelas}</span>
+                      </div>
+
+                      {item.keterangan && (
+                        <p className="text-[11px] text-zinc-400">
+                          {item.keterangan}
+                        </p>
+                      )}
+
+                      <div className="text-[10px] text-zinc-500 font-mono pt-0.5">
+                        Tercatat: {item.tanggalProses}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="text-right pt-2 border-t border-[#d4af37]/20">
+              <button
+                type="button"
+                onClick={() => setSantriDetailHistory(null)}
+                className="px-4 py-2 rounded-xl bg-[#0a301f] border border-[#d4af37]/40 text-xs font-bold text-white hover:bg-[#d4af37] hover:text-black transition"
+              >
+                Tutup Riwayat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDIT / SETTING DATA SANTRI */}
+      {editingSantri && (
+        <EditSantriModal
+          isOpen={Boolean(editingSantri)}
+          onClose={() => setEditingSantri(null)}
+          santri={editingSantri}
+          allSantriList={santriList}
+          onSave={(updatedSantri, originalId) => {
+            if (onUpdateSantriProfile) {
+              onUpdateSantriProfile(updatedSantri, originalId);
+            } else {
+              const updated = santriList.map(s => s.id === originalId ? updatedSantri : s);
+              localStorage.setItem('sim_santri', JSON.stringify(updated));
+            }
+          }}
+          onNotify={(msg) => {
+            setRealtimeAlert({
+              type: 'santri',
+              title: 'Edit Data Santri',
+              detail: msg,
+              time: new Date().toLocaleTimeString('id-ID')
+            });
+          }}
+        />
+      )}
+
+      {/* MODAL INPUT / EDIT NILAI UJIAN */}
+      {ujianModalTarget && (
+        <ModalInputNilaiUjian
+          isOpen={Boolean(ujianModalTarget)}
+          onClose={() => setUjianModalTarget(null)}
+          santri={ujianModalTarget.santri}
+          type={ujianModalTarget.type}
+          onSave={(updatedSantri) => {
+            if (onUpdateSantriProfile) {
+              onUpdateSantriProfile(updatedSantri);
+            } else {
+              const updated = santriList.map(s => s.id === updatedSantri.id ? updatedSantri : s);
+              localStorage.setItem('sim_santri', JSON.stringify(updated));
+            }
+            if (onSaveUjianSantri) {
+              onSaveUjianSantri({
+                id: `UJN-${updatedSantri.id}-${Date.now()}`,
+                idSantri: updatedSantri.id,
+                namaSantri: updatedSantri.nama,
+                kelas: updatedSantri.kelas,
+                semester: settings.semester_aktif || 'Semester Ganjil 2026/2027',
+                tanggal: updatedSantri.tanggalUjianKitab || new Date().toISOString().split('T')[0],
+                nilaiKoreksianKitab: Number(updatedSantri.nilaiKoreksianKitab ?? 90),
+                predikatKoreksianKitab: updatedSantri.predikatKoreksianKitab || 'Mumtaz',
+                kitabKoreksian: updatedSantri.kitabKoreksian,
+                nilaiMuhafadzoh: Number(updatedSantri.nilaiMuhafadzoh ?? 92),
+                predikatMuhafadzoh: updatedSantri.predikatMuhafadzoh || 'Mumtaz',
+                kitabMuhafadzoh: updatedSantri.kitabMuhafadzoh,
+                nilaiBacaKitab: Number(updatedSantri.nilaiBacaKitab ?? 88),
+                predikatBacaKitab: updatedSantri.predikatBacaKitab || 'Jayyid Jiddan',
+                kitabBaca: updatedSantri.kitabBaca,
+                ustadzPenguji: updatedSantri.ustadzPengujiKitab || 'Ust. Muhammad Ilyas'
+              });
+            }
+          }}
+          onNotify={(msg) => {
+            setRealtimeAlert({
+              type: 'santri',
+              title: 'Nilai Ujian Santri',
+              detail: msg,
+              time: new Date().toLocaleTimeString('id-ID')
+            });
+          }}
+        />
       )}
     </div>
   );

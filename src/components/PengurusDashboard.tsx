@@ -854,7 +854,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-full overflow-hidden bg-[#0b3824] border border-[#d4af37]/50 shrink-0">
                 <img
-                  src={pengurus.foto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'}
+                  src={(pengurus.foto && pengurus.foto.trim()) || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'}
                   alt={pengurus.nama}
                   className="w-full h-full object-cover"
                 />
@@ -957,7 +957,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             >
               <div className="w-5 h-5 rounded-full overflow-hidden bg-[#0b3824] border border-[#d4af37]/50 shrink-0">
                 <img
-                  src={pengurus.foto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'}
+                  src={(pengurus.foto && pengurus.foto.trim()) || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'}
                   alt={pengurus.nama}
                   className="w-full h-full object-cover"
                 />
@@ -1711,7 +1711,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
                   <div className="w-20 h-20 rounded-2xl overflow-hidden bg-[#0b3824] border-2 border-[#d4af37] shadow-xl shrink-0">
                     <img
-                      src={pengurus.foto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'}
+                      src={(pengurus.foto && pengurus.foto.trim()) || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'}
                       alt={pengurus.nama}
                       className="w-full h-full object-cover"
                     />
@@ -2128,14 +2128,14 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                    {myStudents.map(s => {
+                    {myStudents.map((s, idx) => {
                       const currentStatus = localSantriAbsensi[s.id] || 'Hadir';
                       return (
-                        <tr key={s.id} className="hover:bg-[#d4af37]/5">
+                        <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5">
                           <td className="p-3">
                             <div className="flex items-center space-x-2.5">
                               <img
-                                src={s.foto || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=80&auto=format&fit=crop&q=80'}
+                                src={(s.foto && s.foto.trim()) || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=80&auto=format&fit=crop&q=80'}
                                 alt={s.nama}
                                 className="w-8 h-8 rounded-full object-cover border border-[#d4af37]/40"
                               />
@@ -2359,12 +2359,12 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                     .map((s, idx) => {
                       const cur = globalSantriAbsensi[s.id] || { status: 'Hadir', ket: '' };
                       return (
-                        <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
+                        <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
                           <td className="p-3 text-center text-emerald-300 font-mono">{idx + 1}</td>
                           <td className="p-3">
                             <div className="flex items-center space-x-2.5">
                               <img
-                                src={s.foto || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=80&auto=format&fit=crop&q=80'}
+                                src={(s.foto && s.foto.trim()) || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=80&auto=format&fit=crop&q=80'}
                                 alt={s.nama}
                                 className="w-8 h-8 rounded-full object-cover border border-[#d4af37]/40 shrink-0"
                               />
@@ -3105,8 +3105,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                  {santriList.map(s => (
-                    <tr key={s.id} className="hover:bg-[#d4af37]/5">
+                  {santriList.map((s, idx) => (
+                    <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5">
                       <td className="p-3">
                         <span className="font-bold text-white block">{s.nama}</span>
                         <span className="text-[10px] text-[#d4af37] font-mono">NIS: {s.id}</span>
@@ -3155,7 +3155,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             <div className="flex items-center space-x-4">
               <div className="w-24 h-24 rounded-2xl overflow-hidden bg-[#0b3824] border-2 border-[#d4af37] shadow-xl shrink-0">
                 <img
-                  src={pengurus.foto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'}
+                  src={(pengurus.foto && pengurus.foto.trim()) || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'}
                   alt={pengurus.nama}
                   className="w-full h-full object-cover"
                 />

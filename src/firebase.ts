@@ -9,10 +9,10 @@ import {
 } from 'firebase/auth';
 import { 
   getFirestore, 
+  initializeFirestore,
   doc, 
   getDoc, 
   setDoc, 
-  getDocFromServer,
   onSnapshot
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -35,8 +35,11 @@ export const safeFirebaseConfig = {
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(safeFirebaseConfig) : getApps()[0];
 
-// CRITICAL: Must pass firebaseConfig.firestoreDatabaseId to getFirestore
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// CRITICAL: Must pass firebaseConfig.firestoreDatabaseId to initializeFirestore with auto-detect long polling
+export const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+  ignoreUndefinedProperties: true,
+}, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -91,21 +94,12 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Connection validation
 export async function testConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.info('Firebase Firestore connected successfully.');
-    return true;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration: Client is offline.');
-    } else {
-      console.info('Firebase online (test document checked).');
-    }
+    const snap = await getDoc(doc(db, 'settings', 'general'));
+    return snap.exists();
+  } catch {
     return false;
   }
 }
-
-// Auto-run connection test on boot
-testConnection();
 
 // Firebase Auth helper: otomatis menggunakan signInWithRedirect di browser HP (kecuali PWA standalone)
 export async function signInWithGoogleFirebase(forceRedirect: boolean = false) {
