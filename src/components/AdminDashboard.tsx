@@ -9,13 +9,9 @@ import {
   Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload, Play,
   ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine, MapPin, Compass, Crosshair, Shield, Navigation,
   Instagram, Youtube, Music2, Globe, Unlock, Menu,
-  Folder, FolderPlus, FolderCheck, CheckSquare, Square, Layers, FileUp, Camera,
-  HardDrive, Search, ChevronLeft
+  Folder, FolderPlus, FolderCheck, CheckSquare, Square, Layers, FileUp, Camera
 } from 'lucide-react';
 import { compressImageFile, parseFileNameForSantri } from '../lib/imageCompression';
-import { Storage5TBManager } from './Storage5TBManager';
-import { queryPaginatedData } from '../lib/scalableDatabase';
-import { formatBytes, TOTAL_CAPACITY_5TB } from '../lib/scalableStorage';
 import { PWAInstallButton } from './PWAInstallButton';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Legend, 
@@ -638,7 +634,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [optionPasswordInput, setOptionPasswordInput] = useState<string>('');
   const [optionPasswordError, setOptionPasswordError] = useState<string>('');
   const [activeControlSection, setActiveControlSection] = useState<
-    'kelola_storage_5tb' | 'input_santri' | 'input_guru' | 'input_jadwal' | 'simpan_absensi' | 'geofencing_absensi' | 'kontrol_tombol' | 
+    'input_santri' | 'input_guru' | 'input_jadwal' | 'simpan_absensi' | 'geofencing_absensi' | 'kontrol_tombol' | 
     'visual_branding' | 'keamanan' | 'profil_santri' | 'kelola_syahriyah' | 'kelola_uang_saku' | 'kelola_kurikulum' |
     'kelola_pengurus' | 'kelola_kalender' | 'kelola_ujian_kitab' | 'kelola_berita' | 'video_intro' | 'sosial_media'
   >(() => {
@@ -940,35 +936,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const singleFolderInputRef = useRef<HTMLInputElement>(null);
   const batchFolderInputRef = useRef<HTMLInputElement>(null);
   const batchGalleryInputRef = useRef<HTMLInputElement>(null);
-
-  // State Paginasi & Pencarian Cepat Tab Santri (Skalabilitas 5 TB & Jutaan Record)
-  const [santriTabSearch, setSantriTabSearch] = useState<string>('');
-  const [santriTabPage, setSantriTabPage] = useState<number>(1);
-  const [santriTabPageSize, setSantriTabPageSize] = useState<number>(15);
-  const [santriHighResPreview, setSantriHighResPreview] = useState<Santri | null>(null);
-
-  // State Paginasi Tabel Boyong Santri di Option Panel
-  const [boyongSearch, setBoyongSearch] = useState<string>('');
-  const [boyongPage, setBoyongPage] = useState<number>(1);
-  const [boyongPageSize, setBoyongPageSize] = useState<number>(10);
-
-  // Memoized Paginated Queries (Arsitektur 5 TB & Jutaan Record Cepat di Browser)
-  const paginatedSantriTabResult = useMemo(() => {
-    return queryPaginatedData(santriList, {
-      filterClass: selectedAngkatanSantri,
-      search: santriTabSearch,
-      page: santriTabPage,
-      pageSize: santriTabPageSize
-    });
-  }, [santriList, selectedAngkatanSantri, santriTabSearch, santriTabPage, santriTabPageSize]);
-
-  const paginatedBoyongResult = useMemo(() => {
-    return queryPaginatedData(santriList, {
-      search: boyongSearch,
-      page: boyongPage,
-      pageSize: boyongPageSize
-    });
-  }, [santriList, boyongSearch, boyongPage, boyongPageSize]);
 
   // State untuk Tab Integrasi Google Sheets
   const [sheetsPreviewTab, setSheetsPreviewTab] = useState<'santri' | 'guru' | 'absensi-guru' | 'absensi-santri' | 'jadwal' | 'nadzhom' | 'nilai' | 'syahriyah'>('absensi-guru');
@@ -5332,72 +5299,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               })}
             </div>
 
-            {/* SEARCH & PAGINATION CONTROLS BAR (ARSITEKTUR SKALABEL 5 TB) */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-2xl bg-[#03170d] border border-[#d4af37]/30 shadow-inner">
-              <div className="relative flex-1">
-                <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={santriTabSearch}
-                  onChange={(e) => {
-                    setSantriTabSearch(e.target.value);
-                    setSantriTabPage(1);
-                  }}
-                  placeholder={`Cari nama, NIS, kamar, atau asal di kelas ${selectedAngkatanSantri}...`}
-                  className="w-full bg-[#020e08] border border-[#d4af37]/30 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#d4af37]"
-                />
-                {santriTabSearch && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSantriTabSearch('');
-                      setSantriTabPage(1);
-                    }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              <div className="flex items-center gap-3 shrink-0">
-                <div className="flex items-center gap-1.5 text-xs text-zinc-300">
-                  <span className="text-[11px] text-zinc-400">Tampilkan:</span>
-                  <select
-                    value={santriTabPageSize}
-                    onChange={(e) => {
-                      setSantriTabPageSize(Number(e.target.value));
-                      setSantriTabPage(1);
-                    }}
-                    className="bg-[#020e08] border border-[#d4af37]/30 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                  >
-                    <option value={10}>10 Baris</option>
-                    <option value={15}>15 Baris</option>
-                    <option value={25}>25 Baris</option>
-                    <option value={50}>50 Baris</option>
-                    <option value={100}>100 Baris</option>
-                  </select>
-                </div>
-
-                <span className="text-xs text-emerald-300 font-mono hidden md:inline">
-                  Total Terdaftar: {santriList.filter(s => s.kelas === selectedAngkatanSantri).length} Santri
-                </span>
-              </div>
-            </div>
-
-            {/* Tabel Data Santri Khusus Angkatan Terpilih (PAGINATED & LAZY LOADED) */}
+            {/* Tabel Data Santri Khusus Angkatan Terpilih */}
             <div className="space-y-3">
               <div className="flex justify-between items-center p-3 rounded-xl bg-[#052216] border border-[#d4af37]/20">
                 <span className="text-xs font-bold text-white">
                   Daftar Santri: <span className="text-[#d4af37]">{selectedAngkatanSantri}</span>
-                  {santriTabSearch && (
-                    <span className="ml-2 text-[11px] text-amber-300 font-normal">
-                      (Filter: "{santriTabSearch}")
-                    </span>
-                  )}
                 </span>
                 <span className="text-xs text-emerald-300 font-mono">
-                  {paginatedSantriTabResult.totalCount} Santri Ditemukan
+                  {santriList.filter(s => s.kelas === selectedAngkatanSantri).length} Santri Terdaftar
                 </span>
               </div>
 
@@ -5416,167 +5325,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10">
-                    {paginatedSantriTabResult.items.map((s, idx) => (
-                      <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
-                        <td className="p-3 text-center font-bold text-[#d4af37]">
-                          {(paginatedSantriTabResult.page - 1) * paginatedSantriTabResult.pageSize + idx + 1}
-                        </td>
-                        <td className="p-2 text-center">
-                          <div 
-                            onClick={() => setSantriHighResPreview(s)}
-                            className="w-10 h-12 mx-auto rounded overflow-hidden border border-[#d4af37]/30 shadow cursor-pointer group relative"
-                            title="Klik untuk melihat foto resolusi penuh dari Cloud Storage"
-                          >
-                            <img
-                              src={s.fotoThumbnail || s.foto}
-                              alt={s.nama}
-                              loading="lazy"
-                              className="w-full h-full object-cover transition transform group-hover:scale-110"
-                              onError={(e) => { (e.target as HTMLElement).setAttribute('src', 'https://via.placeholder.com/70x90'); }}
-                            />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
-                              <Eye className="w-3 h-3 text-white" />
+                    {santriList
+                      .filter(s => s.kelas === selectedAngkatanSantri)
+                      .map((s, idx) => (
+                        <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
+                          <td className="p-3 text-center font-bold text-[#d4af37]">{idx + 1}</td>
+                          <td className="p-2 text-center">
+                            <div className="w-10 h-12 mx-auto rounded overflow-hidden border border-[#d4af37]/30 shadow">
+                              <img
+                                src={s.foto}
+                                alt={s.nama}
+                                className="w-full h-full object-cover"
+                                onError={(e) => { (e.target as HTMLElement).setAttribute('src', 'https://via.placeholder.com/70x90'); }}
+                              />
                             </div>
-                          </div>
-                        </td>
-                        <td className="p-3 font-mono font-bold text-[#d4af37]">{s.id}</td>
-                        <td className="p-3 font-bold text-white text-sm">
-                          <div className="flex items-center space-x-2">
-                            <span>{s.nama}</span>
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Santri Aktif Mondok" />
-                          </div>
-                        </td>
-                        <td className="p-3 text-emerald-300 font-medium">{s.kamar || '-'}</td>
-                        <td className="p-3 text-emerald-200/80">{s.alamat || '-'}</td>
-                        <td className="p-3 text-center">
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 shadow">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            <span>Aktif Mondok</span>
-                          </span>
-                        </td>
-                        <td className="p-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm(`Konfirmasi Penghapusan Data Santri:\n\nApakah Anda yakin ingin menghapus data santri:\nNama: ${s.nama}\nNIS: ${s.id}\nKelas: ${s.kelas}\n\nData ini akan dihapus secara manual karena santri sudah tidak mondok (boyong/pindah).`)) {
-                                if (onDeleteSantri) {
-                                  onDeleteSantri(s.id);
+                          </td>
+                          <td className="p-3 font-mono font-bold text-[#d4af37]">{s.id}</td>
+                          <td className="p-3 font-bold text-white text-sm">
+                            <div className="flex items-center space-x-2">
+                              <span>{s.nama}</span>
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Santri Aktif Mondok" />
+                            </div>
+                          </td>
+                          <td className="p-3 text-emerald-300 font-medium">{s.kamar || '-'}</td>
+                          <td className="p-3 text-emerald-200/80">{s.alamat || '-'}</td>
+                          <td className="p-3 text-center">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 shadow">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                              <span>Aktif Mondok</span>
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`Konfirmasi Penghapusan Data Santri:\n\nApakah Anda yakin ingin menghapus data santri:\nNama: ${s.nama}\nNIS: ${s.id}\nKelas: ${s.kelas}\n\nData ini akan dihapus secara manual karena santri sudah tidak mondok (boyong/pindah).`)) {
+                                  if (onDeleteSantri) {
+                                    onDeleteSantri(s.id);
+                                  }
                                 }
-                              }
-                            }}
-                            className="px-3 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-800 border border-red-500/50 text-red-200 text-xs font-bold inline-flex items-center gap-1.5 transition shadow active:scale-95"
-                            title="Hapus data santri yang sudah tidak mondok (boyong)"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                            <span>Hapus</span>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {paginatedSantriTabResult.totalCount === 0 && (
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-800 border border-red-500/50 text-red-200 text-xs font-bold inline-flex items-center gap-1.5 transition shadow active:scale-95"
+                              title="Hapus data santri yang sudah tidak mondok (boyong)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                              <span>Hapus</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    {santriList.filter(s => s.kelas === selectedAngkatanSantri).length === 0 && (
                       <tr>
                         <td colSpan={8} className="p-8 text-center text-emerald-300">
-                          {santriTabSearch
-                            ? `Tidak ada santri yang cocok dengan pencarian "${santriTabSearch}" pada kelas ${selectedAngkatanSantri}.`
-                            : `Belum ada data santri yang tercatat untuk angkatan ${selectedAngkatanSantri}.`}
+                          Belum ada data santri yang tercatat untuk angkatan {selectedAngkatanSantri}.
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
-
-              {/* BOTTOM PAGINATION NAV CONTROLLER */}
-              {paginatedSantriTabResult.totalCount > 0 && (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-[#d4af37]/20 text-xs">
-                  <span className="text-zinc-400 font-mono text-[11px]">
-                    Menampilkan {(paginatedSantriTabResult.page - 1) * paginatedSantriTabResult.pageSize + 1} - {Math.min(paginatedSantriTabResult.page * paginatedSantriTabResult.pageSize, paginatedSantriTabResult.totalCount)} dari {paginatedSantriTabResult.totalCount} santri
-                  </span>
-
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      disabled={santriTabPage <= 1}
-                      onClick={() => setSantriTabPage(prev => Math.max(1, prev - 1))}
-                      className="px-3 py-1.5 rounded-xl bg-[#052216] border border-[#d4af37]/30 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#d4af37] flex items-center gap-1"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                      <span>Sebelumnya</span>
-                    </button>
-
-                    <span className="px-3 py-1 rounded-xl bg-[#03170d] font-mono text-[#d4af37] font-bold border border-[#d4af37]/20">
-                      Hal {paginatedSantriTabResult.page} / {paginatedSantriTabResult.totalPages}
-                    </span>
-
-                    <button
-                      type="button"
-                      disabled={santriTabPage >= paginatedSantriTabResult.totalPages}
-                      onClick={() => setSantriTabPage(prev => Math.min(paginatedSantriTabResult.totalPages, prev + 1))}
-                      className="px-3 py-1.5 rounded-xl bg-[#052216] border border-[#d4af37]/30 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#d4af37] flex items-center gap-1"
-                    >
-                      <span>Selanjutnya</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
-
-            {/* MODAL PREVIEW FOTO RESOLUSI PENUH (CLOUD OBJECT STORAGE) */}
-            {santriHighResPreview && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
-                <div className="bg-[#041a10] border-2 border-[#d4af37] rounded-3xl p-5 sm:p-6 max-w-md w-full flex flex-col items-center space-y-4 shadow-2xl">
-                  <div className="flex items-center justify-between w-full border-b border-[#d4af37]/20 pb-3">
-                    <div className="flex items-center gap-2">
-                      <Image className="w-4 h-4 text-[#d4af37]" />
-                      <h4 className="text-sm font-bold text-white">Foto Cloud Asli: {santriHighResPreview.nama}</h4>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSantriHighResPreview(null)}
-                      className="w-8 h-8 rounded-full bg-black/40 text-zinc-300 hover:text-white flex items-center justify-center"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="w-56 h-72 rounded-2xl overflow-hidden border-2 border-[#d4af37] shadow-xl bg-black">
-                    <img
-                      src={santriHighResPreview.foto}
-                      alt={santriHighResPreview.nama}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-
-                  <div className="w-full p-3 rounded-xl bg-[#020e08] border border-[#d4af37]/25 text-xs space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-zinc-400">NIS:</span>
-                      <span className="font-mono text-[#d4af37] font-bold">{santriHighResPreview.id}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-400">Kelas:</span>
-                      <span className="text-emerald-300 font-bold">{santriHighResPreview.kelas}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-400">Kamar:</span>
-                      <span className="text-white">{santriHighResPreview.kamar || '-'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-400">Asal:</span>
-                      <span className="text-white">{santriHighResPreview.alamat || '-'}</span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setSantriHighResPreview(null)}
-                    className="w-full py-2 rounded-xl bg-zinc-800 text-zinc-200 text-xs font-bold hover:bg-zinc-700"
-                  >
-                    Tutup
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -6427,9 +6235,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               /* KONTEN UTAMA OPTION PANEL KETIKA TERBUKA */
               <div className="space-y-6">
                 {/* SUB MENU PUSAT KONTROL - 3D BEVELED TILES */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-9 gap-2 bg-[#052216]/90 p-2.5 rounded-2xl border border-[#d4af37]/35 shadow-inner">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-2 bg-[#052216]/90 p-2.5 rounded-2xl border border-[#d4af37]/35 shadow-inner">
                   {[
-                    { id: 'kelola_storage_5tb', label: 'Storage 5 TB & Cloud', icon: HardDrive },
                     { id: 'geofencing_absensi', label: 'Geofencing & Pengganti', icon: MapPin },
                     { id: 'simpan_absensi', label: 'Absensi Ustadz', icon: Save },
                     { id: 'kelola_berita', label: 'Berita & Caption', icon: Newspaper },
@@ -6468,35 +6275,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     );
                   })}
                 </div>
-
-                {/* SECTION 5TB: MONITORING & ARSITEKTUR CLOUD STORAGE 5 TB */}
-                {activeControlSection === 'kelola_storage_5tb' && (
-                  <Storage5TBManager
-                    allDatabaseData={{
-                      santri: santriList,
-                      guru: guruList,
-                      jadwal: jadwalList,
-                      absensiSantri: absensiSantriList,
-                      absensiGuru: absensiGuruList,
-                      syahriyah: syahriyahList,
-                      uangSaku: uangSakuList,
-                      pengurus: pengurusList,
-                      kurikulum: kurikulumList,
-                      silabus: silabusList,
-                      kalender: kalenderList,
-                      ujian: ujianList,
-                      settings: settings
-                    }}
-                    onNotify={(msg) => {
-                      setRealtimeAlert({
-                        type: 'santri',
-                        title: 'Storage 5 TB & Cloud',
-                        detail: msg,
-                        time: new Date().toLocaleTimeString('id-ID')
-                      });
-                    }}
-                  />
-                )}
 
                 {/* SECTION 0: PENGATURAN GEOFENCING, GOOGLE MAPS, DAN USTADZ PENGGANTI */}
                 {activeControlSection === 'geofencing_absensi' && (
@@ -9304,8 +9082,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     )}
 
-                    {/* DAFTAR & PENGHAPUSAN MANUAL SANTRI TIDAK MONDOK (BOYONG) - PAGINATED */}
-                    <div className="card-3d rounded-2xl p-5 space-y-3.5">
+                    {/* DAFTAR & PENGHAPUSAN MANUAL SANTRI TIDAK MONDOK (BOYONG) */}
+                    <div className="card-3d rounded-2xl p-5 space-y-3">
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                         <div>
                           <h5 className="text-xs sm:text-sm font-bold text-white text-gold-3d flex items-center gap-1.5">
@@ -9317,48 +9095,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </p>
                         </div>
                         <span className="text-[11px] text-[#d4af37] font-mono px-3 py-1 rounded-lg bg-[#03170d] border border-[#d4af37]/30">
-                          Total: {santriList.length} Santri Terdaftar
+                          Total: {santriList.length} Santri
                         </span>
-                      </div>
-
-                      {/* Search Bar Boyong */}
-                      <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-1">
-                        <div className="relative flex-1 w-full">
-                          <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="text"
-                            value={boyongSearch}
-                            onChange={(e) => {
-                              setBoyongSearch(e.target.value);
-                              setBoyongPage(1);
-                            }}
-                            placeholder="Cari nama atau NIS santri yang ingin dihapus/boyong..."
-                            className="w-full bg-[#020e08] border border-[#d4af37]/30 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#d4af37]"
-                          />
-                        </div>
-
-                        <div className="text-xs text-zinc-400 flex items-center gap-1.5 shrink-0">
-                          <span>Per Halaman:</span>
-                          <select
-                            value={boyongPageSize}
-                            onChange={(e) => {
-                              setBoyongPageSize(Number(e.target.value));
-                              setBoyongPage(1);
-                            }}
-                            className="bg-[#020e08] border border-[#d4af37]/30 rounded-lg px-2 py-1 text-xs text-white"
-                          >
-                            <option value={10}>10</option>
-                            <option value={25}>25</option>
-                            <option value={50}>50</option>
-                          </select>
-                        </div>
                       </div>
 
                       <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25 max-h-80 overflow-y-auto">
                         <table className="w-full text-xs text-left">
                           <thead className="bg-[#03170d] text-[#d4af37] sticky top-0 z-10 border-b border-[#d4af37]/30">
                             <tr>
-                              <th className="p-2.5 w-12 text-center">NO</th>
                               <th className="p-2.5">NIS</th>
                               <th className="p-2.5">NAMA SANTRI</th>
                               <th className="p-2.5">ANGKATAN</th>
@@ -9368,11 +9112,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/80">
-                            {paginatedBoyongResult.items.map((s, idx) => (
+                            {santriList.map((s) => (
                               <tr key={s.id} className="hover:bg-[#d4af37]/5">
-                                <td className="p-2.5 text-center font-bold text-[#d4af37]">
-                                  {(paginatedBoyongResult.page - 1) * paginatedBoyongResult.pageSize + idx + 1}
-                                </td>
                                 <td className="p-2.5 font-mono text-[#d4af37] font-bold">{s.id}</td>
                                 <td className="p-2.5 font-bold text-white">{s.nama}</td>
                                 <td className="p-2.5 text-emerald-300">{s.kelas}</td>
@@ -9401,46 +9142,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 </td>
                               </tr>
                             ))}
-                            {paginatedBoyongResult.totalCount === 0 && (
-                              <tr>
-                                <td colSpan={7} className="p-6 text-center text-zinc-400">
-                                  {boyongSearch ? `Tidak ada santri yang cocok dengan "${boyongSearch}".` : 'Belum ada data santri.'}
-                                </td>
-                              </tr>
-                            )}
                           </tbody>
                         </table>
                       </div>
-
-                      {/* Pagination Controller Boyong */}
-                      {paginatedBoyongResult.totalCount > 0 && (
-                        <div className="flex items-center justify-between text-xs pt-2 border-t border-[#d4af37]/20">
-                          <span className="text-zinc-400 font-mono text-[11px]">
-                            Menampilkan {(paginatedBoyongResult.page - 1) * paginatedBoyongResult.pageSize + 1} - {Math.min(paginatedBoyongResult.page * paginatedBoyongResult.pageSize, paginatedBoyongResult.totalCount)} dari {paginatedBoyongResult.totalCount} santri
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              disabled={boyongPage <= 1}
-                              onClick={() => setBoyongPage(prev => Math.max(1, prev - 1))}
-                              className="px-2.5 py-1 rounded-lg bg-[#020e08] border border-[#d4af37]/30 text-white font-bold disabled:opacity-40"
-                            >
-                              Prev
-                            </button>
-                            <span className="px-2.5 py-1 rounded-lg bg-[#03170d] font-mono text-[#d4af37] font-bold border border-[#d4af37]/20">
-                              {paginatedBoyongResult.page} / {paginatedBoyongResult.totalPages}
-                            </span>
-                            <button
-                              type="button"
-                              disabled={boyongPage >= paginatedBoyongResult.totalPages}
-                              onClick={() => setBoyongPage(prev => Math.min(paginatedBoyongResult.totalPages, prev + 1))}
-                              className="px-2.5 py-1 rounded-lg bg-[#020e08] border border-[#d4af37]/30 text-white font-bold disabled:opacity-40"
-                            >
-                              Next
-                            </button>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}

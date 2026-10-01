@@ -130,18 +130,6 @@ service cloud.firestore {
       allow create, update, delete: if true;
     }
 
-    // Media Assets & Storage Object Metadata (5 TB Scalable Storage)
-    match /media_assets/{assetId} {
-      allow get, list: if true;
-      allow create, update, delete: if true;
-    }
-
-    // Storage Metrics & Monitoring
-    match /storage_metrics/{metricId} {
-      allow get, list: if true;
-      allow create, update, delete: if true;
-    }
-
     // Admins Collection
     match /admins/{adminId} {
       allow get: if isSignedIn();
