@@ -18,8 +18,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   background_url: '',
   password_admin: 'salaf123',
   password_option_panel: 'admin123',
-  tahun_ajaran: '2026/2027',
-  semester_aktif: 'Semester Ganjil',
   intro_video_url: '/assets/intro_salaf_almaliki.mp4',
   intro_video_name: 'The Journey of Knowledge — Salaf Al-Maliki (Bawaan)',
   intro_video_type: 'default',

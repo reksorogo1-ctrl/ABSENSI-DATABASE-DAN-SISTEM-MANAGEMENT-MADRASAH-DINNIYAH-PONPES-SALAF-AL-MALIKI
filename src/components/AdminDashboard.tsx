@@ -10,12 +10,10 @@ import {
   ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine, MapPin, Compass, Crosshair, Shield, Navigation,
   Instagram, Youtube, Music2, Globe, Unlock, Menu,
   Folder, FolderPlus, FolderCheck, CheckSquare, Square, Layers, FileUp, Camera,
-  HardDrive, Search, ChevronLeft, History
+  HardDrive, Search, ChevronLeft
 } from 'lucide-react';
 import { compressImageFile, parseFileNameForSantri } from '../lib/imageCompression';
 import { Storage5TBManager } from './Storage5TBManager';
-import { KenaikanKelasModal } from './KenaikanKelasModal';
-import { getOrCreateSantriHistory } from '../lib/kenaikanKelasService';
 import { queryPaginatedData } from '../lib/scalableDatabase';
 import { formatBytes, TOTAL_CAPACITY_5TB } from '../lib/scalableStorage';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -81,7 +79,6 @@ interface AdminDashboardProps {
   onSaveSettings: (settings: AppSettings) => void;
   onSaveDashboardAndReset: () => void;
   onUpdateSantriProfile?: (updatedSantri: Santri) => void;
-  onBatchUpdateSantri?: (updatedList: Santri[], updatedSettings?: Partial<AppSettings>) => void;
   onSaveSyahriyah?: (record: SyahriyahRecord) => void;
   onSaveUangSaku?: (record: UangSakuRecord) => void;
   onSaveKurikulum?: (record: KurikulumKitabRecord) => void;
@@ -143,7 +140,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onSaveSettings,
   onSaveDashboardAndReset,
   onUpdateSantriProfile,
-  onBatchUpdateSantri,
   onSaveSyahriyah,
   onSaveUangSaku,
   onSaveKurikulum,
@@ -642,7 +638,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [optionPasswordInput, setOptionPasswordInput] = useState<string>('');
   const [optionPasswordError, setOptionPasswordError] = useState<string>('');
   const [activeControlSection, setActiveControlSection] = useState<
-    'kelola_storage_5tb' | 'kenaikan_kelas' | 'input_santri' | 'input_guru' | 'input_jadwal' | 'simpan_absensi' | 'geofencing_absensi' | 'kontrol_tombol' | 
+    'kelola_storage_5tb' | 'input_santri' | 'input_guru' | 'input_jadwal' | 'simpan_absensi' | 'geofencing_absensi' | 'kontrol_tombol' | 
     'visual_branding' | 'keamanan' | 'profil_santri' | 'kelola_syahriyah' | 'kelola_uang_saku' | 'kelola_kurikulum' |
     'kelola_pengurus' | 'kelola_kalender' | 'kelola_ujian_kitab' | 'kelola_berita' | 'video_intro' | 'sosial_media'
   >(() => {
@@ -653,10 +649,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     return 'simpan_absensi';
   });
-
-  // Modal Kenaikan Kelas Otomatis & Detail Riwayat Santri
-  const [showKenaikanKelasModal, setShowKenaikanKelasModal] = useState<boolean>(false);
-  const [santriDetailHistory, setSantriDetailHistory] = useState<Santri | null>(null);
 
   // Video Intro Management States in Option Panel
   const [adminVideoInfo, setAdminVideoInfo] = useState<VideoInfo>({
@@ -1750,7 +1742,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-12 gap-0">
                 <div className="md:col-span-5 relative h-48 sm:h-56 md:h-auto min-h-[190px] overflow-hidden group">
                   <img
-                    src={(settings.berita_image_url && settings.berita_image_url.trim()) || 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=1200&auto=format&fit=crop&q=80'}
+                    src={settings.berita_image_url || 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=1200&auto=format&fit=crop&q=80'}
                     alt="Berita Terkini Pondok"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                     onError={(e) => {
@@ -2731,7 +2723,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <td className="p-3">
                             <div className="flex items-center space-x-2.5">
                               <img
-                                src={(s.foto && s.foto.trim()) || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=80&auto=format&fit=crop&q=80'}
+                                src={s.foto || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=80&auto=format&fit=crop&q=80'}
                                 alt={s.nama}
                                 className="w-8 h-8 rounded-full object-cover border border-[#d4af37]/40"
                               />
@@ -3258,7 +3250,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <div className="flex items-center space-x-3">
                             <div className="w-9 h-9 rounded-full overflow-hidden bg-[#0b3824] border border-[#d4af37]/40 shrink-0">
                               <img
-                                src={(s.foto && s.foto.trim()) || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=100&auto=format&fit=crop&q=80'}
+                                src={s.foto || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=100&auto=format&fit=crop&q=80'}
                                 alt={s.nama}
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
@@ -3487,7 +3479,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <div key={santri.id} className="card-3d-deep rounded-xl p-3.5 space-y-3">
                             <div className="flex items-center space-x-3">
                               <img
-                                src={(santri.foto && santri.foto.trim()) || 'https://via.placeholder.com/70x90'}
+                                src={santri.foto}
                                 alt={santri.nama}
                                 className="w-12 h-14 object-cover rounded-lg border border-[#d4af37]/40 shadow"
                                 onError={(e) => { (e.target as HTMLElement).setAttribute('src', 'https://via.placeholder.com/70x90'); }}
@@ -5238,7 +5230,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <td className="p-3 text-center font-bold text-[#d4af37]">{i + 1}</td>
                           <td className="p-3">
                             <div className="flex items-center space-x-2.5">
-                              {g.foto && g.foto.trim() !== '' && (
+                              {g.foto && (
                                 <img
                                   src={g.foto}
                                   alt={g.nama}
@@ -5301,28 +5293,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setShowKenaikanKelasModal(true)}
-                  className="btn-3d-gold px-4 py-2 text-black font-black text-xs rounded-xl flex items-center gap-2 shadow-[0_6px_20px_rgba(212,175,55,0.45)] hover:scale-105 transition"
-                  title="Buka sistem kenaikan kelas otomatis seluruh jenjang santri"
-                >
-                  <GraduationCap className="w-4 h-4 text-black stroke-[2.4]" />
-                  <span>PROSES KENAIKAN KELAS</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setActiveTab('pengaturan');
-                    setActiveControlSection('input_santri');
-                  }}
-                  className="btn-3d-dark px-3.5 py-2 text-[#f3e5ab] font-bold text-xs rounded-xl flex items-center gap-2 border border-[#d4af37]/40 hover:border-[#d4af37]"
-                >
-                  <PlusCircle className="w-3.5 h-3.5 text-[#d4af37]" />
-                  <span>Input Santri Manual</span>
-                </button>
-              </div>
+              <button
+                onClick={() => {
+                  setActiveTab('pengaturan');
+                  setActiveControlSection('input_santri');
+                }}
+                className="btn-3d-gold px-4 py-2 text-black font-extrabold text-xs rounded-xl flex items-center gap-2"
+              >
+                <PlusCircle className="w-3.5 h-3.5 text-black" />
+                <span>Input Santri via Option Panel</span>
+              </button>
             </div>
 
             {/* TAB FILTER ANGKATAN SANTRI DENGAN STYLING 3D MEWAH */}
@@ -5431,7 +5411,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3">NAMA LENGKAP SANTRI</th>
                       <th className="p-3">KAMAR PONDOK</th>
                       <th className="p-3">ALAMAT ASAL</th>
-                      <th className="p-3 w-36 text-center">STATUS & RIWAYAT</th>
+                      <th className="p-3 w-32 text-center">STATUS SANTRI</th>
                       <th className="p-3 w-32 text-center">AKSI / HAPUS</th>
                     </tr>
                   </thead>
@@ -5448,7 +5428,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             title="Klik untuk melihat foto resolusi penuh dari Cloud Storage"
                           >
                             <img
-                              src={((s.fotoThumbnail && s.fotoThumbnail.trim()) || (s.foto && s.foto.trim())) || 'https://via.placeholder.com/70x90'}
+                              src={s.fotoThumbnail || s.foto}
                               alt={s.nama}
                               loading="lazy"
                               className="w-full h-full object-cover transition transform group-hover:scale-110"
@@ -5469,29 +5449,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <td className="p-3 text-emerald-300 font-medium">{s.kamar || '-'}</td>
                         <td className="p-3 text-emerald-200/80">{s.alamat || '-'}</td>
                         <td className="p-3 text-center">
-                          <div className="flex flex-col items-center gap-1.5">
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow ${
-                              s.statusSantri === 'Lulus'
-                                ? 'bg-amber-950/80 border border-amber-500/40 text-[#f5e298]'
-                                : s.statusSantri === 'Tetap di Kelas'
-                                ? 'bg-orange-950/80 border border-orange-500/40 text-orange-300'
-                                : s.statusSantri === 'Mutasi / Keluar'
-                                ? 'bg-rose-950/80 border border-rose-500/40 text-rose-300'
-                                : 'bg-emerald-950/80 border border-emerald-500/40 text-emerald-300'
-                            }`}>
-                              <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                              <span>{s.statusSantri || 'Aktif Mondok'}</span>
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setSantriDetailHistory(s)}
-                              className="text-[10px] text-[#d4af37] hover:text-white flex items-center gap-1 font-semibold underline underline-offset-2 transition"
-                              title="Lihat riwayat perjalanan kelas santri dari tahun ke tahun"
-                            >
-                              <History className="w-3 h-3 text-[#d4af37]" />
-                              <span>Lihat Riwayat</span>
-                            </button>
-                          </div>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 shadow">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            <span>Aktif Mondok</span>
+                          </span>
                         </td>
                         <td className="p-3 text-center">
                           <button
@@ -5581,7 +5542,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                   <div className="w-56 h-72 rounded-2xl overflow-hidden border-2 border-[#d4af37] shadow-xl bg-black">
                     <img
-                      src={(santriHighResPreview.foto && santriHighResPreview.foto.trim()) || 'https://via.placeholder.com/300x400?text=Foto+Santri'}
+                      src={santriHighResPreview.foto}
                       alt={santriHighResPreview.nama}
                       className="w-full h-full object-cover"
                     />
@@ -6468,7 +6429,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {/* SUB MENU PUSAT KONTROL - 3D BEVELED TILES */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-9 gap-2 bg-[#052216]/90 p-2.5 rounded-2xl border border-[#d4af37]/35 shadow-inner">
                   {[
-                    { id: 'kenaikan_kelas', label: 'Kenaikan Kelas', icon: GraduationCap },
                     { id: 'kelola_storage_5tb', label: 'Storage 5 TB & Cloud', icon: HardDrive },
                     { id: 'geofencing_absensi', label: 'Geofencing & Pengganti', icon: MapPin },
                     { id: 'simpan_absensi', label: 'Absensi Ustadz', icon: Save },
@@ -6508,86 +6468,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     );
                   })}
                 </div>
-
-                {/* SECTION KENAIKAN KELAS OTOMATIS */}
-                {activeControlSection === 'kenaikan_kelas' && (
-                  <div className="card-3d rounded-2xl p-5 space-y-6">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#d4af37]/20">
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#f5e298] via-[#d4af37] to-[#7a5410] flex items-center justify-center text-black shadow-lg">
-                          <GraduationCap className="w-6 h-6 stroke-[2.2]" />
-                        </div>
-                        <div>
-                          <h3 className="text-base font-extrabold text-[#f5e298] text-gold-3d">
-                            Sistem Kenaikan Kelas & Manajemen Tahun Ajaran Santri
-                          </h3>
-                          <p className="text-xs text-emerald-200/90 mt-0.5">
-                            Memindahkan seluruh santri ke jenjang berikutnya secara otomatis tanpa input ulang data.
-                          </p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setShowKenaikanKelasModal(true)}
-                        className="btn-3d-gold px-5 py-2.5 rounded-xl text-black font-black text-xs shadow-xl flex items-center gap-2 hover:scale-105 transition"
-                      >
-                        <GraduationCap className="w-4 h-4 text-black stroke-[2.4]" />
-                        <span>BUKA PROSES KENAIKAN KELAS</span>
-                      </button>
-                    </div>
-
-                    {/* Ringkasan Status Saat Ini */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className="p-4 rounded-xl bg-[#03150d] border border-[#d4af37]/30">
-                        <span className="text-[11px] font-bold text-zinc-400 block uppercase">Tahun Ajaran Aktif:</span>
-                        <div className="text-lg font-black text-white font-mono mt-1">
-                          {settings.tahun_ajaran || '2026/2027'}
-                        </div>
-                        <span className="text-[11px] text-emerald-300">Semester: {settings.semester_aktif || 'Semester Ganjil'}</span>
-                      </div>
-
-                      <div className="p-4 rounded-xl bg-[#03150d] border border-[#d4af37]/30">
-                        <span className="text-[11px] font-bold text-zinc-400 block uppercase">Total Santri Terdaftar:</span>
-                        <div className="text-lg font-black text-[#f5e298] font-mono mt-1">
-                          {santriList.length} Santri
-                        </div>
-                        <span className="text-[11px] text-emerald-300">Tersimpan Permanen di Database</span>
-                      </div>
-
-                      <div className="p-4 rounded-xl bg-[#03150d] border border-[#d4af37]/30">
-                        <span className="text-[11px] font-bold text-zinc-400 block uppercase">Prinsip Database:</span>
-                        <div className="text-xs font-bold text-emerald-400 mt-1">
-                          ID / NIS Tetap Sama
-                        </div>
-                        <span className="text-[11px] text-zinc-400">Seluruh riwayat absensi & nilai tetap terhubung</span>
-                      </div>
-                    </div>
-
-                    {/* Diagram Alur Kenaikan Kelas */}
-                    <div className="p-4 rounded-xl bg-[#020e08] border border-[#d4af37]/20 space-y-3">
-                      <span className="text-xs font-black text-[#f5e298] block uppercase tracking-wider">
-                        Jenjang Kenaikan Kelas Otomatis Salaf Al-Maliki:
-                      </span>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs">
-                        {[
-                          { from: '1 TSANAWIYAH', to: '2 TSANAWIYAH' },
-                          { from: '2 TSANAWIYAH', to: '3 TSANAWIYAH' },
-                          { from: '3 TSANAWIYAH', to: '1 ALIYAH' },
-                          { from: '1 ALIYAH', to: '2 ALIYAH' },
-                          { from: '2 ALIYAH', to: '3 ALIYAH' },
-                          { from: '3 ALIYAH', to: 'Lulus / Alumni' }
-                        ].map((j, i) => (
-                          <div key={i} className="p-2.5 rounded-lg bg-[#052216] border border-[#d4af37]/20 flex items-center justify-between">
-                            <span className="font-bold text-white">{j.from}</span>
-                            <ArrowRight className="w-3.5 h-3.5 text-[#d4af37]" />
-                            <span className="font-bold text-[#f5e298]">{j.to}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {/* SECTION 5TB: MONITORING & ARSITEKTUR CLOUD STORAGE 5 TB */}
                 {activeControlSection === 'kelola_storage_5tb' && (
@@ -7870,7 +7750,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div className="grid grid-cols-1 md:grid-cols-12 rounded-xl overflow-hidden border border-[#d4af37]/30 bg-[#03150d]">
                         <div className="md:col-span-5 h-36 md:h-auto overflow-hidden">
                           <img
-                            src={(visualForm.berita_image_url && visualForm.berita_image_url.trim()) || 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=1200&auto=format&fit=crop&q=80'}
+                            src={visualForm.berita_image_url || 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=1200&auto=format&fit=crop&q=80'}
                             alt="Preview Berita"
                             className="w-full h-full object-cover"
                             onError={(e) => {
@@ -8812,7 +8692,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="relative group shrink-0">
                               <div className="w-28 h-36 rounded-2xl overflow-hidden border-2 border-[#d4af37] shadow-[0_8px_25px_rgba(0,0,0,0.6)] bg-[#020e08] flex items-center justify-center relative">
                                 <img
-                                  src={(inputSantriForm.foto && inputSantriForm.foto.trim()) || 'https://via.placeholder.com/150x200?text=Foto+Santri'}
+                                  src={inputSantriForm.foto}
                                   alt="Foto Santri"
                                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                                   onError={(e) => {
@@ -9246,7 +9126,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       </td>
                                       <td className="p-2 text-center">
                                         <div className="w-10 h-12 mx-auto rounded overflow-hidden border border-[#d4af37]/40 shadow bg-black">
-                                          <img src={(item.foto && item.foto.trim()) || 'https://via.placeholder.com/70x90'} alt={item.nama} className="w-full h-full object-cover" />
+                                          <img src={item.foto} alt={item.nama} className="w-full h-full object-cover" />
                                         </div>
                                       </td>
                                       <td className="p-2.5">
@@ -9388,7 +9268,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               >
                                 <div className="w-full h-28 rounded-lg overflow-hidden bg-black mb-2 relative">
                                   <img
-                                    src={(photo.dataUrl && photo.dataUrl.trim()) || 'https://via.placeholder.com/150x200'}
+                                    src={photo.dataUrl}
                                     alt={photo.name}
                                     className="w-full h-full object-cover group-hover:scale-105 transition"
                                   />
@@ -9881,7 +9761,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             className="w-full bg-[#03140c] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white"
                             placeholder="https://images.unsplash.com/..."
                           />
-                          {visualForm.berita_image_url && visualForm.berita_image_url.trim() !== '' && (
+                          {visualForm.berita_image_url && (
                             <div className="mt-2 h-24 rounded-lg overflow-hidden border border-[#d4af37]/30">
                               <img src={visualForm.berita_image_url} alt="Preview Berita" className="w-full h-full object-cover" />
                             </div>
@@ -10330,21 +10210,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span className="text-xs font-bold text-[#d4af37] block uppercase tracking-wider">
                         Pratinjau Video (Live Video Preview):
                       </span>
-                      {adminVideoInfo.src && adminVideoInfo.src.trim() !== '' ? (
-                        <div className="relative aspect-video max-h-72 w-full rounded-xl overflow-hidden bg-black border border-[#d4af37]/40 shadow-inner">
-                          <video
-                            key={adminVideoInfo.src}
-                            src={adminVideoInfo.src}
-                            controls
-                            playsInline
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ) : (
-                        <div className="p-6 text-center text-xs text-zinc-400 bg-black/40 rounded-xl border border-[#d4af37]/20">
-                          Belum ada video dipilih
-                        </div>
-                      )}
+                      <div className="relative aspect-video max-h-72 w-full rounded-xl overflow-hidden bg-black border border-[#d4af37]/40 shadow-inner">
+                        <video
+                          key={adminVideoInfo.src}
+                          src={adminVideoInfo.src}
+                          controls
+                          playsInline
+                          className="w-full h-full object-cover"
+                        >
+                          <source src={adminVideoInfo.src} type="video/mp4" />
+                        </video>
+                      </div>
                     </div>
 
                     {/* Two Input Methods Grid */}
@@ -11910,135 +11786,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-      {/* MODAL SISTEM KENAIKAN KELAS OTOMATIS */}
-      {showKenaikanKelasModal && (
-        <KenaikanKelasModal
-          isOpen={showKenaikanKelasModal}
-          onClose={() => setShowKenaikanKelasModal(false)}
-          santriList={santriList}
-          settings={settings}
-          onSavePromotion={(updatedList, updatedSettings) => {
-            if (onBatchUpdateSantri) {
-              onBatchUpdateSantri(updatedList, updatedSettings);
-            } else {
-              localStorage.setItem('sim_santri', JSON.stringify(updatedList));
-              if (updatedSettings) {
-                onSaveSettings({ ...settings, ...updatedSettings });
-              }
-            }
-          }}
-          onNotify={(msg) => {
-            setRealtimeAlert({
-              type: 'santri',
-              title: 'Kenaikan Kelas Otomatis',
-              detail: msg,
-              time: new Date().toLocaleTimeString('id-ID')
-            });
-          }}
-        />
-      )}
-
-      {/* MODAL RIWAYAT PERJALANAN KELAS SANTRI (TAHUN AJARAN → KELAS → STATUS SANTRI) */}
-      {santriDetailHistory && (
-        <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-          <div className="relative w-full max-w-xl rounded-3xl bg-[#041d13] border-2 border-[#d4af37] p-6 text-white shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/30">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-14 rounded-xl overflow-hidden bg-black border border-[#d4af37] shrink-0">
-                  <img
-                    src={(santriDetailHistory.fotoThumbnail && santriDetailHistory.fotoThumbnail.trim()) || (santriDetailHistory.foto && santriDetailHistory.foto.trim()) || 'https://via.placeholder.com/60x80?text=Foto'}
-                    alt={santriDetailHistory.nama}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div>
-                  <h4 className="text-base font-extrabold text-[#f5e298]">
-                    {santriDetailHistory.nama}
-                  </h4>
-                  <span className="text-xs font-mono text-emerald-300 block">
-                    NIS: {santriDetailHistory.id} • Kelas Saat Ini: {santriDetailHistory.kelas}
-                  </span>
-                  <span className="text-[11px] text-zinc-400 block">
-                    Kamar: {santriDetailHistory.kamar || '-'} • Asal: {santriDetailHistory.alamat || '-'}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSantriDetailHistory(null)}
-                className="w-8 h-8 rounded-lg bg-black/40 border border-white/20 text-zinc-400 hover:text-white flex items-center justify-center"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#f5e298] uppercase tracking-wider flex items-center gap-1.5">
-                  <History className="w-4 h-4 text-[#d4af37]" />
-                  <span>Riwayat Perjalanan Santri dari Tahun ke Tahun:</span>
-                </span>
-                <span className="text-[10px] text-zinc-400 font-mono">
-                  TAHUN AJARAN → KELAS → STATUS
-                </span>
-              </div>
-
-              {/* TIMELINE RIWAYAT: TAHUN AJARAN → KELAS → STATUS SANTRI */}
-              <div className="relative pl-6 space-y-3 max-h-72 overflow-y-auto before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#d4af37]/40">
-                {getOrCreateSantriHistory(santriDetailHistory, settings.tahun_ajaran || '2026/2027').map((item, idx) => (
-                  <div key={idx} className="relative group">
-                    <div className="absolute -left-6 top-1.5 w-3.5 h-3.5 rounded-full bg-[#d4af37] border-2 border-black shadow" />
-                    
-                    <div className="p-3 rounded-xl bg-[#020e08] border border-[#d4af37]/25 space-y-1">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-mono font-bold text-xs text-[#f5e298]">
-                          Tahun Ajaran: {item.tahunAjaran}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          item.status === 'Naik Kelas'
-                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
-                            : item.status === 'Lulus'
-                            ? 'bg-amber-950 text-[#f5e298] border border-amber-500/40'
-                            : item.status === 'Tetap di Kelas'
-                            ? 'bg-orange-950 text-orange-300 border border-orange-500/40'
-                            : 'bg-blue-950 text-blue-300 border border-blue-500/40'
-                        }`}>
-                          {item.status}
-                        </span>
-                      </div>
-
-                      <div className="text-xs font-semibold text-white">
-                        Jenjang / Kelas: <span className="text-emerald-300">{item.kelas}</span>
-                      </div>
-
-                      {item.keterangan && (
-                        <p className="text-[11px] text-zinc-400">
-                          {item.keterangan}
-                        </p>
-                      )}
-
-                      <div className="text-[10px] text-zinc-500 font-mono pt-0.5">
-                        Tercatat: {item.tanggalProses}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="text-right pt-2 border-t border-[#d4af37]/20">
-              <button
-                type="button"
-                onClick={() => setSantriDetailHistory(null)}
-                className="px-4 py-2 rounded-xl bg-[#0a301f] border border-[#d4af37]/40 text-xs font-bold text-white hover:bg-[#d4af37] hover:text-black transition"
-              >
-                Tutup Riwayat
-              </button>
-            </div>
           </div>
         </div>
       )}

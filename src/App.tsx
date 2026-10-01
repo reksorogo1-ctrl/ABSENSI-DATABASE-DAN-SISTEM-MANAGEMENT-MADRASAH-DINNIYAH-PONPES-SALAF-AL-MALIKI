@@ -840,19 +840,6 @@ export default function App() {
     saveMasterDataToFirestore('santri', updated);
   };
 
-  const handleBatchUpdateSantri = (updatedList: Santri[], updatedSettings?: Partial<AppSettings>) => {
-    setSantriList(updatedList);
-    localStorage.setItem('sim_santri', JSON.stringify(updatedList));
-    saveMasterDataToFirestore('santri', updatedList);
-
-    if (updatedSettings) {
-      const mergedSettings = { ...settings, ...updatedSettings };
-      setSettings(mergedSettings);
-      localStorage.setItem('sim_settings', JSON.stringify(mergedSettings));
-      saveMasterDataToFirestore('settings', mergedSettings);
-    }
-  };
-
   const handleUpdateSantriProfile = (updatedSantri: Santri) => {
     const updated = santriList.map(s => s.id === updatedSantri.id ? updatedSantri : s);
     setSantriList(updated);
@@ -1284,7 +1271,6 @@ export default function App() {
             onSaveSettings={handleSaveSettings}
             onSaveDashboardAndReset={handleSaveDashboardAndReset}
             onUpdateSantriProfile={handleUpdateSantriProfile}
-            onBatchUpdateSantri={handleBatchUpdateSantri}
             onSaveSyahriyah={handleSaveSyahriyah}
             onSaveUangSaku={handleSaveUangSaku}
             onSaveKurikulum={handleSaveKurikulum}

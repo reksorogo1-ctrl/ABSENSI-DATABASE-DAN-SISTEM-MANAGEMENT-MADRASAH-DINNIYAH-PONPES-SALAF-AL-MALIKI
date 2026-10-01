@@ -8,11 +8,10 @@ import {
   MapPin, Home, UserCheck, CreditCard, Wallet, 
   AlertTriangle, MessageCircle, Phone, ArrowDownLeft, ArrowUpRight, 
   CheckCircle2, Clock, Sparkles, GraduationCap, Check, FileText,
-  Instagram, Youtube, Music2, History, X
+  Instagram, Youtube, Music2
 } from 'lucide-react';
 import { BrandLogos } from './BrandLogos';
 import { PWAInstallButton } from './PWAInstallButton';
-import { getOrCreateSantriHistory } from '../lib/kenaikanKelasService';
 
 interface WaliSantriPortalProps {
   santri: Santri;
@@ -38,7 +37,6 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
   onLogout,
   settings
 }) => {
-  const [showHistoryModal, setShowHistoryModal] = React.useState<boolean>(false);
   // Filter data strictly for this santri (Row-Level Security)
   const myNadzhom = nadzhomList.filter(n => n.idSantri === santri.id);
   const myNilai = nilaiList.filter(n => n.idSantri === santri.id);
@@ -169,7 +167,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6 text-center md:text-left">
             <div className="w-28 h-36 sm:w-32 sm:h-40 rounded-2xl bg-[#052216] border-2 border-[#d4af37] overflow-hidden shadow-2xl shrink-0">
               <img
-                src={(santri.foto && santri.foto.trim()) || 'https://via.placeholder.com/300x380?text=Foto+Santri'}
+                src={santri.foto}
                 alt={santri.nama}
                 className="w-full h-full object-cover"
                 onError={(e) => {
@@ -186,14 +184,6 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
                 <span className="text-xs font-bold text-emerald-300 bg-emerald-950/80 px-3 py-1 rounded-lg border border-emerald-500/30 shadow">
                   Kelas: {santri.kelas}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setShowHistoryModal(true)}
-                  className="text-xs font-bold text-[#d4af37] bg-[#052216] px-3 py-1 rounded-lg border border-[#d4af37]/40 shadow hover:bg-[#d4af37] hover:text-black transition flex items-center gap-1.5 cursor-pointer"
-                >
-                  <History className="w-3.5 h-3.5 text-[#d4af37]" />
-                  <span>Riwayat Perjalanan Kelas</span>
-                </button>
               </div>
 
               <h2 className="text-xl sm:text-3xl font-extrabold text-white text-gold-3d">
@@ -803,105 +793,6 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
           </div>
         </section>
       </main>
-
-      {/* MODAL RIWAYAT PERJALANAN KELAS SANTRI */}
-      {showHistoryModal && (
-        <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-          <div className="relative w-full max-w-lg rounded-3xl bg-[#041d13] border-2 border-[#d4af37] p-6 text-white shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/30">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-14 rounded-xl overflow-hidden bg-black border border-[#d4af37] shrink-0">
-                  <img
-                    src={(santri.fotoThumbnail && santri.fotoThumbnail.trim()) || (santri.foto && santri.foto.trim()) || 'https://via.placeholder.com/60x80?text=Foto'}
-                    alt={santri.nama}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div>
-                  <h4 className="text-base font-extrabold text-[#f5e298]">
-                    {santri.nama}
-                  </h4>
-                  <span className="text-xs font-mono text-emerald-300 block">
-                    NIS: {santri.id} • Kelas Saat Ini: {santri.kelas}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowHistoryModal(false)}
-                className="w-8 h-8 rounded-lg bg-black/40 border border-white/20 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#f5e298] uppercase tracking-wider flex items-center gap-1.5">
-                  <History className="w-4 h-4 text-[#d4af37]" />
-                  <span>Riwayat Perjalanan Kelas Dari Tahun ke Tahun:</span>
-                </span>
-                <span className="text-[10px] text-zinc-400 font-mono">
-                  TAHUN AJARAN → KELAS → STATUS
-                </span>
-              </div>
-
-              {/* TIMELINE RIWAYAT */}
-              <div className="relative pl-6 space-y-3 max-h-72 overflow-y-auto before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#d4af37]/40">
-                {getOrCreateSantriHistory(santri, settings?.tahun_ajaran || '2026/2027').map((item, idx) => (
-                  <div key={idx} className="relative group">
-                    <div className="absolute -left-6 top-1.5 w-3.5 h-3.5 rounded-full bg-[#d4af37] border-2 border-black shadow" />
-                    
-                    <div className="p-3 rounded-xl bg-[#020e08] border border-[#d4af37]/25 space-y-1">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-mono font-bold text-xs text-[#f5e298]">
-                          Tahun Ajaran: {item.tahunAjaran}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          item.status === 'Naik Kelas'
-                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
-                            : item.status === 'Lulus'
-                            ? 'bg-amber-950 text-[#f5e298] border border-amber-500/40'
-                            : item.status === 'Tetap di Kelas'
-                            ? 'bg-orange-950 text-orange-300 border border-orange-500/40'
-                            : 'bg-blue-950 text-blue-300 border border-blue-500/40'
-                        }`}>
-                          {item.status}
-                        </span>
-                      </div>
-
-                      <div className="text-xs font-semibold text-white">
-                        Jenjang / Kelas: <span className="text-emerald-300">{item.kelas}</span>
-                      </div>
-
-                      {item.keterangan && (
-                        <p className="text-[11px] text-zinc-400">
-                          {item.keterangan}
-                        </p>
-                      )}
-
-                      <div className="text-[10px] text-zinc-500 font-mono pt-0.5">
-                        Tercatat: {item.tanggalProses}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="text-right pt-2 border-t border-[#d4af37]/20">
-              <button
-                type="button"
-                onClick={() => setShowHistoryModal(false)}
-                className="px-4 py-2 rounded-xl bg-[#0a301f] border border-[#d4af37]/40 text-xs font-bold text-white hover:bg-[#d4af37] hover:text-black transition cursor-pointer"
-              >
-                Tutup Riwayat
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -617,19 +617,15 @@ export const Storage5TBManager: React.FC<Storage5TBManagerProps> = ({
                     <td className="p-2 text-center">
                       <div className="w-10 h-10 mx-auto rounded-lg overflow-hidden border border-[#d4af37]/30 bg-black flex items-center justify-center">
                         {item.category === 'foto' ? (
-                          ((item.thumbnailUrl && item.thumbnailUrl.trim()) || (item.downloadUrl && item.downloadUrl.trim())) ? (
-                            <img
-                              src={(item.thumbnailUrl && item.thumbnailUrl.trim()) || (item.downloadUrl && item.downloadUrl.trim())}
-                              alt={item.name}
-                              loading="lazy"
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                (e.target as HTMLElement).setAttribute('src', 'https://via.placeholder.com/80?text=Foto');
-                              }}
-                            />
-                          ) : (
-                            <Image className="w-4 h-4 text-emerald-400" />
-                          )
+                          <img
+                            src={item.thumbnailUrl || item.downloadUrl}
+                            alt={item.name}
+                            loading="lazy"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLElement).setAttribute('src', 'https://via.placeholder.com/80?text=Foto');
+                            }}
+                          />
                         ) : item.category === 'video' ? (
                           <Film className="w-5 h-5 text-amber-400" />
                         ) : item.category === 'dokumen' ? (
@@ -773,25 +769,17 @@ export const Storage5TBManager: React.FC<Storage5TBManagerProps> = ({
 
             <div className="rounded-2xl overflow-hidden bg-black max-h-96 flex items-center justify-center border border-white/10 p-2">
               {previewItem.category === 'foto' ? (
-                previewItem.downloadUrl && previewItem.downloadUrl.trim() !== '' ? (
-                  <img
-                    src={previewItem.downloadUrl}
-                    alt={previewItem.name}
-                    className="max-h-80 max-w-full object-contain"
-                  />
-                ) : (
-                  <div className="text-zinc-400 text-xs">Foto tidak tersedia</div>
-                )
+                <img
+                  src={previewItem.downloadUrl}
+                  alt={previewItem.name}
+                  className="max-h-80 max-w-full object-contain"
+                />
               ) : previewItem.category === 'video' ? (
-                previewItem.downloadUrl && previewItem.downloadUrl.trim() !== '' ? (
-                  <video
-                    src={previewItem.downloadUrl}
-                    controls
-                    className="max-h-80 max-w-full"
-                  />
-                ) : (
-                  <div className="text-zinc-400 text-xs">Video tidak tersedia</div>
-                )
+                <video
+                  src={previewItem.downloadUrl}
+                  controls
+                  className="max-h-80 max-w-full"
+                />
               ) : (
                 <div className="p-8 text-center space-y-2">
                   <FileText className="w-12 h-12 text-[#d4af37] mx-auto" />

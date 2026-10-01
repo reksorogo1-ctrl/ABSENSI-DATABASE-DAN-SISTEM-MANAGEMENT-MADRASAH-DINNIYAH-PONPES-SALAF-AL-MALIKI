@@ -1,16 +1,5 @@
-export type StatusSantri = 'Aktif' | 'Naik Kelas' | 'Tetap di Kelas' | 'Lulus' | 'Mutasi / Keluar';
-
-export interface RiwayatKelasItem {
-  tahunAjaran: string; // contoh: "2025/2026", "2026/2027"
-  kelas: string; // contoh: "1 TSANAWIYAH", "2 TSANAWIYAH"
-  status: StatusSantri | string; // "Naik Kelas", "Tetap di Kelas", "Lulus", "Mutasi / Keluar", "Aktif"
-  tanggalProses: string; // Tanggal pemrosesan sistem
-  keterangan?: string; // Deskripsi kenaikan / kelulusan
-  catatanManual?: string; // Catatan khusus dari admin
-}
-
 export interface Santri {
-  id: string; // NIS / ID Santri - UNIK & TETAP SAMA SEPANJANG PENDIDIKAN
+  id: string; // NIS / ID Santri
   nama: string;
   kelas: string;
   kamar: string;
@@ -24,10 +13,6 @@ export interface Santri {
   namaWaliKelas?: string; // Nama Wali Kelas
   noWaWaliKelas?: string; // No WA Wali Kelas (contoh: 628123456789)
   saldoUangSaku?: number; // Saldo terkini tabungan uang saku santri
-  statusSantri?: StatusSantri; // Status akademik santri
-  tahunMasuk?: string; // Tahun pertama masuk (misal: "2024/2025")
-  tahunAjaranAktif?: string; // Tahun ajaran saat ini
-  riwayatKelas?: RiwayatKelasItem[]; // RIWAYAT LENGKAP: TAHUN AJARAN → KELAS → STATUS SANTRI
 
   // Kolom Nilai Ujian Terkoneksi ke Wali Santri
   nilaiKoreksianKitab?: number | string; // Nilai koreksian kitab (contoh: 90)
@@ -352,8 +337,6 @@ export interface AppSettings {
   password_admin?: string;
   email_admin?: string;
   password_option_panel?: string;
-  tahun_ajaran?: string; // Tahun ajaran aktif, contoh: "2026/2027" atau "1447/1448 H"
-  semester_aktif?: string; // Semester aktif, contoh: "Semester Ganjil" / "Semester Genap"
   intro_video_url?: string; // URL video intro opening yang dapat diedit di Option Panel
   intro_video_name?: string; // Nama judul berkas video intro
   intro_video_type?: 'file' | 'url' | 'default' | 'indexeddb'; // Tipe sumber video intro
