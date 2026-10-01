@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, UserCheck, Calendar, BookOpen, Award, Sliders, LogOut, RefreshCw, 
   Clock, Database, Save, CheckCircle2, ChevronRight, BarChart3, TrendingUp, Filter,
@@ -8,10 +8,8 @@ import {
   CreditCard, Wallet, AlertTriangle, Phone, MessageCircle, ArrowDownLeft, ArrowUpRight, Trash2, GraduationCap,
   Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload, Play,
   ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine, MapPin, Compass, Crosshair, Shield, Navigation,
-  Instagram, Youtube, Music2, Globe, Unlock, Menu,
-  Folder, FolderPlus, FolderCheck, CheckSquare, Square, Layers, FileUp, Camera
+  Instagram, Youtube, Music2, Globe, Unlock, Menu, Mail
 } from 'lucide-react';
-import { compressImageFile, parseFileNameForSantri } from '../lib/imageCompression';
 import { PWAInstallButton } from './PWAInstallButton';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Legend, 
@@ -893,50 +891,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     password: ''
   });
 
-  // State Sub-Tab & Input Santri via Galeri / Folder di Option Panel
-  const [inputSantriSubTab, setInputSantriSubTab] = useState<'single' | 'batch_folder'>('single');
-  const [singlePhotoOrigin, setSinglePhotoOrigin] = useState<'default' | 'galeri' | 'folder' | 'url'>('default');
-  const [singlePhotoFileName, setSinglePhotoFileName] = useState<string>('');
-  const [singlePhotoFileSize, setSinglePhotoFileSize] = useState<string>('');
-  const [showUrlPhotoInput, setShowUrlPhotoInput] = useState<boolean>(false);
-  const [isCompressingSinglePhoto, setIsCompressingSinglePhoto] = useState<boolean>(false);
-
-  // Modal Pemilih Foto dari Folder (saat folder lokal berisi banyak foto)
-  const [folderPhotoPickerModal, setFolderPhotoPickerModal] = useState<{
-    isOpen: boolean;
-    folderName: string;
-    photos: Array<{ name: string; dataUrl: string; sizeStr: string; detectedId: string; detectedName: string }>;
-  }>({
-    isOpen: false,
-    folderName: '',
-    photos: []
-  });
-
-  // State Batch / Multi-Import Santri dari Folder atau Galeri
-  const [batchImportList, setBatchImportList] = useState<Array<{
-    id: string;
-    nama: string;
-    kelas: string;
-    kamar: string;
-    alamat: string;
-    foto: string;
-    fileName: string;
-    fileSizeStr: string;
-    selected: boolean;
-  }>>([]);
-  const [batchTargetKelas, setBatchTargetKelas] = useState<string>('1 TSANAWIYAH');
-  const [batchDefaultKamar, setBatchDefaultKamar] = useState<string>('Kamar Abu Bakar 01');
-  const [batchDefaultAlamat, setBatchDefaultAlamat] = useState<string>('Jawa Timur');
-  const [isBatchProcessing, setIsBatchProcessing] = useState<boolean>(false);
-  const [batchProgressText, setBatchProgressText] = useState<string>('');
-  const [isBatchSaving, setIsBatchSaving] = useState<boolean>(false);
-
-  // Refs untuk input file (Galeri & Folder)
-  const singleGalleryInputRef = useRef<HTMLInputElement>(null);
-  const singleFolderInputRef = useRef<HTMLInputElement>(null);
-  const batchFolderInputRef = useRef<HTMLInputElement>(null);
-  const batchGalleryInputRef = useRef<HTMLInputElement>(null);
-
   // State untuk Tab Integrasi Google Sheets
   const [sheetsPreviewTab, setSheetsPreviewTab] = useState<'santri' | 'guru' | 'absensi-guru' | 'absensi-santri' | 'jadwal' | 'nadzhom' | 'nilai' | 'syahriyah'>('absensi-guru');
   const [sheetsInputId, setSheetsInputId] = useState<string>(spreadsheetId);
@@ -954,6 +908,240 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     title: '',
     desc: ''
   });
+
+  // State Email & Sinkronisasi Otomatis Google Sheets
+  const [syncEmailInput, setSyncEmailInput] = useState<string>(() => {
+    return localStorage.getItem('sim_spreadsheet_email') || settings.email_admin || '';
+  });
+  const [savedSyncEmail, setSavedSyncEmail] = useState<string>(() => {
+    return localStorage.getItem('sim_spreadsheet_email') || settings.email_admin || '';
+  });
+  const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('sim_auto_sync_enabled') === 'true';
+  });
+
+  // Otomatis sinkronisasi berkala jika fitur auto-sync diaktifkan dan terhubung ke Google
+  useEffect(() => {
+    if (!isAutoSyncEnabled || !isGoogleConnected || !sheetsService || !spreadsheetId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        console.info('Auto-sync: Menyinkronkan data otomatis ke Google Sheets...');
+        await sheetsService.exportFullDatabaseToSheets({
+          santriList,
+          guruList,
+          jadwalList,
+          nadzhomList,
+          nilaiList,
+          absensiSantriList,
+          absensiGuruList,
+          syahriyahList,
+          settings
+        });
+      } catch (err) {
+        console.warn('Auto-sync background error:', err);
+      }
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [isAutoSyncEnabled, isGoogleConnected, sheetsService, spreadsheetId, santriList, guruList, jadwalList, nadzhomList, nilaiList, absensiSantriList, absensiGuruList, syahriyahList, settings]);
+
+  const handleSaveSyncEmail = () => {
+    const cleanEmail = syncEmailInput.trim();
+    if (!cleanEmail) {
+      setSheetsStatusMsg({ type: 'error', text: 'Silakan masukkan alamat email yang valid.' });
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setSheetsStatusMsg({ type: 'error', text: 'Format email tidak valid. Gunakan format contoh: user@gmail.com' });
+      return;
+    }
+
+    localStorage.setItem('sim_spreadsheet_email', cleanEmail);
+    setSavedSyncEmail(cleanEmail);
+    if (onSaveSettings) {
+      onSaveSettings({
+        ...settings,
+        email_admin: cleanEmail
+      });
+    }
+    setSheetsStatusMsg({ 
+      type: 'success', 
+      text: `Alamat email "${cleanEmail}" berhasil disimpan! Sistem siap melakukan ekspor & impor otomatis melalui email ini.` 
+    });
+  };
+
+  const handleAutoExportViaEmail = async () => {
+    const targetEmail = savedSyncEmail || syncEmailInput.trim();
+    if (!targetEmail) {
+      setSheetsStatusMsg({ type: 'error', text: 'Masukkan dan simpan email terlebih dahulu sebelum melakukan ekspor otomatis.' });
+      return;
+    }
+    if (!isGoogleConnected) {
+      if (onOpenSheetsModal) onOpenSheetsModal();
+      setSheetsStatusMsg({ type: 'info', text: `Silakan hubungkan akun Google "${targetEmail}" terlebih dahulu agar ekspor otomatis berjalan.` });
+      return;
+    }
+    setIsSheetsBusy(true);
+    setSheetsStatusMsg(null);
+    try {
+      if (sheetsService) {
+        await sheetsService.exportFullDatabaseToSheets({
+          santriList,
+          guruList,
+          jadwalList,
+          nadzhomList,
+          nilaiList,
+          absensiSantriList,
+          absensiGuruList,
+          syahriyahList,
+          settings
+        });
+        setSheetsStatusMsg({
+          type: 'success',
+          text: `Ekspor otomatis berhasil! Seluruh data (${santriList.length} Santri, ${guruList.length} Guru, Presensi, Nilai) telah disinkronkan ke Google Spreadsheet untuk email ${targetEmail}.`
+        });
+      } else {
+        onSyncWithSheets();
+      }
+    } catch (err: any) {
+      setSheetsStatusMsg({ type: 'error', text: `Gagal ekspor data: ${err?.message || 'Periksa koneksi Google Sheets Anda.'}` });
+    } finally {
+      setIsSheetsBusy(false);
+    }
+  };
+
+  const handleAutoImportViaEmail = async () => {
+    const targetEmail = savedSyncEmail || syncEmailInput.trim();
+    if (!targetEmail) {
+      setSheetsStatusMsg({ type: 'error', text: 'Masukkan dan simpan email terlebih dahulu sebelum melakukan impor otomatis.' });
+      return;
+    }
+    if (!isGoogleConnected) {
+      if (onOpenSheetsModal) onOpenSheetsModal();
+      setSheetsStatusMsg({ type: 'info', text: `Silakan hubungkan akun Google "${targetEmail}" terlebih dahulu agar impor otomatis berjalan.` });
+      return;
+    }
+    setIsSheetsBusy(true);
+    setSheetsStatusMsg(null);
+    try {
+      if (sheetsService && onDataImported) {
+        const [
+          rSantri, rGuru, rJadwal, rNadzhom, rNilai,
+          rAbsensiSantri, rAbsensiGuru, rSyahriyah, rSettings
+        ] = await Promise.all([
+          sheetsService.loadSantriFromSheet(),
+          sheetsService.loadGuruFromSheet(),
+          sheetsService.loadJadwalFromSheet(),
+          sheetsService.loadNadzhomFromSheet(),
+          sheetsService.loadNilaiFromSheet(),
+          sheetsService.loadAbsensiSantriFromSheet(),
+          sheetsService.loadAbsensiGuruFromSheet(),
+          sheetsService.loadSyahriyahFromSheet(),
+          sheetsService.loadSettingsFromSheet()
+        ]);
+
+        onDataImported({
+          santriList: rSantri.length ? rSantri : undefined,
+          guruList: rGuru.length ? rGuru : undefined,
+          jadwalList: rJadwal.length ? rJadwal : undefined,
+          nadzhomList: rNadzhom.length ? rNadzhom : undefined,
+          nilaiList: rNilai.length ? rNilai : undefined,
+          absensiSantriList: rAbsensiSantri.length ? rAbsensiSantri : undefined,
+          absensiGuruList: rAbsensiGuru.length ? rAbsensiGuru : undefined,
+          syahriyahList: rSyahriyah.length ? rSyahriyah : undefined,
+          settings: Object.keys(rSettings).length ? rSettings : undefined
+        });
+
+        setSheetsStatusMsg({
+          type: 'success',
+          text: `Impor otomatis berhasil! Data berhasil ditarik dari Google Spreadsheet melalui email ${targetEmail} (${rSantri.length} Santri, ${rGuru.length} Guru termuat).`
+        });
+      } else {
+        onSyncWithSheets();
+      }
+    } catch (err: any) {
+      setSheetsStatusMsg({ type: 'error', text: `Gagal impor data: ${err?.message || 'Periksa spreadsheet terhubung.'}` });
+    } finally {
+      setIsSheetsBusy(false);
+    }
+  };
+
+  const handleSaveAndAutoSyncBoth = async () => {
+    handleSaveSyncEmail();
+    const cleanEmail = syncEmailInput.trim();
+    if (!cleanEmail) return;
+
+    if (!isGoogleConnected) {
+      if (onOpenSheetsModal) onOpenSheetsModal();
+      setSheetsStatusMsg({ 
+        type: 'info', 
+        text: `Email "${cleanEmail}" berhasil disimpan. Silakan masuk dengan Google untuk mengotorisasi sinkronisasi otomatis.` 
+      });
+      return;
+    }
+
+    setIsSheetsBusy(true);
+    try {
+      if (sheetsService && onDataImported) {
+        const [
+          rSantri, rGuru, rJadwal, rNadzhom, rNilai,
+          rAbsensiSantri, rAbsensiGuru, rSyahriyah, rSettings
+        ] = await Promise.all([
+          sheetsService.loadSantriFromSheet(),
+          sheetsService.loadGuruFromSheet(),
+          sheetsService.loadJadwalFromSheet(),
+          sheetsService.loadNadzhomFromSheet(),
+          sheetsService.loadNilaiFromSheet(),
+          sheetsService.loadAbsensiSantriFromSheet(),
+          sheetsService.loadAbsensiGuruFromSheet(),
+          sheetsService.loadSyahriyahFromSheet(),
+          sheetsService.loadSettingsFromSheet()
+        ]);
+
+        if (rSantri.length || rGuru.length) {
+          onDataImported({
+            santriList: rSantri.length ? rSantri : undefined,
+            guruList: rGuru.length ? rGuru : undefined,
+            jadwalList: rJadwal.length ? rJadwal : undefined,
+            nadzhomList: rNadzhom.length ? rNadzhom : undefined,
+            nilaiList: rNilai.length ? rNilai : undefined,
+            absensiSantriList: rAbsensiSantri.length ? rAbsensiSantri : undefined,
+            absensiGuruList: rAbsensiGuru.length ? rAbsensiGuru : undefined,
+            syahriyahList: rSyahriyah.length ? rSyahriyah : undefined,
+            settings: Object.keys(rSettings).length ? rSettings : undefined
+          });
+        }
+      }
+
+      if (sheetsService) {
+        await sheetsService.exportFullDatabaseToSheets({
+          santriList,
+          guruList,
+          jadwalList,
+          nadzhomList,
+          nilaiList,
+          absensiSantriList,
+          absensiGuruList,
+          syahriyahList,
+          settings
+        });
+      }
+
+      setIsAutoSyncEnabled(true);
+      localStorage.setItem('sim_auto_sync_enabled', 'true');
+
+      setSheetsStatusMsg({
+        type: 'success',
+        text: `Sukses! Email ${cleanEmail} telah disimpan dan sinkronisasi dua arah (Ekspor & Impor) otomatis berhasil dijalankan.`
+      });
+    } catch (err: any) {
+      setSheetsStatusMsg({ type: 'error', text: `Kendala sinkronisasi: ${err?.message || 'Periksa koneksi Google Sheets'}` });
+    } finally {
+      setIsSheetsBusy(false);
+    }
+  };
 
   // State untuk Edit Profil Anak & Password Wali (NIS) di Option Panel
   const [selectedProfileSantriId, setSelectedProfileSantriId] = useState<string>(
@@ -1179,257 +1367,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       saldoUangSaku: 150000,
       password: ''
     });
-    setSinglePhotoOrigin('default');
-    setSinglePhotoFileName('');
-    setSinglePhotoFileSize('');
-    setShowUrlPhotoInput(false);
-  };
-
-  // Handler memilih foto santri dari Galeri (single file)
-  const handleSingleGallerySelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      setIsCompressingSinglePhoto(true);
-      const dataUrl = await compressImageFile(file);
-      const parsed = parseFileNameForSantri(file.name);
-      setInputSantriForm(prev => ({
-        ...prev,
-        foto: dataUrl,
-        id: (!prev.nama || prev.id.startsWith('S-')) && parsed.id ? parsed.id : prev.id,
-        nama: !prev.nama && parsed.nama ? parsed.nama : prev.nama
-      }));
-      setSinglePhotoOrigin('galeri');
-      setSinglePhotoFileName(file.name);
-      setSinglePhotoFileSize(`${Math.round(file.size / 1024)} KB`);
-    } catch (err: any) {
-      alert(err.message || 'Gagal memproses foto dari galeri');
-    } finally {
-      setIsCompressingSinglePhoto(false);
-      if (e.target) e.target.value = '';
-    }
-  };
-
-  // Handler memilih foto santri dari Folder (bisa 1 atau banyak foto dalam folder)
-  const handleSingleFolderSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/') || /\.(jpe?g|png|webp|bmp|gif)$/i.test(f.name));
-    
-    if (imageFiles.length === 0) {
-      alert('Tidak ada file foto (JPG, PNG, WEBP) yang ditemukan di dalam folder tersebut.');
-      if (e.target) e.target.value = '';
-      return;
-    }
-
-    if (imageFiles.length === 1) {
-      const file = imageFiles[0];
-      try {
-        setIsCompressingSinglePhoto(true);
-        const dataUrl = await compressImageFile(file);
-        const parsed = parseFileNameForSantri(file.name);
-        setInputSantriForm(prev => ({
-          ...prev,
-          foto: dataUrl,
-          id: (!prev.nama || prev.id.startsWith('S-')) && parsed.id ? parsed.id : prev.id,
-          nama: !prev.nama && parsed.nama ? parsed.nama : prev.nama
-        }));
-        setSinglePhotoOrigin('folder');
-        setSinglePhotoFileName(file.name);
-        setSinglePhotoFileSize(`${Math.round(file.size / 1024)} KB`);
-      } catch (err: any) {
-        alert(err.message || 'Gagal memproses foto dari folder');
-      } finally {
-        setIsCompressingSinglePhoto(false);
-      }
-    } else {
-      // Ada beberapa/banyak foto di dalam folder -> buka modal pemilih foto
-      try {
-        setIsCompressingSinglePhoto(true);
-        const processedPhotos: Array<{ name: string; dataUrl: string; sizeStr: string; detectedId: string; detectedName: string }> = [];
-        for (const f of imageFiles.slice(0, 60)) {
-          const dUrl = await compressImageFile(f, 300, 350, 0.75);
-          const parsed = parseFileNameForSantri(f.name);
-          processedPhotos.push({
-            name: f.name,
-            dataUrl: dUrl,
-            sizeStr: `${Math.round(f.size / 1024)} KB`,
-            detectedId: parsed.id,
-            detectedName: parsed.nama
-          });
-        }
-        const folderName = (files[0] as any).webkitRelativePath ? (files[0] as any).webkitRelativePath.split('/')[0] : 'Folder Foto Santri';
-        setFolderPhotoPickerModal({
-          isOpen: true,
-          folderName,
-          photos: processedPhotos
-        });
-      } catch (err: any) {
-        alert('Gagal membaca daftar foto dari folder: ' + err.message);
-      } finally {
-        setIsCompressingSinglePhoto(false);
-      }
-    }
-    if (e.target) e.target.value = '';
-  };
-
-  // Pilih foto spesifik dari modal foto folder
-  const handleSelectPhotoFromFolderModal = (photo: { name: string; dataUrl: string; detectedId: string; detectedName: string; sizeStr: string }) => {
-    setInputSantriForm(prev => ({
-      ...prev,
-      foto: photo.dataUrl,
-      id: photo.detectedId ? photo.detectedId : prev.id,
-      nama: (!prev.nama || prev.nama === '') && photo.detectedName ? photo.detectedName : prev.nama
-    }));
-    setSinglePhotoOrigin('folder');
-    setSinglePhotoFileName(photo.name);
-    setSinglePhotoFileSize(photo.sizeStr || '');
-    setFolderPhotoPickerModal(prev => ({ ...prev, isOpen: false }));
-  };
-
-  // Reset foto satuan ke default
-  const handleResetSinglePhoto = () => {
-    setInputSantriForm(prev => ({
-      ...prev,
-      foto: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=400&auto=format&fit=crop&q=80'
-    }));
-    setSinglePhotoOrigin('default');
-    setSinglePhotoFileName('');
-    setSinglePhotoFileSize('');
-    setShowUrlPhotoInput(false);
-  };
-
-  // Handler Batch Folder
-  const handleBatchFolderSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/') || /\.(jpe?g|png|webp|bmp|gif)$/i.test(f.name));
-    
-    if (imageFiles.length === 0) {
-      alert('Tidak ditemukan file gambar/foto di dalam folder yang dipilih.');
-      if (e.target) e.target.value = '';
-      return;
-    }
-
-    setIsBatchProcessing(true);
-    const newItems: typeof batchImportList = [];
-    let processed = 0;
-    
-    for (const f of imageFiles) {
-      processed++;
-      setBatchProgressText(`Memproses foto ${processed} dari ${imageFiles.length} (${f.name})...`);
-      try {
-        const compressed = await compressImageFile(f, 500, 600, 0.82);
-        const parsed = parseFileNameForSantri(f.name);
-        const autoId = parsed.id || `S-${Math.floor(1000 + Math.random() * 8999)}`;
-        const autoName = parsed.nama || f.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ');
-        newItems.push({
-          id: autoId,
-          nama: autoName,
-          kelas: batchTargetKelas,
-          kamar: batchDefaultKamar,
-          alamat: batchDefaultAlamat,
-          foto: compressed,
-          fileName: f.name,
-          fileSizeStr: `${Math.round(f.size / 1024)} KB`,
-          selected: true
-        });
-      } catch (err) {
-        console.error('Error compressing file', f.name, err);
-      }
-    }
-
-    setBatchImportList(prev => [...newItems, ...prev]);
-    setIsBatchProcessing(false);
-    setBatchProgressText('');
-    if (e.target) e.target.value = '';
-  };
-
-  // Handler Batch Gallery (multi files)
-  const handleBatchGallerySelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const imageFiles = Array.from(files);
-
-    setIsBatchProcessing(true);
-    const newItems: typeof batchImportList = [];
-    let processed = 0;
-
-    for (const f of imageFiles) {
-      processed++;
-      setBatchProgressText(`Memproses foto galeri ${processed} dari ${imageFiles.length} (${f.name})...`);
-      try {
-        const compressed = await compressImageFile(f, 500, 600, 0.82);
-        const parsed = parseFileNameForSantri(f.name);
-        const autoId = parsed.id || `S-${Math.floor(1000 + Math.random() * 8999)}`;
-        const autoName = parsed.nama || f.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ');
-        newItems.push({
-          id: autoId,
-          nama: autoName,
-          kelas: batchTargetKelas,
-          kamar: batchDefaultKamar,
-          alamat: batchDefaultAlamat,
-          foto: compressed,
-          fileName: f.name,
-          fileSizeStr: `${Math.round(f.size / 1024)} KB`,
-          selected: true
-        });
-      } catch (err) {
-        console.error('Error compressing gallery photo', f.name, err);
-      }
-    }
-
-    setBatchImportList(prev => [...newItems, ...prev]);
-    setIsBatchProcessing(false);
-    setBatchProgressText('');
-    if (e.target) e.target.value = '';
-  };
-
-  // Simpan santri massal dari batch list
-  const handleBatchSaveAll = () => {
-    const selected = batchImportList.filter(i => i.selected);
-    if (selected.length === 0) {
-      alert('Pilih setidaknya 1 santri untuk disimpan!');
-      return;
-    }
-
-    setIsBatchSaving(true);
-    let count = 0;
-    for (const item of selected) {
-      onSaveNewSantri({
-        id: item.id.trim(),
-        nama: item.nama.trim(),
-        kelas: item.kelas,
-        kamar: item.kamar.trim(),
-        alamat: item.alamat.trim(),
-        foto: item.foto
-      });
-      count++;
-    }
-    setIsBatchSaving(false);
-    alert(`Alhamdulillah! Berhasil menambahkan ${count} santri dari folder/galeri ke database!`);
-    setBatchImportList(prev => prev.filter(i => !i.selected));
-  };
-
-  // Pindahkan santri dari batch list ke form manual single
-  const handleTransferBatchToSingle = (item: typeof batchImportList[0]) => {
-    setInputSantriForm({
-      id: item.id,
-      nama: item.nama,
-      kelas: item.kelas,
-      kamar: item.kamar,
-      alamat: item.alamat,
-      foto: item.foto,
-      namaOrangTua: '',
-      namaWaliKelas: 'Ustazah Fina Nikmatul Kamelia',
-      noWaWaliKelas: '0812-3456-7890',
-      saldoUangSaku: 150000,
-      password: ''
-    });
-    setSinglePhotoOrigin('folder');
-    setSinglePhotoFileName(item.fileName);
-    setSinglePhotoFileSize(item.fileSizeStr);
-    setInputSantriSubTab('single');
   };
 
   // Submit tambah Guru dari Option Panel
@@ -5511,6 +5448,110 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               )}
 
+              {/* KARTU KREDENSIAL EMAIL & OTOMATIS EKSPOR IMPOR */}
+              <div className="bg-gradient-to-r from-[#031d12] via-[#02180e] to-[#0a1805] p-5 rounded-2xl border-2 border-[#d4af37]/60 shadow-xl space-y-4 mt-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#d4af37]/25">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#d4af37]/20 border border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow">
+                      <Mail className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm sm:text-base font-bold text-white text-gold-3d flex items-center gap-2">
+                        <span>Konfigurasi Email Google & Ekspor-Impor Otomatis</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-sans font-bold">
+                          Cloud Auto-Sync
+                        </span>
+                      </h4>
+                      <p className="text-xs text-emerald-300">
+                        Simpan email Google Anda untuk menjalankan ekspor dan impor data presensi, santri, dan raport secara otomatis.
+                      </p>
+                    </div>
+                  </div>
+
+                  {savedSyncEmail && (
+                    <div className="flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-xl border border-[#d4af37]/40 text-xs">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span className="text-stone-300">Email Tersimpan:</span>
+                      <span className="font-mono text-[#faebaa] font-bold">{savedSyncEmail}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Form Input Email & Tombol Simpan Email */}
+                <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-3 items-center">
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-[#d4af37] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="email"
+                      value={syncEmailInput}
+                      onChange={(e) => setSyncEmailInput(e.target.value)}
+                      placeholder="Masukkan alamat email Google (misal: reksorogo1@gmail.com)..."
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#010a05] border border-[#d4af37]/50 text-white font-mono text-xs sm:text-sm focus:outline-none focus:border-[#faebaa] focus:ring-1 focus:ring-[#d4af37]"
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleSaveSyncEmail}
+                    className="px-5 py-2.5 bg-gradient-to-r from-[#d4af37] to-[#b8972e] text-black font-extrabold text-xs sm:text-sm rounded-xl shadow hover:brightness-110 active:scale-95 transition flex items-center justify-center gap-2"
+                  >
+                    <Save className="w-4 h-4 stroke-[2.5]" />
+                    <span>Simpan Email</span>
+                  </button>
+
+                  <button
+                    onClick={handleSaveAndAutoSyncBoth}
+                    disabled={isSheetsBusy}
+                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow hover:brightness-110 active:scale-95 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isSheetsBusy ? 'animate-spin' : ''}`} />
+                    <span>Simpan & Ekspor-Impor Otomatis</span>
+                  </button>
+                </div>
+
+                {/* Baris Tombol Aksi Otomatis Ekspor & Impor Melalui Email */}
+                <div className="pt-2 flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={handleAutoExportViaEmail}
+                    disabled={isSheetsBusy}
+                    className="px-4 py-2 bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-200 rounded-xl text-xs font-bold flex items-center gap-2 shadow transition disabled:opacity-50 hover:scale-[1.01]"
+                  >
+                    <ArrowUpFromLine className="w-4 h-4 text-emerald-400" />
+                    <span>Otomatis Ekspor ke Email Ini</span>
+                  </button>
+
+                  <button
+                    onClick={handleAutoImportViaEmail}
+                    disabled={isSheetsBusy}
+                    className="px-4 py-2 bg-[#1b1402] hover:bg-[#281e04] border border-[#d4af37]/50 text-[#faebaa] rounded-xl text-xs font-bold flex items-center gap-2 shadow transition disabled:opacity-50 hover:scale-[1.01]"
+                  >
+                    <ArrowDownToLine className="w-4 h-4 text-[#d4af37]" />
+                    <span>Otomatis Impor Data dari Email Ini</span>
+                  </button>
+
+                  <div className="ml-auto flex items-center gap-2 bg-[#02130a] px-3 py-1.5 rounded-xl border border-stone-800 text-xs">
+                    <span className="text-stone-300">Auto-Sync Latar Belakang:</span>
+                    <button
+                      onClick={() => {
+                        const next = !isAutoSyncEnabled;
+                        setIsAutoSyncEnabled(next);
+                        localStorage.setItem('sim_auto_sync_enabled', next ? 'true' : 'false');
+                        setSheetsStatusMsg({
+                          type: 'info',
+                          text: next ? 'Sinkronisasi latar belakang otomatis diaktifkan (tiap 5 menit).' : 'Sinkronisasi latar belakang dinonaktifkan.'
+                        });
+                      }}
+                      className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase border transition ${
+                        isAutoSyncEnabled
+                          ? 'bg-emerald-900/80 text-emerald-300 border-emerald-500'
+                          : 'bg-stone-900 text-stone-400 border-stone-700'
+                      }`}
+                    >
+                      {isAutoSyncEnabled ? '● Aktif (Tiap 5 Mnt)' : '○ Nonaktif'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* Grid 2 Kolom: Status Akun & File Spreadsheet Aktif */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
                 {/* 1. Status Akun Google */}
@@ -5553,15 +5594,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onClick={() => {
                           if (onOpenSheetsModal) onOpenSheetsModal();
                         }}
-                        className="px-4 py-2 bg-white text-gray-800 font-bold text-xs rounded-lg shadow hover:bg-gray-100 transition flex items-center gap-2"
+                        className="gsi-material-button"
                       >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24">
-                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                        </svg>
-                        <span>Sign in with Google</span>
+                        <div className="gsi-material-button-content-wrapper">
+                          <div className="gsi-material-button-icon">
+                            <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" style={{ display: 'block', width: '18px', height: '18px' }}>
+                              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                              <path fill="#4285F4" d="M46.98 24.55c0-.78-.07-1.53-.2-2.25H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                              <path fill="none" d="M0 0h48v48H0z"></path>
+                            </svg>
+                          </div>
+                          <span className="gsi-material-button-contents">Sign in with Google</span>
+                        </div>
                       </button>
                     )}
                   </div>
@@ -8353,737 +8399,101 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
-                {/* SECTION 2: INPUT MANUAL DATA SANTRI PER ANGKATAN (DENGAN GALERI & FOLDER) */}
+                {/* SECTION 2: INPUT MANUAL DATA SANTRI PER ANGKATAN */}
                 {activeControlSection === 'input_santri' && (
-                  <div className="space-y-5">
-                    {/* Hidden inputs untuk file Galeri dan Folder */}
-                    <input
-                      ref={singleGalleryInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleSingleGallerySelect}
-                    />
-                    <input
-                      ref={singleFolderInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      {...({ webkitdirectory: '', directory: '' } as any)}
-                      className="hidden"
-                      onChange={handleSingleFolderSelect}
-                    />
-                    <input
-                      ref={batchFolderInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      {...({ webkitdirectory: '', directory: '' } as any)}
-                      className="hidden"
-                      onChange={handleBatchFolderSelect}
-                    />
-                    <input
-                      ref={batchGalleryInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={handleBatchGallerySelect}
-                    />
-
-                    {/* SUB-NAVIGASI TAB PILIHAN INPUT SANTRI */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 p-2 rounded-2xl bg-[#03170d] border border-[#d4af37]/30 shadow-inner">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setInputSantriSubTab('single')}
-                          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition ${
-                            inputSantriSubTab === 'single'
-                              ? 'btn-3d-gold text-black shadow-md'
-                              : 'bg-[#052216] text-[#f3e5ab] hover:text-white border border-[#d4af37]/25'
-                          }`}
-                        >
-                          <Users className="w-4 h-4" />
-                          <span>Input Manual Satuan (Galeri / Folder / URL)</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setInputSantriSubTab('batch_folder')}
-                          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition relative ${
-                            inputSantriSubTab === 'batch_folder'
-                              ? 'btn-3d-gold text-black shadow-md'
-                              : 'bg-[#052216] text-[#f3e5ab] hover:text-white border border-[#d4af37]/25'
-                          }`}
-                        >
-                          <FolderOpen className="w-4 h-4 text-[#d4af37]" />
-                          <span>Impor Cepat Massal dari Folder / Galeri</span>
-                          <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-red-600 text-white font-extrabold uppercase animate-pulse">
-                            Cepat
-                          </span>
-                        </button>
-                      </div>
-
-                      <div className="text-[11px] text-emerald-300 font-mono hidden sm:block">
-                        Total Terdaftar: <span className="text-[#d4af37] font-bold">{santriList.length}</span> Santri
+                  <form onSubmit={handleAddSantriSubmit} className="card-3d rounded-2xl p-5 space-y-5">
+                    <div className="flex items-center space-x-2 border-b border-[#d4af37]/20 pb-3">
+                      <Users className="w-5 h-5 text-[#d4af37]" />
+                      <div>
+                        <h4 className="text-sm font-bold text-white text-gold-3d">Input Manual Data Santri Baru per Angkatan</h4>
+                        <p className="text-[11px] text-emerald-300">Menambahkan santri langsung ke basis data lokal dan Google Sheets</p>
                       </div>
                     </div>
 
-                    {/* SUB-TAB 1: FORM INPUT MANUAL SATUAN DENGAN GALERI & FOLDER */}
-                    {inputSantriSubTab === 'single' && (
-                      <form onSubmit={handleAddSantriSubmit} className="card-3d rounded-2xl p-5 sm:p-6 space-y-6">
-                        <div className="flex items-center justify-between border-b border-[#d4af37]/20 pb-3">
-                          <div className="flex items-center space-x-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-amber-400 text-black flex items-center justify-center font-bold shadow">
-                              <Users className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <h4 className="text-sm sm:text-base font-bold text-white text-gold-3d">
-                                Input Manual Data Santri Baru per Angkatan
-                              </h4>
-                              <p className="text-[11px] text-emerald-300">
-                                Pilih foto santri langsung dari Galeri perangkat, Folder penyimpanan foto, atau tautan URL.
-                              </p>
-                            </div>
-                          </div>
-                          <span className="text-[10px] px-2.5 py-1 rounded-full bg-[#03170d] border border-[#d4af37]/40 text-[#f5e298] font-mono">
-                            Mode Satuan
-                          </span>
-                        </div>
-
-                        {/* BAGIAN FOTO SANTRI: PILIH DARI GALERI ATAU FOLDER DENGAN PREVIEW */}
-                        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-[#041a10] via-[#052618] to-[#03170d] border-2 border-[#d4af37]/40 shadow-xl space-y-4">
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-[#d4af37]/20 pb-2.5">
-                            <div className="flex items-center gap-2">
-                              <Image className="w-4 h-4 text-[#d4af37]" />
-                              <span className="text-xs font-bold text-white uppercase tracking-wider">
-                                Foto Profil Santri (Galeri / Folder)
-                              </span>
-                            </div>
-                            <span className="text-[11px] text-emerald-300">
-                              Format didukung: JPG, PNG, WEBP (Otomatis dikompresi ringan & tajam)
-                            </span>
-                          </div>
-
-                          <div className="flex flex-col md:flex-row items-center gap-5">
-                            {/* Kotak Avatar Pratinjau Foto */}
-                            <div className="relative group shrink-0">
-                              <div className="w-28 h-36 rounded-2xl overflow-hidden border-2 border-[#d4af37] shadow-[0_8px_25px_rgba(0,0,0,0.6)] bg-[#020e08] flex items-center justify-center relative">
-                                <img
-                                  src={inputSantriForm.foto}
-                                  alt="Foto Santri"
-                                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                                  onError={(e) => {
-                                    (e.target as HTMLElement).setAttribute('src', 'https://via.placeholder.com/150x200?text=Foto+Santri');
-                                  }}
-                                />
-                                {isCompressingSinglePhoto && (
-                                  <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-1.5 text-center p-2 z-10">
-                                    <RefreshCw className="w-6 h-6 text-[#d4af37] animate-spin" />
-                                    <span className="text-[10px] text-amber-200 font-bold">Mengompresi...</span>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Badge Asal Foto */}
-                              <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap">
-                                {singlePhotoOrigin === 'galeri' && (
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-600 text-white shadow border border-emerald-400">
-                                    ✓ Dari Galeri
-                                  </span>
-                                )}
-                                {singlePhotoOrigin === 'folder' && (
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-500 text-black shadow border border-amber-300">
-                                    ✓ Dari Folder
-                                  </span>
-                                )}
-                                {singlePhotoOrigin === 'url' && (
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-blue-600 text-white shadow border border-blue-400">
-                                    🌐 Link URL
-                                  </span>
-                                )}
-                                {singlePhotoOrigin === 'default' && (
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-medium bg-zinc-800 text-zinc-300 shadow border border-zinc-600">
-                                    Foto Bawaan
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Tombol-Tombol Aksi Pilih Foto */}
-                            <div className="flex-1 space-y-3 w-full">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                                {/* Tombol Pilih dari Galeri */}
-                                <button
-                                  type="button"
-                                  onClick={() => singleGalleryInputRef.current?.click()}
-                                  className="btn-3d-gold p-3 rounded-xl text-black font-extrabold text-xs flex items-center justify-center gap-2 shadow-md hover:scale-102 active:scale-95 transition"
-                                >
-                                  <Image className="w-4 h-4 text-black shrink-0" />
-                                  <div className="text-left">
-                                    <div className="font-extrabold leading-tight">Pilih dari Galeri</div>
-                                    <div className="text-[9px] font-normal opacity-80">Foto satuan / album HP</div>
-                                  </div>
-                                </button>
-
-                                {/* Tombol Pilih dari Folder */}
-                                <button
-                                  type="button"
-                                  onClick={() => singleFolderInputRef.current?.click()}
-                                  className="p-3 rounded-xl bg-gradient-to-r from-emerald-800 to-teal-800 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs flex items-center justify-center gap-2 border border-emerald-400/50 shadow-md hover:scale-102 active:scale-95 transition"
-                                >
-                                  <FolderOpen className="w-4 h-4 text-emerald-200 shrink-0" />
-                                  <div className="text-left">
-                                    <div className="font-extrabold leading-tight">Pilih dari Folder</div>
-                                    <div className="text-[9px] font-normal text-emerald-200">Folder foto PC/Laptop</div>
-                                  </div>
-                                </button>
-
-                                {/* Tombol Input URL Web */}
-                                <button
-                                  type="button"
-                                  onClick={() => setShowUrlPhotoInput(!showUrlPhotoInput)}
-                                  className="p-3 rounded-xl bg-[#03170d] hover:bg-[#072d1b] text-[#f3e5ab] font-bold text-xs flex items-center justify-center gap-2 border border-[#d4af37]/35 shadow hover:scale-102 active:scale-95 transition"
-                                >
-                                  <ExternalLink className="w-4 h-4 text-[#d4af37] shrink-0" />
-                                  <div className="text-left">
-                                    <div className="font-bold leading-tight">{showUrlPhotoInput ? 'Tutup URL Link' : 'Input via URL'}</div>
-                                    <div className="text-[9px] font-normal text-emerald-300">Tautan web online</div>
-                                  </div>
-                                </button>
-                              </div>
-
-                              {/* Informasi File Terpilih */}
-                              {singlePhotoFileName && (
-                                <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#020e08] border border-[#d4af37]/25 text-xs">
-                                  <div className="flex items-center gap-2 truncate">
-                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                                    <span className="text-emerald-200 font-mono truncate">{singlePhotoFileName}</span>
-                                    {singlePhotoFileSize && (
-                                      <span className="text-[10px] text-zinc-400 shrink-0">({singlePhotoFileSize})</span>
-                                    )}
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={handleResetSinglePhoto}
-                                    className="text-red-400 hover:text-red-300 text-[11px] underline shrink-0 ml-2"
-                                  >
-                                    Reset Foto
-                                  </button>
-                                </div>
-                              )}
-
-                              {/* Input URL Foto (jika dibuka) */}
-                              {showUrlPhotoInput && (
-                                <div className="space-y-1.5 p-3 rounded-xl bg-[#020e08] border border-blue-500/40">
-                                  <label className="block text-[11px] font-semibold text-blue-300">
-                                    Masukkan Link URL Foto Santri (Online)
-                                  </label>
-                                  <div className="flex gap-2">
-                                    <input
-                                      type="text"
-                                      value={inputSantriForm.foto}
-                                      onChange={(e) => {
-                                        setInputSantriForm({ ...inputSantriForm, foto: e.target.value });
-                                        setSinglePhotoOrigin('url');
-                                        setSinglePhotoFileName('');
-                                      }}
-                                      className="flex-1 bg-[#0a301f] border border-blue-400/40 rounded-lg p-2 text-xs text-white"
-                                      placeholder="https://images.unsplash.com/... atau tautan foto langsung"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={handleResetSinglePhoto}
-                                      className="px-3 py-1.5 rounded-lg bg-red-950 border border-red-500/40 text-red-200 text-xs font-bold hover:bg-red-900"
-                                    >
-                                      Reset
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* FORM FIELD DATA SANTRI */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs font-semibold text-[#d4af37] mb-1">Angkatan / Kelas</label>
-                            <select
-                              value={inputSantriForm.kelas}
-                              onChange={(e) => setInputSantriForm({ ...inputSantriForm, kelas: e.target.value })}
-                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white focus:ring-1 focus:ring-[#d4af37]"
-                            >
-                              {classList.map(kls => (
-                                <option key={kls} value={kls}>{kls}</option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <label className="block text-xs font-semibold text-[#d4af37]">Nomor Induk Santri (NIS)</label>
-                              <button
-                                type="button"
-                                onClick={() => setInputSantriForm(prev => ({ ...prev, id: `S-${Math.floor(1000 + Math.random() * 8999)}` }))}
-                                className="text-[10px] text-emerald-300 hover:text-white flex items-center gap-1"
-                              >
-                                <RefreshCw className="w-2.5 h-2.5" />
-                                <span>Acak NIS</span>
-                              </button>
-                            </div>
-                            <input
-                              type="text"
-                              value={inputSantriForm.id}
-                              onChange={(e) => setInputSantriForm({ ...inputSantriForm, id: e.target.value })}
-                              required
-                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-mono focus:ring-1 focus:ring-[#d4af37]"
-                              placeholder="Contoh: S-1008"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-[#d4af37] mb-1">Nama Lengkap Santri</label>
-                            <input
-                              type="text"
-                              value={inputSantriForm.nama}
-                              onChange={(e) => setInputSantriForm({ ...inputSantriForm, nama: e.target.value })}
-                              required
-                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white focus:ring-1 focus:ring-[#d4af37]"
-                              placeholder="Contoh: Muhammad Ilham Rosyadi"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-[#d4af37] mb-1">Kamar Pondok</label>
-                            <input
-                              type="text"
-                              value={inputSantriForm.kamar}
-                              onChange={(e) => setInputSantriForm({ ...inputSantriForm, kamar: e.target.value })}
-                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white focus:ring-1 focus:ring-[#d4af37]"
-                              placeholder="Contoh: Kamar Abu Bakar 05"
-                            />
-                          </div>
-
-                          <div className="md:col-span-2">
-                            <label className="block text-xs font-semibold text-[#d4af37] mb-1">Alamat Asal Santri</label>
-                            <input
-                              type="text"
-                              value={inputSantriForm.alamat}
-                              onChange={(e) => setInputSantriForm({ ...inputSantriForm, alamat: e.target.value })}
-                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white focus:ring-1 focus:ring-[#d4af37]"
-                              placeholder="Contoh: Nganjuk, Jawa Timur"
-                            />
-                          </div>
-                        </div>
-
-                        {/* TOMBOL SIMPAN DATA SANTRI */}
-                        <div className="text-right pt-3 border-t border-[#d4af37]/20 flex flex-col sm:flex-row items-center justify-between gap-3">
-                          <span className="text-[11px] text-emerald-300">
-                            Santri yang disimpan langsung aktif di presensi diniyah & portal wali santri.
-                          </span>
-                          <button
-                            type="submit"
-                            className="btn-3d-gold px-7 py-3 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg hover:scale-102 transition w-full sm:w-auto"
-                          >
-                            <PlusCircle className="w-4 h-4 text-black" />
-                            <span>Simpan Data Santri Baru</span>
-                          </button>
-                        </div>
-                      </form>
-                    )}
-
-                    {/* SUB-TAB 2: IMPOR CEPAT MASSAL DARI FOLDER / MULTI-GALERI */}
-                    {inputSantriSubTab === 'batch_folder' && (
-                      <div className="card-3d rounded-2xl p-5 sm:p-6 space-y-6">
-                        {/* HERO HEADER */}
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#d4af37]/20 pb-3">
-                          <div className="flex items-center space-x-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold shadow">
-                              <FolderOpen className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <h4 className="text-sm sm:text-base font-bold text-white text-gold-3d">
-                                Unggah Cepat Santri Massal dari Folder atau Galeri
-                              </h4>
-                              <p className="text-[11px] text-emerald-300">
-                                Pilih 1 folder penuh berisi foto-foto santri atau pilih banyak foto dari galeri. Nama file otomatis menjadi NIS & Nama Santri.
-                              </p>
-                            </div>
-                          </div>
-                          <span className="text-[10px] px-2.5 py-1 rounded-full bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono">
-                            Mode Impor Massal
-                          </span>
-                        </div>
-
-                        {/* TOMBOL AKSI UTAMA MEMILIH FOLDER ATAU BANYAK FOTO GALERI */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div
-                            onClick={() => batchFolderInputRef.current?.click()}
-                            className="p-5 rounded-2xl bg-gradient-to-br from-[#05281a] to-[#02150d] border-2 border-dashed border-[#d4af37]/60 hover:border-[#d4af37] cursor-pointer text-center group transition transform hover:-translate-y-0.5 shadow-lg"
-                          >
-                            <div className="w-12 h-12 mx-auto rounded-2xl bg-[#d4af37]/20 flex items-center justify-center text-[#d4af37] group-hover:scale-110 transition mb-3">
-                              <FolderOpen className="w-6 h-6" />
-                            </div>
-                            <h5 className="text-sm font-bold text-white group-hover:text-[#d4af37]">
-                              Pilih Folder Foto Santri (Folder Picker)
-                            </h5>
-                            <p className="text-[11px] text-emerald-300 mt-1">
-                              Memilih satu folder di komputer/laptop yang berisi banyak foto santri sekaligus.
-                            </p>
-                            <span className="inline-block mt-3 px-3 py-1 rounded-lg text-xs font-bold bg-[#d4af37] text-black">
-                              📂 Buka Folder Foto
-                            </span>
-                          </div>
-
-                          <div
-                            onClick={() => batchGalleryInputRef.current?.click()}
-                            className="p-5 rounded-2xl bg-gradient-to-br from-[#05281a] to-[#02150d] border-2 border-dashed border-emerald-400/60 hover:border-emerald-300 cursor-pointer text-center group transition transform hover:-translate-y-0.5 shadow-lg"
-                          >
-                            <div className="w-12 h-12 mx-auto rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-300 group-hover:scale-110 transition mb-3">
-                              <Image className="w-6 h-6" />
-                            </div>
-                            <h5 className="text-sm font-bold text-white group-hover:text-emerald-300">
-                              Pilih Banyak Foto dari Galeri (Multi-Select)
-                            </h5>
-                            <p className="text-[11px] text-emerald-300 mt-1">
-                              Memilih beberapa atau puluhan file gambar santri dari album/galeri perangkat Anda.
-                            </p>
-                            <span className="inline-block mt-3 px-3 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white">
-                              🖼️ Pilih dari Galeri
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* BAR PENGATURAN DEFAULT ANGKATAN & KAMAR UNTUK BATCH */}
-                        <div className="p-4 rounded-xl bg-[#03170d] border border-[#d4af37]/25 space-y-3">
-                          <span className="text-xs font-bold text-[#d4af37] uppercase tracking-wide">
-                            Pengaturan Default untuk Santri yang Diimpor:
-                          </span>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div>
-                              <label className="block text-[11px] text-emerald-300 mb-1">Target Angkatan / Kelas</label>
-                              <select
-                                value={batchTargetKelas}
-                                onChange={(e) => {
-                                  const newKls = e.target.value;
-                                  setBatchTargetKelas(newKls);
-                                  setBatchImportList(prev => prev.map(item => ({ ...item, kelas: newKls })));
-                                }}
-                                className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white"
-                              >
-                                {classList.map(kls => (
-                                  <option key={kls} value={kls}>{kls}</option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <div>
-                              <label className="block text-[11px] text-emerald-300 mb-1">Kamar Default</label>
-                              <input
-                                type="text"
-                                value={batchDefaultKamar}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setBatchDefaultKamar(val);
-                                  setBatchImportList(prev => prev.map(item => ({ ...item, kamar: val })));
-                                }}
-                                className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white"
-                                placeholder="Contoh: Kamar Abu Bakar 01"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-[11px] text-emerald-300 mb-1">Alamat Asal Default</label>
-                              <input
-                                type="text"
-                                value={batchDefaultAlamat}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setBatchDefaultAlamat(val);
-                                  setBatchImportList(prev => prev.map(item => ({ ...item, alamat: val })));
-                                }}
-                                className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white"
-                                placeholder="Contoh: Jawa Timur"
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* STATUS LOADING PROSES BATCH */}
-                        {isBatchProcessing && (
-                          <div className="p-4 rounded-xl bg-amber-950/80 border border-amber-500/50 flex items-center gap-3">
-                            <RefreshCw className="w-5 h-5 text-amber-300 animate-spin shrink-0" />
-                            <div className="text-xs text-amber-200">
-                              <span className="font-bold">Sedang memproses foto dari folder/galeri: </span>
-                              <span>{batchProgressText}</span>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* DAFTAR FOTO SANTRI YANG TERDETEKSI */}
-                        {batchImportList.length > 0 ? (
-                          <div className="space-y-3">
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-xl bg-[#020e08] border border-[#d4af37]/30">
-                              <div className="flex items-center gap-3">
-                                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-white">
-                                  <input
-                                    type="checkbox"
-                                    checked={batchImportList.length > 0 && batchImportList.every(i => i.selected)}
-                                    onChange={(e) => {
-                                      const checked = e.target.checked;
-                                      setBatchImportList(prev => prev.map(i => ({ ...i, selected: checked })));
-                                    }}
-                                    className="rounded border-[#d4af37] text-amber-500 focus:ring-0 w-4 h-4"
-                                  />
-                                  <span>Pilih Semua Foto</span>
-                                </label>
-                                <span className="text-xs text-emerald-300 font-mono">
-                                  ({batchImportList.filter(i => i.selected).length} dari {batchImportList.length} terpilih)
-                                </span>
-                              </div>
-
-                              <div className="flex items-center gap-2 w-full sm:w-auto">
-                                <button
-                                  type="button"
-                                  onClick={() => setBatchImportList([])}
-                                  className="px-3 py-1.5 rounded-lg bg-red-950/80 hover:bg-red-800 text-red-200 text-xs font-bold border border-red-500/40"
-                                >
-                                  Bersihkan
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isBatchSaving || batchImportList.filter(i => i.selected).length === 0}
-                                  onClick={handleBatchSaveAll}
-                                  className="btn-3d-gold px-5 py-2 text-black font-extrabold text-xs rounded-xl flex items-center gap-2 shadow disabled:opacity-50"
-                                >
-                                  {isBatchSaving ? (
-                                    <>
-                                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                      <span>Menyimpan...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <CheckCircle2 className="w-3.5 h-3.5" />
-                                      <span>
-                                        Simpan {batchImportList.filter(i => i.selected).length} Santri Terpilih
-                                      </span>
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* TABEL SANTRI TERDETEKSI */}
-                            <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25 max-h-96 overflow-y-auto">
-                              <table className="w-full text-xs text-left">
-                                <thead className="bg-[#03170d] text-[#d4af37] sticky top-0 z-10 border-b border-[#d4af37]/30">
-                                  <tr>
-                                    <th className="p-2.5 w-10 text-center">PILIH</th>
-                                    <th className="p-2.5 w-16 text-center">FOTO</th>
-                                    <th className="p-2.5 w-32">NIS</th>
-                                    <th className="p-2.5">NAMA LENGKAP SANTRI</th>
-                                    <th className="p-2.5 w-36">ANGKATAN</th>
-                                    <th className="p-2.5">FILE ASLI</th>
-                                    <th className="p-2.5 text-center w-28">AKSI</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/90">
-                                  {batchImportList.map((item, idx) => (
-                                    <tr key={`${item.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
-                                      <td className="p-2.5 text-center">
-                                        <input
-                                          type="checkbox"
-                                          checked={item.selected}
-                                          onChange={(e) => {
-                                            const checked = e.target.checked;
-                                            setBatchImportList(prev => prev.map((it, i) => i === idx ? { ...it, selected: checked } : it));
-                                          }}
-                                          className="rounded border-[#d4af37] text-amber-500 focus:ring-0 w-4 h-4"
-                                        />
-                                      </td>
-                                      <td className="p-2 text-center">
-                                        <div className="w-10 h-12 mx-auto rounded overflow-hidden border border-[#d4af37]/40 shadow bg-black">
-                                          <img src={item.foto} alt={item.nama} className="w-full h-full object-cover" />
-                                        </div>
-                                      </td>
-                                      <td className="p-2.5">
-                                        <input
-                                          type="text"
-                                          value={item.id}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            setBatchImportList(prev => prev.map((it, i) => i === idx ? { ...it, id: val } : it));
-                                          }}
-                                          className="w-full bg-[#0a301f] border border-[#d4af37]/30 rounded-lg p-1.5 text-xs text-white font-mono"
-                                        />
-                                      </td>
-                                      <td className="p-2.5">
-                                        <input
-                                          type="text"
-                                          value={item.nama}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            setBatchImportList(prev => prev.map((it, i) => i === idx ? { ...it, nama: val } : it));
-                                          }}
-                                          className="w-full bg-[#0a301f] border border-[#d4af37]/30 rounded-lg p-1.5 text-xs text-white font-bold"
-                                        />
-                                      </td>
-                                      <td className="p-2.5 text-emerald-300 font-medium">
-                                        <span className="px-2 py-1 rounded bg-[#03170d] border border-[#d4af37]/30 text-[11px]">
-                                          {item.kelas}
-                                        </span>
-                                      </td>
-                                      <td className="p-2.5 text-zinc-400 font-mono text-[10px] truncate max-w-[120px]">
-                                        <div>{item.fileName}</div>
-                                        <div className="text-zinc-500">{item.fileSizeStr}</div>
-                                      </td>
-                                      <td className="p-2.5 text-center">
-                                        <div className="flex items-center justify-center gap-1.5">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleTransferBatchToSingle(item)}
-                                            className="px-2 py-1 rounded bg-amber-950 text-amber-200 border border-amber-500/40 text-[10px] font-bold hover:bg-amber-900"
-                                            title="Buka & edit detail di Form Manual Satuan"
-                                          >
-                                            Form
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => setBatchImportList(prev => prev.filter((_, i) => i !== idx))}
-                                            className="p-1 rounded bg-red-950/80 text-red-300 border border-red-500/40 hover:bg-red-800"
-                                            title="Hapus dari daftar ini"
-                                          >
-                                            <Trash2 className="w-3 h-3" />
-                                          </button>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="p-8 rounded-2xl bg-[#020e08] border border-[#d4af37]/20 text-center space-y-3">
-                            <FolderOpen className="w-10 h-10 text-[#d4af37]/60 mx-auto" />
-                            <h5 className="text-sm font-bold text-white">Belum Ada Foto Santri yang Dipilih</h5>
-                            <p className="text-xs text-emerald-300 max-w-md mx-auto">
-                              Klik salah satu tombol di atas untuk memilih satu folder foto santri atau memilih banyak file foto dari galeri.
-                            </p>
-                            <div className="p-3 rounded-xl bg-[#03170d] border border-[#d4af37]/20 max-w-lg mx-auto text-left text-[11px] text-zinc-300 space-y-1 font-mono">
-                              <div className="text-[#d4af37] font-bold">💡 Tips Penamaan File Foto Santri:</div>
-                              <div>• <span className="text-emerald-300">S-1008 Muhammad Wildan.jpg</span> (NIS & Nama terisi otomatis)</div>
-                              <div>• <span className="text-emerald-300">1025_Ahmad_Fauzi.png</span> (Otomatis menjadi NIS S-1025)</div>
-                              <div>• <span className="text-emerald-300">Zaidan Nawawi.jpeg</span> (Nama terisi, NIS dibuatkan acak)</div>
-                            </div>
-                          </div>
-                        )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">Angkatan / Kelas</label>
+                        <select
+                          value={inputSantriForm.kelas}
+                          onChange={(e) => setInputSantriForm({ ...inputSantriForm, kelas: e.target.value })}
+                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                        >
+                          {classList.map(kls => (
+                            <option key={kls} value={kls}>{kls}</option>
+                          ))}
+                        </select>
                       </div>
-                    )}
 
-                    {/* MODAL PEMILIH FOTO DARI FOLDER (Jika folder berisi banyak foto pada saat input satuan) */}
-                    {folderPhotoPickerModal.isOpen && (
-                      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
-                        <div className="bg-[#052216] border-2 border-[#d4af37] rounded-3xl p-5 sm:p-6 max-w-3xl w-full max-h-[90vh] flex flex-col space-y-4 shadow-2xl">
-                          <div className="flex items-center justify-between border-b border-[#d4af37]/25 pb-3">
-                            <div className="flex items-center gap-2">
-                              <FolderOpen className="w-5 h-5 text-[#d4af37]" />
-                              <div>
-                                <h4 className="text-sm sm:text-base font-bold text-white text-gold-3d">
-                                  Pilih Foto Santri dari Folder: <span className="text-[#d4af37] font-mono">{folderPhotoPickerModal.folderName}</span>
-                                </h4>
-                                <p className="text-[11px] text-emerald-300">
-                                  Ditemukan {folderPhotoPickerModal.photos.length} foto santri. Klik salah satu foto untuk mengisi form manual santri ini.
-                                </p>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setFolderPhotoPickerModal(prev => ({ ...prev, isOpen: false }))}
-                              className="w-8 h-8 rounded-full bg-black/40 hover:bg-black/80 text-zinc-300 hover:text-white flex items-center justify-center border border-white/10"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-
-                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#020e08] border border-[#d4af37]/30 text-xs">
-                            <span className="text-emerald-300">
-                              Ingin memasukkan semua foto sekaligus?
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                // Pindahkan semua foto ke batch list
-                                const newBatch = folderPhotoPickerModal.photos.map(p => ({
-                                  id: p.detectedId || `S-${Math.floor(1000 + Math.random() * 8999)}`,
-                                  nama: p.detectedName || p.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' '),
-                                  kelas: inputSantriForm.kelas,
-                                  kamar: 'Kamar Abu Bakar 01',
-                                  alamat: 'Jawa Timur',
-                                  foto: p.dataUrl,
-                                  fileName: p.name,
-                                  fileSizeStr: p.sizeStr,
-                                  selected: true
-                                }));
-                                setBatchImportList(prev => [...newBatch, ...prev]);
-                                setFolderPhotoPickerModal(prev => ({ ...prev, isOpen: false }));
-                                setInputSantriSubTab('batch_folder');
-                              }}
-                              className="px-3 py-1.5 rounded-lg btn-3d-gold text-black font-extrabold text-[11px]"
-                            >
-                              Impor Semua Foto di Folder Ini Sekaligus
-                            </button>
-                          </div>
-
-                          {/* Grid Foto di dalam Folder */}
-                          <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                            {folderPhotoPickerModal.photos.map((photo, pIdx) => (
-                              <div
-                                key={pIdx}
-                                onClick={() => handleSelectPhotoFromFolderModal(photo)}
-                                className="group relative rounded-xl overflow-hidden border-2 border-[#d4af37]/30 hover:border-[#d4af37] bg-[#020e08] cursor-pointer transition transform hover:-translate-y-1 hover:shadow-xl p-2 flex flex-col items-center text-center"
-                              >
-                                <div className="w-full h-28 rounded-lg overflow-hidden bg-black mb-2 relative">
-                                  <img
-                                    src={photo.dataUrl}
-                                    alt={photo.name}
-                                    className="w-full h-full object-cover group-hover:scale-105 transition"
-                                  />
-                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-xs font-bold text-white bg-gradient-to-t from-black/80 via-transparent">
-                                    Pilih Foto
-                                  </div>
-                                </div>
-                                <span className="text-[11px] font-bold text-white line-clamp-1 w-full">
-                                  {photo.detectedName || photo.name}
-                                </span>
-                                {photo.detectedId && (
-                                  <span className="text-[10px] text-[#d4af37] font-mono font-bold">
-                                    {photo.detectedId}
-                                  </span>
-                                )}
-                                <span className="text-[9px] text-zinc-400 mt-0.5 truncate max-w-full">
-                                  {photo.name}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-
-                          <div className="pt-2 border-t border-[#d4af37]/20 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setFolderPhotoPickerModal(prev => ({ ...prev, isOpen: false }))}
-                              className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-200 text-xs font-bold hover:bg-zinc-700"
-                            >
-                              Tutup
-                            </button>
-                          </div>
-                        </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">Nomor Induk Santri (NIS)</label>
+                        <input
+                          type="text"
+                          value={inputSantriForm.id}
+                          onChange={(e) => setInputSantriForm({ ...inputSantriForm, id: e.target.value })}
+                          required
+                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-mono"
+                          placeholder="Contoh: S-1008"
+                        />
                       </div>
-                    )}
+
+                      <div>
+                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">Nama Lengkap Santri</label>
+                        <input
+                          type="text"
+                          value={inputSantriForm.nama}
+                          onChange={(e) => setInputSantriForm({ ...inputSantriForm, nama: e.target.value })}
+                          required
+                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                          placeholder="Contoh: Muhammad Ilham Rosyadi"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">Kamar Pondok</label>
+                        <input
+                          type="text"
+                          value={inputSantriForm.kamar}
+                          onChange={(e) => setInputSantriForm({ ...inputSantriForm, kamar: e.target.value })}
+                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                          placeholder="Contoh: Kamar Abu Bakar 05"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">Alamat Asal Santri</label>
+                        <input
+                          type="text"
+                          value={inputSantriForm.alamat}
+                          onChange={(e) => setInputSantriForm({ ...inputSantriForm, alamat: e.target.value })}
+                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                          placeholder="Contoh: Nganjuk, Jawa Timur"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">Link URL Foto Santri</label>
+                        <input
+                          type="text"
+                          value={inputSantriForm.foto}
+                          onChange={(e) => setInputSantriForm({ ...inputSantriForm, foto: e.target.value })}
+                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                          placeholder="URL foto santri (Unsplash/Imgur/Drive)..."
+                        />
+                      </div>
+                    </div>
+
+                    <div className="text-right pt-2 border-t border-[#d4af37]/20">
+                      <button
+                        type="submit"
+                        className="btn-3d-gold px-6 py-2.5 text-black font-extrabold text-xs rounded-xl flex items-center gap-2 ml-auto shadow"
+                      >
+                        <PlusCircle className="w-4 h-4 text-black" />
+                        <span>Simpan Data Santri Baru</span>
+                      </button>
+                    </div>
 
                     {/* DAFTAR & PENGHAPUSAN MANUAL SANTRI TIDAK MONDOK (BOYONG) */}
-                    <div className="card-3d rounded-2xl p-5 space-y-3">
+                    <div className="pt-6 border-t border-[#d4af37]/30 space-y-3">
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                         <div>
                           <h5 className="text-xs sm:text-sm font-bold text-white text-gold-3d flex items-center gap-1.5">
@@ -9146,7 +8556,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </table>
                       </div>
                     </div>
-                  </div>
+                  </form>
                 )}
 
                 {/* SECTION 3: INPUT MANUAL DATA GURU PER ANGKATAN */}
