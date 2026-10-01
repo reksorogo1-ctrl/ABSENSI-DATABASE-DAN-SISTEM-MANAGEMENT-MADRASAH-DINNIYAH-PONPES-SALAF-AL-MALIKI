@@ -82,7 +82,8 @@ export default defineConfig({
         ],
       },
       devOptions: {
-        enabled: false,
+        enabled: true,
+        type: 'module',
       },
     }),
   ],
@@ -96,6 +97,9 @@ export default defineConfig({
     port: 3000,
     strictPort: true,
     allowedHosts: true,
-    hmr: false,
+    hmr: {
+      clientPort: 443,
+      protocol: 'wss',
+    },
   },
 });

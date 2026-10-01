@@ -274,7 +274,6 @@ export class GoogleSheetsService {
   async loadSantriFromSheet(): Promise<Santri[]> {
     const rows = await this.getRangeValues('Santri!A2:F200');
     if (!rows.length) return [];
-    const seen = new Set<string>();
     return rows.map((r) => ({
       id: String(r[0] || '').trim(),
       nama: String(r[1] || '').trim(),
@@ -282,12 +281,7 @@ export class GoogleSheetsService {
       kamar: String(r[3] || '').trim(),
       alamat: String(r[4] || '').trim(),
       foto: String(r[5] || '').trim() || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=400'
-    })).filter(s => {
-      if (!s.id || !s.nama) return false;
-      if (seen.has(s.id)) return false;
-      seen.add(s.id);
-      return true;
-    });
+    })).filter(s => s.id && s.nama);
   }
 
   async loadSettingsFromSheet(): Promise<Partial<AppSettings>> {
