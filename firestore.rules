@@ -46,7 +46,6 @@ service cloud.firestore {
         (!('link_tiktok' in data) || (data.link_tiktok is string && data.link_tiktok.size() <= 500)) &&
         (!('link_youtube' in data) || (data.link_youtube is string && data.link_youtube.size() <= 500)) &&
         (!('link_wa' in data) || (data.link_wa is string && data.link_wa.size() <= 500)) &&
-        (!('email_admin' in data) || (data.email_admin is string && data.email_admin.size() <= 200)) &&
         (!('geofencing_enabled' in data) || data.geofencing_enabled is bool) &&
         (!('geofencing_locked' in data) || data.geofencing_locked is bool) &&
         (!('geofencing_zone_name' in data) || (data.geofencing_zone_name is string && data.geofencing_zone_name.size() <= 200)) &&
@@ -100,34 +99,37 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Master Cloud Data Sync between Devices (Laptop, HP, PWA Web App)
-    match /master_data/{docId} {
-      allow read, write: if true;
-    }
-
     // Settings Collection
     match /settings/{settingId} {
-      allow get, list: if true;
-      allow create, update: if true;
-      allow delete: if isAdmin();
+      allow get: if isValidId(settingId);
+      allow list: if isValidId(settingId);
+      allow create, update: if isValidId(settingId) && (isAdmin() || isSignedIn()) && isValidAppSettings(incoming());
+      allow delete: if isValidId(settingId) && isAdmin();
     }
 
     // Absensi Guru Collection
     match /absensi_guru/{absensiId} {
-      allow get, list: if true;
-      allow create, update, delete: if true;
+      allow get: if isValidId(absensiId);
+      allow list: if isSignedIn();
+      allow create: if isValidId(absensiId) && (isSignedIn() || isAdmin()) && isValidAbsensiGuru(incoming());
+      allow update: if isValidId(absensiId) && (isSignedIn() || isAdmin()) && isValidAbsensiGuru(incoming());
+      allow delete: if isValidId(absensiId) && isAdmin();
     }
 
     // Absensi Santri Collection
     match /absensi_santri/{absensiId} {
-      allow get, list: if true;
-      allow create, update, delete: if true;
+      allow get: if isValidId(absensiId);
+      allow list: if isSignedIn();
+      allow create: if isValidId(absensiId) && (isSignedIn() || isAdmin()) && isValidAbsensiSantri(incoming());
+      allow update: if isValidId(absensiId) && (isSignedIn() || isAdmin()) && isValidAbsensiSantri(incoming());
+      allow delete: if isValidId(absensiId) && isAdmin();
     }
 
     // Santri Collection
     match /santri/{santriId} {
-      allow get, list: if true;
-      allow create, update, delete: if true;
+      allow get: if isValidId(santriId);
+      allow list: if true;
+      allow create, update, delete: if isValidId(santriId) && isAdmin() && isValidSantri(incoming());
     }
 
     // Admins Collection
