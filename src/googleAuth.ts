@@ -1,12 +1,11 @@
 import { 
   signInWithPopup, 
   signInWithRedirect, 
-  getRedirectResult, 
   GoogleAuthProvider, 
   onAuthStateChanged, 
   User 
 } from 'firebase/auth';
-import { auth, isMobileDevice } from './firebase';
+import { auth, isMobileDevice, checkFirebaseRedirectResult } from './firebase';
 import firebaseConfig from '../firebase-applet-config.json';
 
 export { auth };
@@ -122,21 +121,19 @@ export const setManualAccessToken = (token: string, email?: string): { user: Use
  */
 export const checkGoogleAuthRedirectResult = async (): Promise<{ user: User; accessToken: string } | null> => {
   try {
-    const result = await getRedirectResult(auth);
-    if (result && result.user) {
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      if (credential?.accessToken) {
-        cachedAccessToken = credential.accessToken;
+    const res = await checkFirebaseRedirectResult();
+    if (res && res.user) {
+      if (res.accessToken) {
+        cachedAccessToken = res.accessToken;
         if (typeof window !== 'undefined') {
-          localStorage.setItem('sim_google_access_token', credential.accessToken);
+          localStorage.setItem('sim_google_access_token', res.accessToken);
         }
       }
-      currentGoogleUser = result.user;
-      return { user: result.user, accessToken: cachedAccessToken || '' };
+      currentGoogleUser = res.user;
+      return { user: res.user, accessToken: cachedAccessToken || '' };
     }
   } catch (err: any) {
     console.warn('Google redirect result check:', err);
-    throw err;
   }
   return null;
 };
@@ -155,10 +152,11 @@ export const initAuth = (
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
       currentGoogleUser = user;
-      if (cachedAccessToken) {
-        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        if (onAuthFailure) onAuthFailure();
+      if (!cachedAccessToken && typeof window !== 'undefined') {
+        cachedAccessToken = localStorage.getItem('sim_google_access_token');
+      }
+      if (cachedAccessToken && onAuthSuccess) {
+        onAuthSuccess(user, cachedAccessToken);
       }
     } else {
       // Don't overwrite if manual or GIS token is active

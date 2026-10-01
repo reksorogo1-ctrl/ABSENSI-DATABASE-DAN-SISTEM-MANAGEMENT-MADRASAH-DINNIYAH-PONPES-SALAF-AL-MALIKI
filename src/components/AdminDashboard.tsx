@@ -8,7 +8,7 @@ import {
   CreditCard, Wallet, AlertTriangle, Phone, MessageCircle, ArrowDownLeft, ArrowUpRight, Trash2, GraduationCap,
   Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload, Play,
   ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine, MapPin, Compass, Crosshair, Shield, Navigation,
-  Instagram, Youtube, Music2, Globe, Unlock, Menu
+  Instagram, Youtube, Music2, Globe, Unlock, Menu, Mail
 } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 import { 
@@ -908,6 +908,240 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     title: '',
     desc: ''
   });
+
+  // State Email & Sinkronisasi Otomatis Google Sheets
+  const [syncEmailInput, setSyncEmailInput] = useState<string>(() => {
+    return localStorage.getItem('sim_spreadsheet_email') || settings.email_admin || '';
+  });
+  const [savedSyncEmail, setSavedSyncEmail] = useState<string>(() => {
+    return localStorage.getItem('sim_spreadsheet_email') || settings.email_admin || '';
+  });
+  const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('sim_auto_sync_enabled') === 'true';
+  });
+
+  // Otomatis sinkronisasi berkala jika fitur auto-sync diaktifkan dan terhubung ke Google
+  useEffect(() => {
+    if (!isAutoSyncEnabled || !isGoogleConnected || !sheetsService || !spreadsheetId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        console.info('Auto-sync: Menyinkronkan data otomatis ke Google Sheets...');
+        await sheetsService.exportFullDatabaseToSheets({
+          santriList,
+          guruList,
+          jadwalList,
+          nadzhomList,
+          nilaiList,
+          absensiSantriList,
+          absensiGuruList,
+          syahriyahList,
+          settings
+        });
+      } catch (err) {
+        console.warn('Auto-sync background error:', err);
+      }
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [isAutoSyncEnabled, isGoogleConnected, sheetsService, spreadsheetId, santriList, guruList, jadwalList, nadzhomList, nilaiList, absensiSantriList, absensiGuruList, syahriyahList, settings]);
+
+  const handleSaveSyncEmail = () => {
+    const cleanEmail = syncEmailInput.trim();
+    if (!cleanEmail) {
+      setSheetsStatusMsg({ type: 'error', text: 'Silakan masukkan alamat email yang valid.' });
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setSheetsStatusMsg({ type: 'error', text: 'Format email tidak valid. Gunakan format contoh: user@gmail.com' });
+      return;
+    }
+
+    localStorage.setItem('sim_spreadsheet_email', cleanEmail);
+    setSavedSyncEmail(cleanEmail);
+    if (onSaveSettings) {
+      onSaveSettings({
+        ...settings,
+        email_admin: cleanEmail
+      });
+    }
+    setSheetsStatusMsg({ 
+      type: 'success', 
+      text: `Alamat email "${cleanEmail}" berhasil disimpan! Sistem siap melakukan ekspor & impor otomatis melalui email ini.` 
+    });
+  };
+
+  const handleAutoExportViaEmail = async () => {
+    const targetEmail = savedSyncEmail || syncEmailInput.trim();
+    if (!targetEmail) {
+      setSheetsStatusMsg({ type: 'error', text: 'Masukkan dan simpan email terlebih dahulu sebelum melakukan ekspor otomatis.' });
+      return;
+    }
+    if (!isGoogleConnected) {
+      if (onOpenSheetsModal) onOpenSheetsModal();
+      setSheetsStatusMsg({ type: 'info', text: `Silakan hubungkan akun Google "${targetEmail}" terlebih dahulu agar ekspor otomatis berjalan.` });
+      return;
+    }
+    setIsSheetsBusy(true);
+    setSheetsStatusMsg(null);
+    try {
+      if (sheetsService) {
+        await sheetsService.exportFullDatabaseToSheets({
+          santriList,
+          guruList,
+          jadwalList,
+          nadzhomList,
+          nilaiList,
+          absensiSantriList,
+          absensiGuruList,
+          syahriyahList,
+          settings
+        });
+        setSheetsStatusMsg({
+          type: 'success',
+          text: `Ekspor otomatis berhasil! Seluruh data (${santriList.length} Santri, ${guruList.length} Guru, Presensi, Nilai) telah disinkronkan ke Google Spreadsheet untuk email ${targetEmail}.`
+        });
+      } else {
+        onSyncWithSheets();
+      }
+    } catch (err: any) {
+      setSheetsStatusMsg({ type: 'error', text: `Gagal ekspor data: ${err?.message || 'Periksa koneksi Google Sheets Anda.'}` });
+    } finally {
+      setIsSheetsBusy(false);
+    }
+  };
+
+  const handleAutoImportViaEmail = async () => {
+    const targetEmail = savedSyncEmail || syncEmailInput.trim();
+    if (!targetEmail) {
+      setSheetsStatusMsg({ type: 'error', text: 'Masukkan dan simpan email terlebih dahulu sebelum melakukan impor otomatis.' });
+      return;
+    }
+    if (!isGoogleConnected) {
+      if (onOpenSheetsModal) onOpenSheetsModal();
+      setSheetsStatusMsg({ type: 'info', text: `Silakan hubungkan akun Google "${targetEmail}" terlebih dahulu agar impor otomatis berjalan.` });
+      return;
+    }
+    setIsSheetsBusy(true);
+    setSheetsStatusMsg(null);
+    try {
+      if (sheetsService && onDataImported) {
+        const [
+          rSantri, rGuru, rJadwal, rNadzhom, rNilai,
+          rAbsensiSantri, rAbsensiGuru, rSyahriyah, rSettings
+        ] = await Promise.all([
+          sheetsService.loadSantriFromSheet(),
+          sheetsService.loadGuruFromSheet(),
+          sheetsService.loadJadwalFromSheet(),
+          sheetsService.loadNadzhomFromSheet(),
+          sheetsService.loadNilaiFromSheet(),
+          sheetsService.loadAbsensiSantriFromSheet(),
+          sheetsService.loadAbsensiGuruFromSheet(),
+          sheetsService.loadSyahriyahFromSheet(),
+          sheetsService.loadSettingsFromSheet()
+        ]);
+
+        onDataImported({
+          santriList: rSantri.length ? rSantri : undefined,
+          guruList: rGuru.length ? rGuru : undefined,
+          jadwalList: rJadwal.length ? rJadwal : undefined,
+          nadzhomList: rNadzhom.length ? rNadzhom : undefined,
+          nilaiList: rNilai.length ? rNilai : undefined,
+          absensiSantriList: rAbsensiSantri.length ? rAbsensiSantri : undefined,
+          absensiGuruList: rAbsensiGuru.length ? rAbsensiGuru : undefined,
+          syahriyahList: rSyahriyah.length ? rSyahriyah : undefined,
+          settings: Object.keys(rSettings).length ? rSettings : undefined
+        });
+
+        setSheetsStatusMsg({
+          type: 'success',
+          text: `Impor otomatis berhasil! Data berhasil ditarik dari Google Spreadsheet melalui email ${targetEmail} (${rSantri.length} Santri, ${rGuru.length} Guru termuat).`
+        });
+      } else {
+        onSyncWithSheets();
+      }
+    } catch (err: any) {
+      setSheetsStatusMsg({ type: 'error', text: `Gagal impor data: ${err?.message || 'Periksa spreadsheet terhubung.'}` });
+    } finally {
+      setIsSheetsBusy(false);
+    }
+  };
+
+  const handleSaveAndAutoSyncBoth = async () => {
+    handleSaveSyncEmail();
+    const cleanEmail = syncEmailInput.trim();
+    if (!cleanEmail) return;
+
+    if (!isGoogleConnected) {
+      if (onOpenSheetsModal) onOpenSheetsModal();
+      setSheetsStatusMsg({ 
+        type: 'info', 
+        text: `Email "${cleanEmail}" berhasil disimpan. Silakan masuk dengan Google untuk mengotorisasi sinkronisasi otomatis.` 
+      });
+      return;
+    }
+
+    setIsSheetsBusy(true);
+    try {
+      if (sheetsService && onDataImported) {
+        const [
+          rSantri, rGuru, rJadwal, rNadzhom, rNilai,
+          rAbsensiSantri, rAbsensiGuru, rSyahriyah, rSettings
+        ] = await Promise.all([
+          sheetsService.loadSantriFromSheet(),
+          sheetsService.loadGuruFromSheet(),
+          sheetsService.loadJadwalFromSheet(),
+          sheetsService.loadNadzhomFromSheet(),
+          sheetsService.loadNilaiFromSheet(),
+          sheetsService.loadAbsensiSantriFromSheet(),
+          sheetsService.loadAbsensiGuruFromSheet(),
+          sheetsService.loadSyahriyahFromSheet(),
+          sheetsService.loadSettingsFromSheet()
+        ]);
+
+        if (rSantri.length || rGuru.length) {
+          onDataImported({
+            santriList: rSantri.length ? rSantri : undefined,
+            guruList: rGuru.length ? rGuru : undefined,
+            jadwalList: rJadwal.length ? rJadwal : undefined,
+            nadzhomList: rNadzhom.length ? rNadzhom : undefined,
+            nilaiList: rNilai.length ? rNilai : undefined,
+            absensiSantriList: rAbsensiSantri.length ? rAbsensiSantri : undefined,
+            absensiGuruList: rAbsensiGuru.length ? rAbsensiGuru : undefined,
+            syahriyahList: rSyahriyah.length ? rSyahriyah : undefined,
+            settings: Object.keys(rSettings).length ? rSettings : undefined
+          });
+        }
+      }
+
+      if (sheetsService) {
+        await sheetsService.exportFullDatabaseToSheets({
+          santriList,
+          guruList,
+          jadwalList,
+          nadzhomList,
+          nilaiList,
+          absensiSantriList,
+          absensiGuruList,
+          syahriyahList,
+          settings
+        });
+      }
+
+      setIsAutoSyncEnabled(true);
+      localStorage.setItem('sim_auto_sync_enabled', 'true');
+
+      setSheetsStatusMsg({
+        type: 'success',
+        text: `Sukses! Email ${cleanEmail} telah disimpan dan sinkronisasi dua arah (Ekspor & Impor) otomatis berhasil dijalankan.`
+      });
+    } catch (err: any) {
+      setSheetsStatusMsg({ type: 'error', text: `Kendala sinkronisasi: ${err?.message || 'Periksa koneksi Google Sheets'}` });
+    } finally {
+      setIsSheetsBusy(false);
+    }
+  };
 
   // State untuk Edit Profil Anak & Password Wali (NIS) di Option Panel
   const [selectedProfileSantriId, setSelectedProfileSantriId] = useState<string>(
@@ -5213,6 +5447,110 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button onClick={() => setSheetsStatusMsg(null)} className="text-stone-400 hover:text-white">✕</button>
                 </div>
               )}
+
+              {/* KARTU KREDENSIAL EMAIL & OTOMATIS EKSPOR IMPOR */}
+              <div className="bg-gradient-to-r from-[#031d12] via-[#02180e] to-[#0a1805] p-5 rounded-2xl border-2 border-[#d4af37]/60 shadow-xl space-y-4 mt-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#d4af37]/25">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#d4af37]/20 border border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow">
+                      <Mail className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm sm:text-base font-bold text-white text-gold-3d flex items-center gap-2">
+                        <span>Konfigurasi Email Google & Ekspor-Impor Otomatis</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-sans font-bold">
+                          Cloud Auto-Sync
+                        </span>
+                      </h4>
+                      <p className="text-xs text-emerald-300">
+                        Simpan email Google Anda untuk menjalankan ekspor dan impor data presensi, santri, dan raport secara otomatis.
+                      </p>
+                    </div>
+                  </div>
+
+                  {savedSyncEmail && (
+                    <div className="flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-xl border border-[#d4af37]/40 text-xs">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span className="text-stone-300">Email Tersimpan:</span>
+                      <span className="font-mono text-[#faebaa] font-bold">{savedSyncEmail}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Form Input Email & Tombol Simpan Email */}
+                <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-3 items-center">
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-[#d4af37] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="email"
+                      value={syncEmailInput}
+                      onChange={(e) => setSyncEmailInput(e.target.value)}
+                      placeholder="Masukkan alamat email Google (misal: reksorogo1@gmail.com)..."
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#010a05] border border-[#d4af37]/50 text-white font-mono text-xs sm:text-sm focus:outline-none focus:border-[#faebaa] focus:ring-1 focus:ring-[#d4af37]"
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleSaveSyncEmail}
+                    className="px-5 py-2.5 bg-gradient-to-r from-[#d4af37] to-[#b8972e] text-black font-extrabold text-xs sm:text-sm rounded-xl shadow hover:brightness-110 active:scale-95 transition flex items-center justify-center gap-2"
+                  >
+                    <Save className="w-4 h-4 stroke-[2.5]" />
+                    <span>Simpan Email</span>
+                  </button>
+
+                  <button
+                    onClick={handleSaveAndAutoSyncBoth}
+                    disabled={isSheetsBusy}
+                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow hover:brightness-110 active:scale-95 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isSheetsBusy ? 'animate-spin' : ''}`} />
+                    <span>Simpan & Ekspor-Impor Otomatis</span>
+                  </button>
+                </div>
+
+                {/* Baris Tombol Aksi Otomatis Ekspor & Impor Melalui Email */}
+                <div className="pt-2 flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={handleAutoExportViaEmail}
+                    disabled={isSheetsBusy}
+                    className="px-4 py-2 bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-200 rounded-xl text-xs font-bold flex items-center gap-2 shadow transition disabled:opacity-50 hover:scale-[1.01]"
+                  >
+                    <ArrowUpFromLine className="w-4 h-4 text-emerald-400" />
+                    <span>Otomatis Ekspor ke Email Ini</span>
+                  </button>
+
+                  <button
+                    onClick={handleAutoImportViaEmail}
+                    disabled={isSheetsBusy}
+                    className="px-4 py-2 bg-[#1b1402] hover:bg-[#281e04] border border-[#d4af37]/50 text-[#faebaa] rounded-xl text-xs font-bold flex items-center gap-2 shadow transition disabled:opacity-50 hover:scale-[1.01]"
+                  >
+                    <ArrowDownToLine className="w-4 h-4 text-[#d4af37]" />
+                    <span>Otomatis Impor Data dari Email Ini</span>
+                  </button>
+
+                  <div className="ml-auto flex items-center gap-2 bg-[#02130a] px-3 py-1.5 rounded-xl border border-stone-800 text-xs">
+                    <span className="text-stone-300">Auto-Sync Latar Belakang:</span>
+                    <button
+                      onClick={() => {
+                        const next = !isAutoSyncEnabled;
+                        setIsAutoSyncEnabled(next);
+                        localStorage.setItem('sim_auto_sync_enabled', next ? 'true' : 'false');
+                        setSheetsStatusMsg({
+                          type: 'info',
+                          text: next ? 'Sinkronisasi latar belakang otomatis diaktifkan (tiap 5 menit).' : 'Sinkronisasi latar belakang dinonaktifkan.'
+                        });
+                      }}
+                      className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase border transition ${
+                        isAutoSyncEnabled
+                          ? 'bg-emerald-900/80 text-emerald-300 border-emerald-500'
+                          : 'bg-stone-900 text-stone-400 border-stone-700'
+                      }`}
+                    >
+                      {isAutoSyncEnabled ? '● Aktif (Tiap 5 Mnt)' : '○ Nonaktif'}
+                    </button>
+                  </div>
+                </div>
+              </div>
 
               {/* Grid 2 Kolom: Status Akun & File Spreadsheet Aktif */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">

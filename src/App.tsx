@@ -65,6 +65,30 @@ export default function App() {
       localStorage.removeItem('sim_auth_session');
     }
   }, [session]);
+
+  // Menjaga sesi login di HP agar tidak restart saat berpindah aplikasi atau tab background
+  useEffect(() => {
+    const handleRestoreOnResume = () => {
+      try {
+        const saved = localStorage.getItem('sim_auth_session');
+        if (saved && !session) {
+          console.info('Memulihkan sesi login HP dari penyimpanan persisten');
+          setSession(JSON.parse(saved));
+        }
+      } catch {}
+    };
+
+    window.addEventListener('pageshow', handleRestoreOnResume);
+    window.addEventListener('focus', handleRestoreOnResume);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') handleRestoreOnResume();
+    });
+
+    return () => {
+      window.removeEventListener('pageshow', handleRestoreOnResume);
+      window.removeEventListener('focus', handleRestoreOnResume);
+    };
+  }, [session]);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
   // Remember Me & Forgot Password State
@@ -235,11 +259,10 @@ export default function App() {
     // Menangkap hasil login redirect (signInWithRedirect) saat browser HP kembali ke web app
     const processRedirectLogin = async () => {
       try {
-        const fbUser = await checkFirebaseRedirectResult();
-        const googleAuthRes = await checkGoogleAuthRedirectResult();
-        const email = fbUser?.email || googleAuthRes?.user?.email || '';
+        const res = await checkFirebaseRedirectResult();
+        const email = res?.user?.email || '';
 
-        if (email || fbUser || googleAuthRes) {
+        if (email || res?.user) {
           console.info('Login redirect sukses di HP, memulihkan sesi admin:', email);
           setIsGoogleConnected(true);
           setShowDoors(true);
@@ -975,64 +998,68 @@ export default function App() {
   };
 
   // 1. If logged in as Wali Santri -> render WaliSantriPortal with Row-Level Security
-  if (session?.role === 'wali_santri' && session.santriData) {
-    const liveSantri = santriList.find(s => s.id === session.santriData?.id) || session.santriData;
-    return (
-      <>
-        <div className="anim-dashboard-fade" key="wali">
-          <WaliSantriPortal
-            santri={liveSantri}
-            nadzhomList={nadzhomList}
-            nilaiList={nilaiList}
-            absensiList={absensiSantriList}
-            syahriyahList={syahriyahList}
-            uangSakuList={uangSakuList}
-            ujianList={ujianList}
-            onLogout={handleLogout}
-            spreadsheetId={spreadsheetId}
-            settings={settings}
-          />
-        </div>
-        {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} settings={settings} />}
-      </>
-    );
+  if (session?.role === 'wali_santri') {
+    const liveSantri = session.santriData || santriList.find(s => s.id === session.identifier) || santriList[0];
+    if (liveSantri) {
+      return (
+        <>
+          <div className="anim-dashboard-fade" key="wali">
+            <WaliSantriPortal
+              santri={liveSantri}
+              nadzhomList={nadzhomList}
+              nilaiList={nilaiList}
+              absensiList={absensiSantriList}
+              syahriyahList={syahriyahList}
+              uangSakuList={uangSakuList}
+              ujianList={ujianList}
+              onLogout={handleLogout}
+              spreadsheetId={spreadsheetId}
+              settings={settings}
+            />
+          </div>
+          {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} settings={settings} />}
+        </>
+      );
+    }
   }
 
   // 2. If logged in as Pengurus -> render PengurusDashboard
-  if (session?.role === 'pengurus' && session.pengurusData) {
-    const livePengurus = pengurusList.find(p => p.id === session.pengurusData?.id) || session.pengurusData;
-    return (
-      <>
-        <div className="anim-dashboard-fade" key="pengurus">
-          <PengurusDashboard
-            pengurus={livePengurus}
-            settings={settings}
-            stats={stats}
-            santriList={santriList}
-            guruList={guruList}
-            jadwalList={jadwalList}
-            nadzhomList={nadzhomList}
-            nilaiList={nilaiList}
-            absensiSantriList={absensiSantriList}
-            absensiGuruList={absensiGuruList}
-            syahriyahList={syahriyahList}
-            uangSakuList={uangSakuList}
-            kurikulumList={kurikulumList}
-            silabusList={silabusList}
-            kalenderList={kalenderList}
-            ujianList={ujianList}
-            izinList={izinMengajarList}
-            onLogout={handleLogout}
-            onUpdatePengurusProfile={handleUpdatePengurus}
-            onSaveAbsensiSantri={handleSaveAbsensiSantri}
-            onSaveAbsensiGuru={handleSaveAbsensiGuru}
-            onSubmitIzinMengajar={handleAddIzinMengajar}
-            onSaveSilabus={handleSaveSilabus}
-          />
-        </div>
-        {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} settings={settings} />}
-      </>
-    );
+  if (session?.role === 'pengurus') {
+    const livePengurus = session.pengurusData || pengurusList.find(p => p.id === session.identifier) || pengurusList[0];
+    if (livePengurus) {
+      return (
+        <>
+          <div className="anim-dashboard-fade" key="pengurus">
+            <PengurusDashboard
+              pengurus={livePengurus}
+              settings={settings}
+              stats={stats}
+              santriList={santriList}
+              guruList={guruList}
+              jadwalList={jadwalList}
+              nadzhomList={nadzhomList}
+              nilaiList={nilaiList}
+              absensiSantriList={absensiSantriList}
+              absensiGuruList={absensiGuruList}
+              syahriyahList={syahriyahList}
+              uangSakuList={uangSakuList}
+              kurikulumList={kurikulumList}
+              silabusList={silabusList}
+              kalenderList={kalenderList}
+              ujianList={ujianList}
+              izinList={izinMengajarList}
+              onLogout={handleLogout}
+              onUpdatePengurusProfile={handleUpdatePengurus}
+              onSaveAbsensiSantri={handleSaveAbsensiSantri}
+              onSaveAbsensiGuru={handleSaveAbsensiGuru}
+              onSubmitIzinMengajar={handleAddIzinMengajar}
+              onSaveSilabus={handleSaveSilabus}
+            />
+          </div>
+          {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} settings={settings} />}
+        </>
+      );
+    }
   }
 
   // 3. If logged in as Admin -> render AdminDashboard

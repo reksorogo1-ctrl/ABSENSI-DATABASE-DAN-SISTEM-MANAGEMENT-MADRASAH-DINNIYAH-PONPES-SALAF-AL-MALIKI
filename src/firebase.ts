@@ -129,19 +129,32 @@ export async function signInWithGoogleFirebase(forceRedirect: boolean = false) {
   }
 }
 
-// Menangkap hasil login redirect setelah browser HP kembali ke aplikasi
-export async function checkFirebaseRedirectResult() {
-  try {
-    const result = await getRedirectResult(auth);
-    if (result && result.user) {
-      console.info('Firebase redirect sign-in berhasil:', result.user.email);
-      return result.user;
-    }
-    return null;
-  } catch (error) {
-    console.error('Firebase checkFirebaseRedirectResult error:', error);
-    throw error;
+let cachedRedirectPromise: Promise<{ user: any; accessToken: string | null } | null> | null = null;
+
+// Menangkap hasil login redirect setelah browser HP kembali ke aplikasi (hanya dipanggil 1 kali secara aman)
+export async function checkFirebaseRedirectResult(): Promise<{ user: any; accessToken: string | null } | null> {
+  if (cachedRedirectPromise) {
+    return cachedRedirectPromise;
   }
+  cachedRedirectPromise = (async () => {
+    try {
+      const result = await getRedirectResult(auth);
+      if (result && result.user) {
+        console.info('Firebase redirect sign-in berhasil:', result.user.email);
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        const accessToken = credential?.accessToken || null;
+        if (accessToken && typeof window !== 'undefined') {
+          localStorage.setItem('sim_google_access_token', accessToken);
+        }
+        return { user: result.user, accessToken };
+      }
+      return null;
+    } catch (error) {
+      console.warn('Firebase checkFirebaseRedirectResult:', error);
+      return null;
+    }
+  })();
+  return cachedRedirectPromise;
 }
 
 export async function signOutFirebase() {
@@ -186,6 +199,7 @@ export async function saveSettingsToFirestore(settings: Partial<AppSettings>): P
     if (settings.link_tiktok) cleanSettings.link_tiktok = settings.link_tiktok;
     if (settings.link_youtube) cleanSettings.link_youtube = settings.link_youtube;
     if (settings.link_wa) cleanSettings.link_wa = settings.link_wa;
+    if (settings.email_admin) cleanSettings.email_admin = settings.email_admin;
     if (typeof settings.geofencing_enabled === 'boolean') cleanSettings.geofencing_enabled = settings.geofencing_enabled;
     if (typeof settings.geofencing_locked === 'boolean') cleanSettings.geofencing_locked = settings.geofencing_locked;
     if (settings.geofencing_zone_name) cleanSettings.geofencing_zone_name = settings.geofencing_zone_name;

@@ -271,6 +271,7 @@ export interface AppSettings {
   logo_madrasah: string;
   background_url?: string;
   password_admin?: string;
+  email_admin?: string;
   password_option_panel?: string;
   intro_video_url?: string; // URL video intro opening yang dapat diedit di Option Panel
   intro_video_name?: string; // Nama judul berkas video intro
