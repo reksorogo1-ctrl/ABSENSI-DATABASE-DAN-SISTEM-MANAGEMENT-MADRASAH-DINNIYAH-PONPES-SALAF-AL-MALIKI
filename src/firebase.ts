@@ -149,9 +149,6 @@ export async function checkFirebaseRedirectResult(): Promise<{ user: any; access
         console.info('Firebase redirect sign-in berhasil:', result.user.email);
         const credential = GoogleAuthProvider.credentialFromResult(result);
         const accessToken = credential?.accessToken || null;
-        if (accessToken && typeof window !== 'undefined') {
-          localStorage.setItem('sim_google_access_token', accessToken);
-        }
         return { user: result.user, accessToken };
       }
       return null;
