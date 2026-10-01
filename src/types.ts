@@ -25,10 +25,6 @@ export interface Santri {
   noWaWaliKelas?: string; // No WA Wali Kelas (contoh: 628123456789)
   saldoUangSaku?: number; // Saldo terkini tabungan uang saku santri
   statusSantri?: StatusSantri; // Status akademik santri
-  jenisKelamin?: 'Putra' | 'Putri'; // Putra atau Putri
-  angkatan?: string; // e.g. "Angkatan 2024", "Angkatan 2025", "Angkatan 2026"
-  tahunAjaran?: string; // Tahun ajaran santri
-  kategoriMhf?: 'JAYYID' | 'MUTAWASIT' | 'RODI'; // Kategori penilaian muhafadzoh
   tahunMasuk?: string; // Tahun pertama masuk (misal: "2024/2025")
   tahunAjaranAktif?: string; // Tahun ajaran saat ini
   riwayatKelas?: RiwayatKelasItem[]; // RIWAYAT LENGKAP: TAHUN AJARAN → KELAS → STATUS SANTRI
@@ -45,7 +41,6 @@ export interface Santri {
   tanggalUjianKitab?: string; // Tanggal pelaksanaan ujian
   kitabMuhafadzoh?: string;
   kitabBaca?: string;
-  kitabKoreksian?: string;
 }
 
 // Skema Objek Metadata Cloud Storage Skala Besar (Hingga ±5 TB)
@@ -358,8 +353,6 @@ export interface AppSettings {
   email_admin?: string;
   password_option_panel?: string;
   tahun_ajaran?: string; // Tahun ajaran aktif, contoh: "2026/2027" atau "1447/1448 H"
-  daftar_tahun_ajaran?: string[]; // Daftar tahun ajaran yang dapat diedit di Option Panel
-  daftar_nadzhom?: string[]; // Daftar nama kitab nadzhom yang dapat diedit di Option Panel
   semester_aktif?: string; // Semester aktif, contoh: "Semester Ganjil" / "Semester Genap"
   intro_video_url?: string; // URL video intro opening yang dapat diedit di Option Panel
   intro_video_name?: string; // Nama judul berkas video intro

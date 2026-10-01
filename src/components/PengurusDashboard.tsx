@@ -2128,10 +2128,10 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                    {myStudents.map((s, idx) => {
+                    {myStudents.map(s => {
                       const currentStatus = localSantriAbsensi[s.id] || 'Hadir';
                       return (
-                        <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5">
+                        <tr key={s.id} className="hover:bg-[#d4af37]/5">
                           <td className="p-3">
                             <div className="flex items-center space-x-2.5">
                               <img
@@ -2359,7 +2359,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                     .map((s, idx) => {
                       const cur = globalSantriAbsensi[s.id] || { status: 'Hadir', ket: '' };
                       return (
-                        <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
+                        <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
                           <td className="p-3 text-center text-emerald-300 font-mono">{idx + 1}</td>
                           <td className="p-3">
                             <div className="flex items-center space-x-2.5">
@@ -3105,8 +3105,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                  {santriList.map((s, idx) => (
-                    <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5">
+                  {santriList.map(s => (
+                    <tr key={s.id} className="hover:bg-[#d4af37]/5">
                       <td className="p-3">
                         <span className="font-bold text-white block">{s.nama}</span>
                         <span className="text-[10px] text-[#d4af37] font-mono">NIS: {s.id}</span>

@@ -421,7 +421,7 @@ export const KenaikanKelasModal: React.FC<KenaikanKelasModalProps> = ({
                         const originalSantri = santriList.find(s => s.id === dec.santriId);
                         return (
                           <tr 
-                            key={`${dec.santriId}-${idx}`}
+                            key={dec.santriId}
                             className={`hover:bg-[#d4af37]/5 transition ${
                               dec.isManualOverride ? 'bg-blue-950/20' : ''
                             }`}

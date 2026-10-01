@@ -15,11 +15,6 @@ import {
 import { compressImageFile, parseFileNameForSantri } from '../lib/imageCompression';
 import { Storage5TBManager } from './Storage5TBManager';
 import { KenaikanKelasModal } from './KenaikanKelasModal';
-import { EditSantriModal } from './EditSantriModal';
-import { TabUjianMuhafadzoh } from './TabUjianMuhafadzoh';
-import { TabUjianBacaKitab } from './TabUjianBacaKitab';
-import { TabUjianKoreksianKitab } from './TabUjianKoreksianKitab';
-import { ModalInputNilaiUjian } from './ModalInputNilaiUjian';
 import { getOrCreateSantriHistory } from '../lib/kenaikanKelasService';
 import { queryPaginatedData } from '../lib/scalableDatabase';
 import { formatBytes, TOTAL_CAPACITY_5TB } from '../lib/scalableStorage';
@@ -85,7 +80,7 @@ interface AdminDashboardProps {
   onSaveNilai: (nilai: NilaiUjianRecord) => void;
   onSaveSettings: (settings: AppSettings) => void;
   onSaveDashboardAndReset: () => void;
-  onUpdateSantriProfile?: (updatedSantri: Santri, oldId?: string) => void;
+  onUpdateSantriProfile?: (updatedSantri: Santri) => void;
   onBatchUpdateSantri?: (updatedList: Santri[], updatedSettings?: Partial<AppSettings>) => void;
   onSaveSyahriyah?: (record: SyahriyahRecord) => void;
   onSaveUangSaku?: (record: UangSakuRecord) => void;
@@ -662,12 +657,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Modal Kenaikan Kelas Otomatis & Detail Riwayat Santri
   const [showKenaikanKelasModal, setShowKenaikanKelasModal] = useState<boolean>(false);
   const [santriDetailHistory, setSantriDetailHistory] = useState<Santri | null>(null);
-
-  // Modal Edit / Setting Data Santri
-  const [editingSantri, setEditingSantri] = useState<Santri | null>(null);
-
-  // Modal Input / Edit Nilai Ujian Santri
-  const [ujianModalTarget, setUjianModalTarget] = useState<{ santri: Santri; type: 'muhafadzoh' | 'baca' | 'koreksian' | 'all' } | null>(null);
 
   // Video Intro Management States in Option Panel
   const [adminVideoInfo, setAdminVideoInfo] = useState<VideoInfo>({
@@ -1604,9 +1593,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {[
               { id: 'dashboard', label: 'Dashboard Utama', icon: Users },
               { id: 'kalender', label: 'Kalender Akademik', icon: Calendar, badge: 'Agenda' },
-              { id: 'ujian-muhafadzoh', label: '1. Tab Muhafadzoh', icon: Award, badge: 'Ujian' },
-              { id: 'ujian-baca-kitab', label: '2. Tab Baca Kitab', icon: BookOpen, badge: 'Ujian' },
-              { id: 'ujian-koreksian-kitab', label: '3. Tab Koreksian Kitab', icon: CheckSquare, badge: 'Ujian' },
+              { id: 'ujian-kitab', label: 'Ujian Muhafadzoh & Kitab', icon: Award },
               { id: 'absensi-santri', label: settings.text_absensi_santri_title || 'Absensi Santri', icon: UserCheck },
               { id: 'absensi-guru', label: settings.text_absensi_guru_title || 'Absensi Ustadz / Guru', icon: Clock },
               { id: 'jadwal', label: settings.text_jadwal_title || 'Jadwal Pelajaran', icon: Calendar },
@@ -1618,7 +1605,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               { id: 'pengaturan', label: 'Option Panel (Pusat Kontrol)', icon: Sliders, badge: 'Password' }
             ].map(tab => {
               const Icon = tab.icon;
-              const isActive = activeTab === tab.id || (tab.id === 'ujian-muhafadzoh' && activeTab === 'ujian-kitab');
+              const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
@@ -2169,10 +2156,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </thead>
                   <tbody className="divide-y divide-amber-500/20">
                     {izinList.length > 0 ? (
-                      izinList.map((item, idx) => {
+                      izinList.map(item => {
                         const currentPengganti = penggantiSelected[item.id] || item.ustadzPengganti || guruList[0]?.nama || 'Ust. M. Rizqi Fadlillah, S.Pd.';
                         return (
-                          <tr key={`${item.id}-${idx}`} className="hover:bg-amber-500/10 transition">
+                          <tr key={item.id} className="hover:bg-amber-500/10 transition">
                             <td className="p-3 font-mono font-bold text-emerald-300 whitespace-nowrap">
                               {item.tanggal}
                               <span className="text-[10px] text-amber-200/70 block">Jam Ke-{item.jamKe || 1}</span>
@@ -2380,7 +2367,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </thead>
                     <tbody className="divide-y divide-[#d4af37]/10 bg-[#02130b]">
                       {rekapBulananSantri.map((s, idx) => (
-                        <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
+                        <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
                           <td className="p-3 text-center text-emerald-300 font-mono">{idx + 1}</td>
                           <td className="p-3 font-mono text-[#d4af37] font-bold">{s.id}</td>
                           <td className="p-3 font-bold text-white">{s.nama}</td>
@@ -2730,7 +2717,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         return true;
                       })
                       .map((s, idx) => (
-                        <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
+                        <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
                           <td className="p-3 text-center">
                             <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full font-bold font-mono text-xs ${
                               idx === 0 ? 'bg-[#d4af37] text-black shadow-lg shadow-[#d4af37]/40 ring-2 ring-[#f5e298]' :
@@ -2855,7 +2842,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/80">
                     {santriList.slice(0, 10).map((s, idx) => (
-                      <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
+                      <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
                         <td className="p-3 text-center text-emerald-300 font-mono">{idx + 1}</td>
                         <td className="p-3">
                           <span className="font-bold text-white block">{s.nama}</span>
@@ -3182,92 +3169,184 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* BAGIAN UJIAN: 3 TAB TERPISAH (TAB MUHAFAZHOH, TAB BACA KITAB, TAB KOREKSIAN KITAB) */}
-        {(activeTab === 'ujian-muhafadzoh' || activeTab === 'ujian-baca-kitab' || activeTab === 'ujian-koreksian-kitab' || activeTab === 'ujian-kitab') && (
+        {/* TAB: UJIAN MUHAFADZOH, KOREKSIAN KITAB, & BACA KITAB */}
+        {activeTab === 'ujian-kitab' && (
           <div className="space-y-6">
-            {/* SUBTAB SWITCHER BAR DI ATAS KETIGA TAB */}
-            <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-gradient-to-r from-[#03150c] via-[#020e08] to-[#041d11] border-2 border-[#d4af37]/50 shadow-xl">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black text-[#f5e298] uppercase tracking-wider flex items-center gap-1.5 px-2">
-                  <Award className="w-4 h-4 text-[#d4af37]" />
-                  <span>MENU BAGIAN UJIAN:</span>
-                </span>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('ujian-muhafadzoh')}
-                    className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow ${
-                      activeTab === 'ujian-muhafadzoh' || activeTab === 'ujian-kitab'
-                        ? 'bg-gradient-to-r from-[#d4af37] via-[#f5e298] to-[#c59e2b] text-black ring-2 ring-[#f5e298]/80 scale-102 font-extrabold'
-                        : 'bg-black/50 text-[#f3e5ab]/80 hover:bg-[#d4af37]/20 hover:text-white border border-[#d4af37]/30'
-                    }`}
-                  >
-                    <Award className="w-3.5 h-3.5" />
-                    <span>1. TAB MUHAFAZHOH</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('ujian-baca-kitab')}
-                    className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow ${
-                      activeTab === 'ujian-baca-kitab'
-                        ? 'bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white ring-2 ring-blue-300 scale-102 font-extrabold'
-                        : 'bg-black/50 text-blue-200/80 hover:bg-blue-500/20 hover:text-white border border-blue-500/30'
-                    }`}
-                  >
-                    <BookOpen className="w-3.5 h-3.5" />
-                    <span>2. TAB BACA KITAB</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('ujian-koreksian-kitab')}
-                    className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow ${
-                      activeTab === 'ujian-koreksian-kitab'
-                        ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-black ring-2 ring-amber-300 scale-102 font-extrabold'
-                        : 'bg-black/50 text-amber-200/80 hover:bg-amber-500/20 hover:text-white border border-amber-500/30'
-                    }`}
-                  >
-                    <CheckSquare className="w-3.5 h-3.5" />
-                    <span>3. TAB KOREKSIAN KITAB</span>
-                  </button>
+            <div className="card-3d rounded-3xl p-6 backdrop-blur flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border border-[#d4af37]/30">
+              <div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#0b3824] border border-[#d4af37]/50 flex items-center justify-center text-[#d4af37] shadow">
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-white text-gold-3d">
+                      Rekap Ujian Muhafadzoh, Koreksian Kitab, & Baca Kitab
+                    </h2>
+                    <p className="text-xs text-emerald-200/90">
+                      Terkoneksi langsung ke Dashboard Wali Santri di kolom bawah profil anak. Diatur dan dinilai melalui Option Panel.
+                    </p>
+                  </div>
                 </div>
               </div>
 
               <button
-                type="button"
                 onClick={() => {
                   setActiveTab('pengaturan');
                   setActiveControlSection('kelola_ujian_kitab');
                 }}
-                className="px-3.5 py-1.5 rounded-xl bg-[#0b3824] hover:bg-[#0e482e] border border-[#d4af37]/50 text-[#f5e298] text-xs font-bold flex items-center gap-1.5 transition shadow"
+                className="btn-3d-gold px-4 py-2.5 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow"
               >
-                <Sliders className="w-3.5 h-3.5 text-[#d4af37]" />
-                <span>Pengaturan Nilai (Option Panel)</span>
+                <Sliders className="w-4 h-4 text-black" />
+                <span>Input / Edit Nilai di Option Panel</span>
               </button>
             </div>
 
-            {/* KONTEN MASING-MASING TAB */}
-            {(activeTab === 'ujian-muhafadzoh' || activeTab === 'ujian-kitab') && (
-              <TabUjianMuhafadzoh
-                santriList={santriList}
-                onOpenInputModal={(s) => setUjianModalTarget({ santri: s, type: 'muhafadzoh' })}
-              />
-            )}
+            {/* Quick Cards Rata-Rata */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <div className="card-3d-glass rounded-2xl p-5 border border-[#d4af37]/40 space-y-1">
+                <span className="text-xs text-[#d4af37] font-bold block">1. Rata-rata Nilai Koreksian Kitab</span>
+                <div className="text-2xl font-black text-white font-mono">
+                  {(santriList.reduce((acc, s) => acc + Number(s.nilaiKoreksianKitab ?? 88), 0) / (santriList.length || 1)).toFixed(1)} / 100
+                </div>
+                <span className="text-[11px] text-emerald-300">Pemeriksaan Makna Gandul & Catatan Pegon</span>
+              </div>
 
-            {activeTab === 'ujian-baca-kitab' && (
-              <TabUjianBacaKitab
-                santriList={santriList}
-                onOpenInputModal={(s) => setUjianModalTarget({ santri: s, type: 'baca' })}
-              />
-            )}
+              <div className="card-3d-glass rounded-2xl p-5 border border-emerald-500/40 space-y-1">
+                <span className="text-xs text-emerald-300 font-bold block">2. Rata-rata Nilai Muhafadzoh</span>
+                <div className="text-2xl font-black text-emerald-300 font-mono">
+                  {(santriList.reduce((acc, s) => acc + Number(s.nilaiMuhafadzoh ?? 90), 0) / (santriList.length || 1)).toFixed(1)} / 100
+                </div>
+                <span className="text-[11px] text-emerald-200/90">Hafalan Matan Nadzhom Diniyah</span>
+              </div>
 
-            {activeTab === 'ujian-koreksian-kitab' && (
-              <TabUjianKoreksianKitab
-                santriList={santriList}
-                onOpenInputModal={(s) => setUjianModalTarget({ santri: s, type: 'koreksian' })}
-              />
-            )}
+              <div className="card-3d-glass rounded-2xl p-5 border border-blue-500/40 space-y-1">
+                <span className="text-xs text-blue-300 font-bold block">3. Rata-rata Nilai Baca Kitab</span>
+                <div className="text-2xl font-black text-blue-300 font-mono">
+                  {(santriList.reduce((acc, s) => acc + Number(s.nilaiBacaKitab ?? 86), 0) / (santriList.length || 1)).toFixed(1)} / 100
+                </div>
+                <span className="text-[11px] text-slate-300">Qira'atul Kutub & Fahmul Tarkib</span>
+              </div>
+            </div>
+
+            {/* Tabel Santri dengan 3 Nilai Utama */}
+            <div className="card-3d rounded-2xl p-5 border border-[#d4af37]/30 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <h3 className="text-sm font-bold text-white text-gold-3d">
+                  Daftar Nilai Santri Lengkap (Terkoneksi ke Wali Santri)
+                </h3>
+                <span className="text-xs text-[#d4af37] font-mono">
+                  Total: {santriList.length} Santri Terdaftar
+                </span>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25">
+                <table className="w-full text-xs text-left min-w-[900px]">
+                  <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
+                    <tr>
+                      <th className="p-3">Santri & Angkatan</th>
+                      <th className="p-3">Nilai Koreksian Kitab</th>
+                      <th className="p-3">Nilai Muhafadzoh</th>
+                      <th className="p-3">Nilai Baca Kitab</th>
+                      <th className="p-3">Penguji & Tanggal</th>
+                      <th className="p-3 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
+                    {santriList.map(s => (
+                      <tr key={s.id} className="hover:bg-[#d4af37]/5">
+                        <td className="p-3">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-9 h-9 rounded-full overflow-hidden bg-[#0b3824] border border-[#d4af37]/40 shrink-0">
+                              <img
+                                src={(s.foto && s.foto.trim()) || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=100&auto=format&fit=crop&q=80'}
+                                alt={s.nama}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).setAttribute('src', 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=100&auto=format&fit=crop&q=80');
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <span className="font-bold text-white block">{s.nama}</span>
+                              <span className="text-[10px] text-[#d4af37] font-mono">NIS: {s.id} • {s.kelas}</span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Nilai Koreksian Kitab */}
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded bg-[#d4af37]/20 border border-[#d4af37]/50 text-[#d4af37] font-mono font-black text-sm">
+                              {s.nilaiKoreksianKitab ?? 90}
+                            </span>
+                            <div>
+                              <span className="text-[10px] font-bold text-white block">
+                                {s.predikatKoreksianKitab || 'Mumtaz'}
+                              </span>
+                              <span className="text-[9px] text-slate-400 block truncate max-w-[150px]">
+                                Makna Gandul Sah & Lengkap
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Nilai Muhafadzoh */}
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 font-mono font-black text-sm">
+                              {s.nilaiMuhafadzoh ?? 92}
+                            </span>
+                            <div>
+                              <span className="text-[10px] font-bold text-white block">
+                                {s.predikatMuhafadzoh || 'Mumtaz'}
+                              </span>
+                              <span className="text-[9px] text-slate-400 block truncate max-w-[150px]">
+                                Hafalan Mutqin
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Nilai Baca Kitab */}
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded bg-blue-500/20 border border-blue-500/50 text-blue-300 font-mono font-black text-sm">
+                              {s.nilaiBacaKitab ?? 88}
+                            </span>
+                            <div>
+                              <span className="text-[10px] font-bold text-white block">
+                                {s.predikatBacaKitab || 'Jayyid Jiddan'}
+                              </span>
+                              <span className="text-[9px] text-slate-400 block truncate max-w-[150px]">
+                                Tarkib & I'rob Fashih
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="p-3">
+                          <span className="text-slate-300 block font-medium">{s.ustadzPengujiKitab || 'Ust. Ilyas'}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">{s.tanggalUjianKitab || '2026-09-22'}</span>
+                        </td>
+
+                        <td className="p-3 text-center">
+                          <button
+                            onClick={() => {
+                              setSelectedUjianSantriId(s.id);
+                              setActiveTab('pengaturan');
+                              setActiveControlSection('kelola_ujian_kitab');
+                            }}
+                            className="px-2.5 py-1 bg-[#d4af37]/20 hover:bg-[#d4af37] text-[#d4af37] hover:text-black font-bold rounded-lg transition"
+                          >
+                            Atur Nilai
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 
@@ -3402,10 +3481,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {santriInClass.map((santri, idx) => {
+                      {santriInClass.map(santri => {
                         const cur = santriAbsensiState[santri.id] || { status: 'Hadir', ket: '' };
                         return (
-                          <div key={`${santri.id}-${idx}`} className="card-3d-deep rounded-xl p-3.5 space-y-3">
+                          <div key={santri.id} className="card-3d-deep rounded-xl p-3.5 space-y-3">
                             <div className="flex items-center space-x-3">
                               <img
                                 src={(santri.foto && santri.foto.trim()) || 'https://via.placeholder.com/70x90'}
@@ -3512,7 +3591,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10">
                     {rekapBulananSantri.map((s, idx) => (
-                      <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
+                      <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
                         <td className="p-3 text-center text-emerald-300 font-mono">{idx + 1}</td>
                         <td className="p-3 font-mono text-[#d4af37]">{s.id}</td>
                         <td className="p-3 font-bold text-white">{s.nama}</td>
@@ -5353,12 +5432,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3">KAMAR PONDOK</th>
                       <th className="p-3">ALAMAT ASAL</th>
                       <th className="p-3 w-36 text-center">STATUS & RIWAYAT</th>
-                      <th className="p-3 w-48 text-center">AKSI & PENGATURAN</th>
+                      <th className="p-3 w-32 text-center">AKSI / HAPUS</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10">
                     {paginatedSantriTabResult.items.map((s, idx) => (
-                      <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
+                      <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
                         <td className="p-3 text-center font-bold text-[#d4af37]">
                           {(paginatedSantriTabResult.page - 1) * paginatedSantriTabResult.pageSize + idx + 1}
                         </td>
@@ -5415,33 +5494,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         </td>
                         <td className="p-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5 flex-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => setEditingSantri(s)}
-                              className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/30 hover:from-amber-500/40 hover:to-amber-600/50 border border-[#d4af37]/60 text-[#f5e298] hover:text-white text-xs font-bold inline-flex items-center gap-1.5 transition shadow active:scale-95 cursor-pointer"
-                              title="Edit data santri: nama, NIS, foto, alamat, kamar, wali, dsb."
-                            >
-                              <Sliders className="w-3.5 h-3.5 text-[#d4af37]" />
-                              <span>Edit / Setting</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (window.confirm(`Konfirmasi Penghapusan Data Santri:\n\nApakah Anda yakin ingin menghapus data santri:\nNama: ${s.nama}\nNIS: ${s.id}\nKelas: ${s.kelas}\n\nData ini akan dihapus secara manual karena santri sudah tidak mondok (boyong/pindah).`)) {
-                                  if (onDeleteSantri) {
-                                    onDeleteSantri(s.id);
-                                  }
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`Konfirmasi Penghapusan Data Santri:\n\nApakah Anda yakin ingin menghapus data santri:\nNama: ${s.nama}\nNIS: ${s.id}\nKelas: ${s.kelas}\n\nData ini akan dihapus secara manual karena santri sudah tidak mondok (boyong/pindah).`)) {
+                                if (onDeleteSantri) {
+                                  onDeleteSantri(s.id);
                                 }
-                              }}
-                              className="px-2.5 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-800 border border-red-500/50 text-red-200 text-xs font-bold inline-flex items-center gap-1.5 transition shadow active:scale-95 cursor-pointer"
-                              title="Hapus data santri yang sudah tidak mondok (boyong)"
-                            >
-                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                              <span>Hapus</span>
-                            </button>
-                          </div>
+                              }
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-800 border border-red-500/50 text-red-200 text-xs font-bold inline-flex items-center gap-1.5 transition shadow active:scale-95"
+                            title="Hapus data santri yang sudah tidak mondok (boyong)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                            <span>Hapus</span>
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -8377,8 +8444,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onChange={(e) => setSelectedUjianSantriId(e.target.value)}
                         className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
                       >
-                        {santriList.map((s, idx) => (
-                          <option key={`${s.id}-${idx}`} value={s.id}>
+                        {santriList.map(s => (
+                          <option key={s.id} value={s.id}>
                             {s.nama} ({s.id} — {s.kelas})
                           </option>
                         ))}
@@ -9422,7 +9489,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/80">
                             {paginatedBoyongResult.items.map((s, idx) => (
-                              <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5">
+                              <tr key={s.id} className="hover:bg-[#d4af37]/5">
                                 <td className="p-2.5 text-center font-bold text-[#d4af37]">
                                   {(paginatedBoyongResult.page - 1) * paginatedBoyongResult.pageSize + idx + 1}
                                 </td>
@@ -10947,8 +11014,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onChange={(e) => setSelectedProfileSantriId(e.target.value)}
                         className="w-full bg-[#0a301f] border border-[#d4af37]/50 rounded-xl p-3 text-sm text-white font-semibold"
                       >
-                        {santriList.map((s, idx) => (
-                          <option key={`${s.id}-${idx}`} value={s.id}>
+                        {santriList.map(s => (
+                          <option key={s.id} value={s.id}>
                             {s.nama} — NIS: {s.id} ({s.kelas})
                           </option>
                         ))}
@@ -11176,8 +11243,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             onChange={(e) => setInputSyahriyahForm({ ...inputSyahriyahForm, idSantri: e.target.value })}
                             className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
                           >
-                            {santriList.map((s, idx) => (
-                              <option key={`${s.id}-${idx}`} value={s.id}>{s.nama} ({s.id})</option>
+                            {santriList.map(s => (
+                              <option key={s.id} value={s.id}>{s.nama} ({s.id})</option>
                             ))}
                           </select>
                         </div>
@@ -11270,10 +11337,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                            {syahriyahList.slice(0, 10).map((sy, idx) => {
+                            {syahriyahList.slice(0, 10).map((sy) => {
                               const sObj = santriList.find(s => s.id === sy.idSantri);
                               return (
-                                <tr key={`${sy.id}-${idx}`} className="hover:bg-[#d4af37]/5">
+                                <tr key={sy.id} className="hover:bg-[#d4af37]/5">
                                   <td className="p-3 font-bold text-white">
                                     {sObj?.nama || sy.idSantri} <span className="text-[10px] text-emerald-400 font-mono">({sy.idSantri})</span>
                                   </td>
@@ -11359,8 +11426,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             onChange={(e) => setInputUangSakuForm({ ...inputUangSakuForm, idSantri: e.target.value })}
                             className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
                           >
-                            {santriList.map((s, idx) => (
-                              <option key={`${s.id}-${idx}`} value={s.id}>
+                            {santriList.map(s => (
+                              <option key={s.id} value={s.id}>
                                 {s.nama} (Saldo: Rp {(s.saldoUangSaku ?? 0).toLocaleString('id-ID')})
                               </option>
                             ))}
@@ -11440,10 +11507,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                            {uangSakuList.slice(0, 10).map((us, idx) => {
+                            {uangSakuList.slice(0, 10).map((us) => {
                               const sObj = santriList.find(s => s.id === us.idSantri);
                               return (
-                                <tr key={`${us.id}-${idx}`} className="hover:bg-[#d4af37]/5">
+                                <tr key={us.id} className="hover:bg-[#d4af37]/5">
                                   <td className="p-3 font-mono text-emerald-300">{us.tanggal}</td>
                                   <td className="p-3 font-bold text-white">{sObj?.nama || us.idSantri}</td>
                                   <td className="p-3">
@@ -11582,8 +11649,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             onChange={(e) => setInputKurikulumForm({ ...inputKurikulumForm, ustadzPengampu: e.target.value })}
                             className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
                           >
-                            {guruList.map((g, idx) => (
-                              <option key={`${g.id}-${idx}`} value={g.nama}>{g.nama} ({g.mapel})</option>
+                            {guruList.map(g => (
+                              <option key={g.id} value={g.nama}>{g.nama} ({g.mapel})</option>
                             ))}
                           </select>
                         </div>
@@ -11617,8 +11684,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                            {kurikulumList.map((k, idx) => (
-                              <tr key={`${k.id}-${idx}`} className="hover:bg-[#d4af37]/5">
+                            {kurikulumList.map((k) => (
+                              <tr key={k.id} className="hover:bg-[#d4af37]/5">
                                 <td className="p-3 font-semibold text-[#d4af37]">{k.kelas}</td>
                                 <td className="p-3 text-white font-bold">{k.mapel}</td>
                                 <td className="p-3 font-extrabold text-white text-sm">{k.kitab}</td>
@@ -11974,78 +12041,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
         </div>
-      )}
-
-      {/* MODAL EDIT / SETTING DATA SANTRI */}
-      {editingSantri && (
-        <EditSantriModal
-          isOpen={Boolean(editingSantri)}
-          onClose={() => setEditingSantri(null)}
-          santri={editingSantri}
-          allSantriList={santriList}
-          onSave={(updatedSantri, originalId) => {
-            if (onUpdateSantriProfile) {
-              onUpdateSantriProfile(updatedSantri, originalId);
-            } else {
-              const updated = santriList.map(s => s.id === originalId ? updatedSantri : s);
-              localStorage.setItem('sim_santri', JSON.stringify(updated));
-            }
-          }}
-          onNotify={(msg) => {
-            setRealtimeAlert({
-              type: 'santri',
-              title: 'Edit Data Santri',
-              detail: msg,
-              time: new Date().toLocaleTimeString('id-ID')
-            });
-          }}
-        />
-      )}
-
-      {/* MODAL INPUT / EDIT NILAI UJIAN */}
-      {ujianModalTarget && (
-        <ModalInputNilaiUjian
-          isOpen={Boolean(ujianModalTarget)}
-          onClose={() => setUjianModalTarget(null)}
-          santri={ujianModalTarget.santri}
-          type={ujianModalTarget.type}
-          onSave={(updatedSantri) => {
-            if (onUpdateSantriProfile) {
-              onUpdateSantriProfile(updatedSantri);
-            } else {
-              const updated = santriList.map(s => s.id === updatedSantri.id ? updatedSantri : s);
-              localStorage.setItem('sim_santri', JSON.stringify(updated));
-            }
-            if (onSaveUjianSantri) {
-              onSaveUjianSantri({
-                id: `UJN-${updatedSantri.id}-${Date.now()}`,
-                idSantri: updatedSantri.id,
-                namaSantri: updatedSantri.nama,
-                kelas: updatedSantri.kelas,
-                semester: settings.semester_aktif || 'Semester Ganjil 2026/2027',
-                tanggal: updatedSantri.tanggalUjianKitab || new Date().toISOString().split('T')[0],
-                nilaiKoreksianKitab: Number(updatedSantri.nilaiKoreksianKitab ?? 90),
-                predikatKoreksianKitab: updatedSantri.predikatKoreksianKitab || 'Mumtaz',
-                kitabKoreksian: updatedSantri.kitabKoreksian,
-                nilaiMuhafadzoh: Number(updatedSantri.nilaiMuhafadzoh ?? 92),
-                predikatMuhafadzoh: updatedSantri.predikatMuhafadzoh || 'Mumtaz',
-                kitabMuhafadzoh: updatedSantri.kitabMuhafadzoh,
-                nilaiBacaKitab: Number(updatedSantri.nilaiBacaKitab ?? 88),
-                predikatBacaKitab: updatedSantri.predikatBacaKitab || 'Jayyid Jiddan',
-                kitabBaca: updatedSantri.kitabBaca,
-                ustadzPenguji: updatedSantri.ustadzPengujiKitab || 'Ust. Muhammad Ilyas'
-              });
-            }
-          }}
-          onNotify={(msg) => {
-            setRealtimeAlert({
-              type: 'santri',
-              title: 'Nilai Ujian Santri',
-              detail: msg,
-              time: new Date().toLocaleTimeString('id-ID')
-            });
-          }}
-        />
       )}
     </div>
   );

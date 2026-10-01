@@ -106,15 +106,7 @@ export function getNextAcademicYear(currentYear: string): string {
  * Inisialisasi daftar keputusan kenaikan kelas untuk seluruh santri
  */
 export function buildInitialDecisions(santriList: Santri[]): SantriPromotionDecision[] {
-  const seen = new Set<string>();
-  const uniqueSantri = (santriList || []).filter((s, idx) => {
-    const rawId = s?.id ? String(s.id).trim() : `temp-${idx}`;
-    if (!rawId || seen.has(rawId)) return false;
-    seen.add(rawId);
-    return true;
-  });
-
-  return uniqueSantri.map(s => {
+  return santriList.map(s => {
     const rule = CLASS_PROGRESSION_MAP[s.kelas];
     const defaultAction: PromotionAction = rule ? rule.defaultAction : 'naik';
     const defaultNextClass = rule ? rule.nextClass : s.kelas;

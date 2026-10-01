@@ -610,7 +610,7 @@ export const Storage5TBManager: React.FC<Storage5TBManagerProps> = ({
                 </tr>
               ) : (
                 paginatedObjects.items.map((item, idx) => (
-                  <tr key={`${item.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
+                  <tr key={item.id} className="hover:bg-[#d4af37]/5 transition">
                     <td className="p-3 text-center font-bold text-[#d4af37]">
                       {(currentPage - 1) * pageSize + idx + 1}
                     </td>

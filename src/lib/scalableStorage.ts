@@ -478,23 +478,11 @@ export async function downloadStorageObject(item: StorageObjectMetadata): Promis
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } else {
-      const a = document.createElement('a');
-      a.href = item.downloadUrl;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      window.open(item.downloadUrl, '_blank');
     }
   } catch (err) {
     console.error('Gagal mengunduh file:', err);
-    const a = document.createElement('a');
-    a.href = item.downloadUrl;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    window.open(item.downloadUrl, '_blank');
   }
 }
 
