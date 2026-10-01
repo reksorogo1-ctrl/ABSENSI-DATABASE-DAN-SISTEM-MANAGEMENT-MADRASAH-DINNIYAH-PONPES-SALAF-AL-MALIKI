@@ -5,7 +5,7 @@ import {
   onAuthStateChanged, 
   User 
 } from 'firebase/auth';
-import { auth, isMobileDevice, checkFirebaseRedirectResult } from './firebase';
+import { auth, isMobileDevice, isStandaloneApp, checkFirebaseRedirectResult } from './firebase';
 import firebaseConfig from '../firebase-applet-config.json';
 
 export { auth };
@@ -172,7 +172,35 @@ export const googleSignIn = async (forceRedirect: boolean = false): Promise<{ us
   try {
     isSigningIn = true;
     
-    // Pada HP/Mobile, langsung gunakan signInWithRedirect agar popup tidak diblokir dan tidak terjadi restart tab
+    // Jika di dalam PWA Standalone (Web App Layar Utama), JANGAN redirect keluar dari app container
+    if (isStandaloneApp()) {
+      console.info('PWA Standalone Mode: Menggunakan GIS / Popup di dalam app agar tidak terlempar keluar');
+      if (typeof window !== 'undefined' && window.google?.accounts?.oauth2) {
+        try {
+          const gisResult = await requestGISToken();
+          if (gisResult?.accessToken && typeof window !== 'undefined') {
+            localStorage.setItem('sim_google_access_token', gisResult.accessToken);
+          }
+          return gisResult;
+        } catch (gisErr) {
+          console.warn('GIS di PWA gagal, mencoba Firebase popup:', gisErr);
+        }
+      }
+      try {
+        const result = await signInWithPopup(auth, provider);
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        if (credential?.accessToken) {
+          cachedAccessToken = credential.accessToken;
+          localStorage.setItem('sim_google_access_token', credential.accessToken);
+        }
+        currentGoogleUser = result.user;
+        return { user: result.user, accessToken: cachedAccessToken || '' };
+      } catch (e: any) {
+        throw new Error('Pada Web App (Layar Utama HP), gunakan Masuk dengan Sandi Admin atau salin Access Token untuk menghubungkan Google Sheets tanpa keluar aplikasi.');
+      }
+    }
+
+    // Pada browser HP biasa (Chrome / Safari), gunakan signInWithRedirect
     if (forceRedirect || isMobileDevice()) {
       console.info('Menggunakan signInWithRedirect untuk lingkungan browser HP/mobile...');
       await signInWithRedirect(auth, provider);

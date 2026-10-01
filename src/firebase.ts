@@ -107,9 +107,15 @@ export async function testConnection(): Promise<boolean> {
 // Auto-run connection test on boot
 testConnection();
 
-// Firebase Auth helper: otomatis menggunakan signInWithRedirect di HP agar tidak terblokir / restart
+// Firebase Auth helper: otomatis menggunakan signInWithRedirect di browser HP (kecuali PWA standalone)
 export async function signInWithGoogleFirebase(forceRedirect: boolean = false) {
   try {
+    if (isStandaloneApp()) {
+      console.info('PWA Standalone Mode: Menggunakan popup di dalam container');
+      const result = await signInWithPopup(auth, googleProvider);
+      return result.user;
+    }
+
     if (forceRedirect || isMobileDevice()) {
       console.info('Menggunakan signInWithRedirect untuk lingkungan browser HP/mobile constraints...');
       await signInWithRedirect(auth, googleProvider);
@@ -119,7 +125,7 @@ export async function signInWithGoogleFirebase(forceRedirect: boolean = false) {
       return result.user;
     }
   } catch (error: any) {
-    if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/popup-closed-by-user') {
+    if (!isStandaloneApp() && (error?.code === 'auth/popup-blocked' || error?.code === 'auth/popup-closed-by-user')) {
       console.warn('Popup terblokir oleh browser HP, mengalihkan ke signInWithRedirect...');
       await signInWithRedirect(auth, googleProvider);
       return null;
@@ -227,6 +233,57 @@ export function subscribeSettingsFromFirestore(callback: (settings: Partial<AppS
     },
     (error) => {
       console.warn('Realtime settings subscription error:', error);
+    }
+  );
+}
+
+// Deteksi apakah sedang dibuka dalam mode Web App PWA (Layar Utama HP / Standalone)
+export const isStandaloneApp = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as any).standalone === true ||
+    document.referrer.includes('android-app://')
+  );
+};
+
+// Sinkronisasi data master antar perangkat (Laptop, HP, Web App) via Firestore
+export async function saveMasterDataToFirestore(key: string, data: any): Promise<void> {
+  try {
+    await setDoc(doc(db, 'master_data', key), {
+      data: JSON.stringify(data),
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (error) {
+    console.warn(`Gagal menyimpan master_data/${key} ke Firestore:`, error);
+  }
+}
+
+export async function loadMasterDataFromFirestore<T>(key: string): Promise<T | null> {
+  try {
+    const snap = await getDoc(doc(db, 'master_data', key));
+    if (snap.exists() && snap.data()?.data) {
+      return JSON.parse(snap.data().data) as T;
+    }
+  } catch (error) {
+    console.warn(`Gagal memuat master_data/${key} dari Firestore:`, error);
+  }
+  return null;
+}
+
+export function subscribeMasterDataFromFirestore<T>(key: string, callback: (data: T) => void) {
+  return onSnapshot(
+    doc(db, 'master_data', key),
+    (snap) => {
+      if (snap.exists() && snap.data()?.data) {
+        try {
+          const parsed = JSON.parse(snap.data().data) as T;
+          callback(parsed);
+        } catch {}
+      }
+    },
+    (err) => {
+      console.warn(`Realtime subscription error for master_data/${key}:`, err);
     }
   );
 }

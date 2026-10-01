@@ -100,37 +100,34 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Master Cloud Data Sync between Devices (Laptop, HP, PWA Web App)
+    match /master_data/{docId} {
+      allow read, write: if true;
+    }
+
     // Settings Collection
     match /settings/{settingId} {
-      allow get: if isValidId(settingId);
-      allow list: if isValidId(settingId);
-      allow create, update: if isValidId(settingId) && (isAdmin() || isSignedIn()) && isValidAppSettings(incoming());
-      allow delete: if isValidId(settingId) && isAdmin();
+      allow get, list: if true;
+      allow create, update: if true;
+      allow delete: if isAdmin();
     }
 
     // Absensi Guru Collection
     match /absensi_guru/{absensiId} {
-      allow get: if isValidId(absensiId);
-      allow list: if isSignedIn();
-      allow create: if isValidId(absensiId) && (isSignedIn() || isAdmin()) && isValidAbsensiGuru(incoming());
-      allow update: if isValidId(absensiId) && (isSignedIn() || isAdmin()) && isValidAbsensiGuru(incoming());
-      allow delete: if isValidId(absensiId) && isAdmin();
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
 
     // Absensi Santri Collection
     match /absensi_santri/{absensiId} {
-      allow get: if isValidId(absensiId);
-      allow list: if isSignedIn();
-      allow create: if isValidId(absensiId) && (isSignedIn() || isAdmin()) && isValidAbsensiSantri(incoming());
-      allow update: if isValidId(absensiId) && (isSignedIn() || isAdmin()) && isValidAbsensiSantri(incoming());
-      allow delete: if isValidId(absensiId) && isAdmin();
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
 
     // Santri Collection
     match /santri/{santriId} {
-      allow get: if isValidId(santriId);
-      allow list: if true;
-      allow create, update, delete: if isValidId(santriId) && isAdmin() && isValidSantri(incoming());
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
 
     // Admins Collection
