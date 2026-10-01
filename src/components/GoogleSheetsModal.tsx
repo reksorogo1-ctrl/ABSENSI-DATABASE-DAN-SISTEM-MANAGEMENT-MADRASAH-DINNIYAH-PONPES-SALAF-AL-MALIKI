@@ -766,7 +766,7 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
               {/* 1. Google Account Connection Card */}
               <div className="p-4 rounded-xl bg-[#02120a]/80 border border-[#d4af37]/20 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center space-x-3.5">
-                  {currentUser?.photoURL ? (
+                  {currentUser?.photoURL && currentUser.photoURL.trim() !== '' ? (
                     <img 
                       src={currentUser.photoURL} 
                       alt="Avatar" 

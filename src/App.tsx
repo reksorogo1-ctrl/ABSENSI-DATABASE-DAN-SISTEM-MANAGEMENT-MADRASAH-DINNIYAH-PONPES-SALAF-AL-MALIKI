@@ -44,6 +44,19 @@ import { DoorTransition } from './components/DoorTransition';
 import { LoginScreen } from './components/LoginScreen';
 import { GoogleSheetsModal } from './components/GoogleSheetsModal';
 
+function deduplicateSantriList(list: Santri[]): Santri[] {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set<string>();
+  return list.filter((s, idx) => {
+    const rawId = s?.id ? String(s.id).trim() : `temp-${idx}`;
+    if (!rawId || seen.has(rawId)) {
+      return false;
+    }
+    seen.add(rawId);
+    return true;
+  });
+}
+
 export default function App() {
   // Intro Video State - disabled to open dashboard login directly
   const [showIntro, setShowIntro] = useState<boolean>(false);
@@ -115,7 +128,7 @@ export default function App() {
   });
   const [santriList, setSantriList] = useState<Santri[]>(() => {
     const saved = localStorage.getItem('sim_santri');
-    return saved ? JSON.parse(saved) : INITIAL_SANTRI_LIST;
+    return deduplicateSantriList(saved ? JSON.parse(saved) : INITIAL_SANTRI_LIST);
   });
   const [guruList, setGuruList] = useState<GuruPengajar[]>(() => {
     const saved = localStorage.getItem('sim_guru');
@@ -306,8 +319,9 @@ export default function App() {
     // 1. Data Santri
     loadMasterDataFromFirestore<Santri[]>('santri').then((data) => {
       if (data && Array.isArray(data) && data.length > 0) {
-        setSantriList(data);
-        localStorage.setItem('sim_santri', JSON.stringify(data));
+        const cleaned = deduplicateSantriList(data);
+        setSantriList(cleaned);
+        localStorage.setItem('sim_santri', JSON.stringify(cleaned));
       } else {
         saveMasterDataToFirestore('santri', santriList);
       }
@@ -532,8 +546,9 @@ export default function App() {
       ]);
 
       if (remoteSantri && remoteSantri.length > 0) {
-        setSantriList(remoteSantri);
-        localStorage.setItem('sim_santri', JSON.stringify(remoteSantri));
+        const cleaned = deduplicateSantriList(remoteSantri);
+        setSantriList(cleaned);
+        localStorage.setItem('sim_santri', JSON.stringify(cleaned));
       }
       if (remoteGuru && remoteGuru.length > 0) {
         setGuruList(remoteGuru);
@@ -578,8 +593,9 @@ export default function App() {
     settings?: Partial<AppSettings>;
   }) => {
     if (imported.santriList && imported.santriList.length > 0) {
-      setSantriList(imported.santriList);
-      localStorage.setItem('sim_santri', JSON.stringify(imported.santriList));
+      const cleaned = deduplicateSantriList(imported.santriList);
+      setSantriList(cleaned);
+      localStorage.setItem('sim_santri', JSON.stringify(cleaned));
     }
     if (imported.guruList && imported.guruList.length > 0) {
       setGuruList(imported.guruList);
@@ -840,14 +856,66 @@ export default function App() {
     saveMasterDataToFirestore('santri', updated);
   };
 
-  const handleUpdateSantriProfile = (updatedSantri: Santri) => {
-    const updated = santriList.map(s => s.id === updatedSantri.id ? updatedSantri : s);
-    setSantriList(updated);
-    localStorage.setItem('sim_santri', JSON.stringify(updated));
-    saveMasterDataToFirestore('santri', updated);
-    if (session?.role === 'wali_santri' && session.identifier === updatedSantri.id) {
+  const handleBatchUpdateSantri = (updatedList: Santri[], updatedSettings?: Partial<AppSettings>) => {
+    const cleaned = deduplicateSantriList(updatedList);
+    setSantriList(cleaned);
+    localStorage.setItem('sim_santri', JSON.stringify(cleaned));
+    saveMasterDataToFirestore('santri', cleaned);
+
+    if (updatedSettings) {
+      const mergedSettings = { ...settings, ...updatedSettings };
+      setSettings(mergedSettings);
+      localStorage.setItem('sim_settings', JSON.stringify(mergedSettings));
+      saveMasterDataToFirestore('settings', mergedSettings);
+    }
+  };
+
+  const handleUpdateSantriProfile = (updatedSantri: Santri, oldId?: string) => {
+    const targetId = oldId || updatedSantri.id;
+    const updated = santriList.map(s => s.id === targetId ? updatedSantri : s);
+    const cleaned = deduplicateSantriList(updated);
+    setSantriList(cleaned);
+    localStorage.setItem('sim_santri', JSON.stringify(cleaned));
+    saveMasterDataToFirestore('santri', cleaned);
+
+    // Jika NIS berubah, perbarui referensi relasi data santri agar tidak terputus
+    if (oldId && oldId !== updatedSantri.id) {
+      setAbsensiSantriList(prev => {
+        const u = prev.map(a => a.idSantri === oldId ? { ...a, idSantri: updatedSantri.id, namaSantri: updatedSantri.nama } : a);
+        localStorage.setItem('sim_absensi_santri', JSON.stringify(u));
+        saveMasterDataToFirestore('absensiSantri', u);
+        return u;
+      });
+      setNilaiList(prev => {
+        const u = prev.map(n => n.idSantri === oldId ? { ...n, idSantri: updatedSantri.id, nama: updatedSantri.nama } : n);
+        localStorage.setItem('sim_nilai', JSON.stringify(u));
+        saveMasterDataToFirestore('nilai', u);
+        return u;
+      });
+      setNadzhomList(prev => {
+        const u = prev.map(n => n.idSantri === oldId ? { ...n, idSantri: updatedSantri.id, nama: updatedSantri.nama } : n);
+        localStorage.setItem('sim_nadzhom', JSON.stringify(u));
+        saveMasterDataToFirestore('nadzhom', u);
+        return u;
+      });
+      setSyahriyahList(prev => {
+        const u = prev.map(s => s.idSantri === oldId ? { ...s, idSantri: updatedSantri.id, namaSantri: updatedSantri.nama } : s);
+        localStorage.setItem('sim_syahriyah', JSON.stringify(u));
+        saveMasterDataToFirestore('syahriyah', u);
+        return u;
+      });
+      setUangSakuList(prev => {
+        const u = prev.map(s => s.idSantri === oldId ? { ...s, idSantri: updatedSantri.id, namaSantri: updatedSantri.nama } : s);
+        localStorage.setItem('sim_uang_saku', JSON.stringify(u));
+        saveMasterDataToFirestore('uangSaku', u);
+        return u;
+      });
+    }
+
+    if (session?.role === 'wali_santri' && (session.identifier === targetId || session.identifier === updatedSantri.id)) {
       setSession({
         ...session,
+        identifier: updatedSantri.id,
         santriData: updatedSantri
       });
     }
@@ -1271,6 +1339,7 @@ export default function App() {
             onSaveSettings={handleSaveSettings}
             onSaveDashboardAndReset={handleSaveDashboardAndReset}
             onUpdateSantriProfile={handleUpdateSantriProfile}
+            onBatchUpdateSantri={handleBatchUpdateSantri}
             onSaveSyahriyah={handleSaveSyahriyah}
             onSaveUangSaku={handleSaveUangSaku}
             onSaveKurikulum={handleSaveKurikulum}
