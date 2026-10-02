@@ -100,7 +100,7 @@ export async function getStoredVideoBlobUrl(): Promise<string | null> {
   }
 }
 
-// Save a streaming / web URL (e.g. Cloudinary, YouTube direct, direct MP4 link)
+// Save a streaming / web URL (e.g. Cloudinary, Firebase, YouTube direct, direct MP4 link)
 export function saveVideoUrl(url: string, label?: string): void {
   localStorage.setItem(LS_VIDEO_URL_KEY, url);
   localStorage.setItem(LS_VIDEO_NAME_KEY, label || url.split('/').pop() || 'Video URL Online');
