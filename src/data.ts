@@ -18,6 +18,26 @@ export const DEFAULT_SETTINGS: AppSettings = {
   background_url: '',
   password_admin: 'salaf123',
   password_option_panel: 'admin123',
+  tahun_ajaran: '2026/2027',
+  daftar_tahun_ajaran: [
+    '2026/2027',
+    '2025/2026',
+    '2024/2025',
+    '2023/2024',
+    '2022/2023'
+  ],
+  daftar_nadzhom: [
+    'NADZHOM IMRITHI',
+    'NADZHOM ALFIYAH (JILID 1)',
+    'NADZHOM ALFIYAH (JILID 2)',
+    'NADZHOM ALFIYAH (KHATAM)',
+    'NADZHOM AQIDATUL AWAM',
+    'NADZHOM MAQSUD',
+    'NADZHOM ROISYIYAH',
+    'NADZHOM JAUHARATUT TAUHID',
+    'NADZHOM HIDAYATUS SHIBYAN'
+  ],
+  semester_aktif: 'Semester Ganjil',
   intro_video_url: '/assets/intro_salaf_almaliki.mp4',
   intro_video_name: 'The Journey of Knowledge — Salaf Al-Maliki (Bawaan)',
   intro_video_type: 'default',

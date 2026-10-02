@@ -133,32 +133,20 @@ export async function saveSettingsToFirestore(settings: Partial<AppSettings>): P
   try {
     const cleanSettings: Record<string, any> = {
       id: 'general',
+      ...settings,
       updatedAt: new Date().toISOString()
     };
 
-    // Only set defined keys to avoid invalid schema writes
-    if (settings.nama_pondok) cleanSettings.nama_pondok = settings.nama_pondok;
-    if (settings.nama_madrasah) cleanSettings.nama_madrasah = settings.nama_madrasah;
-    if (settings.judul_aplikasi) cleanSettings.judul_aplikasi = settings.judul_aplikasi;
-    if (settings.logo_pondok) cleanSettings.logo_pondok = settings.logo_pondok;
-    if (settings.logo_madrasah) cleanSettings.logo_madrasah = settings.logo_madrasah;
-    if (settings.background_url) cleanSettings.background_url = settings.background_url;
-    if (settings.link_instagram) cleanSettings.link_instagram = settings.link_instagram;
-    if (settings.link_tiktok) cleanSettings.link_tiktok = settings.link_tiktok;
-    if (settings.link_youtube) cleanSettings.link_youtube = settings.link_youtube;
-    if (settings.link_wa) cleanSettings.link_wa = settings.link_wa;
-    if (typeof settings.geofencing_enabled === 'boolean') cleanSettings.geofencing_enabled = settings.geofencing_enabled;
-    if (typeof settings.geofencing_locked === 'boolean') cleanSettings.geofencing_locked = settings.geofencing_locked;
-    if (settings.geofencing_zone_name) cleanSettings.geofencing_zone_name = settings.geofencing_zone_name;
-    if (typeof settings.geofencing_latitude === 'number') cleanSettings.geofencing_latitude = settings.geofencing_latitude;
-    if (typeof settings.geofencing_longitude === 'number') cleanSettings.geofencing_longitude = settings.geofencing_longitude;
-    if (typeof settings.geofencing_radius_meters === 'number') cleanSettings.geofencing_radius_meters = settings.geofencing_radius_meters;
-    if (typeof settings.geofencing_max_gps_accuracy === 'number') cleanSettings.geofencing_max_gps_accuracy = settings.geofencing_max_gps_accuracy;
-    if (typeof settings.toleransi_keterlambatan_menit === 'number') cleanSettings.toleransi_keterlambatan_menit = settings.toleransi_keterlambatan_menit;
+    // Remove any undefined keys to prevent Firestore write errors
+    Object.keys(cleanSettings).forEach(key => {
+      if (cleanSettings[key] === undefined) {
+        delete cleanSettings[key];
+      }
+    });
 
     await setDoc(doc(db, 'settings', 'general'), cleanSettings, { merge: true });
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    console.error('Error saving settings to Firestore:', error);
   }
 }
 
@@ -174,6 +162,81 @@ export function subscribeSettingsFromFirestore(callback: (settings: Partial<AppS
     },
     (error) => {
       console.warn('Realtime settings subscription error:', error);
+    }
+  );
+}
+
+// =========================================================================
+// REAL-TIME APP MASTER DATA ENGINE (WEBSITE & WEB APP SINGLE SOURCE OF TRUTH)
+// =========================================================================
+
+export interface AppCollectionEnvelope<T = any> {
+  id: string;
+  list: T[];
+  updatedAt: string;
+  source?: string;
+}
+
+/**
+ * Save an entire collection atomically to Firestore.
+ * Automatically notifies all connected clients (Website and Web App) via onSnapshot.
+ */
+export async function saveCollectionToFirestore<T>(collectionKey: string, list: T[]): Promise<void> {
+  try {
+    // Sanitasi list agar tidak ada nilai undefined
+    const sanitizedList = JSON.parse(JSON.stringify(list));
+    const envelope: AppCollectionEnvelope<T> = {
+      id: collectionKey,
+      list: sanitizedList,
+      updatedAt: new Date().toISOString(),
+      source: 'web_client'
+    };
+
+    await setDoc(doc(db, 'app_data', collectionKey), envelope, { merge: true });
+  } catch (error) {
+    console.error(`Gagal menyimpan koleksi ${collectionKey} ke Firestore:`, error);
+  }
+}
+
+/**
+ * Load a collection once from Firestore (fallback or initialization)
+ */
+export async function loadCollectionFromFirestore<T>(collectionKey: string): Promise<T[] | null> {
+  try {
+    const snap = await getDoc(doc(db, 'app_data', collectionKey));
+    if (snap.exists()) {
+      const data = snap.data() as AppCollectionEnvelope<T>;
+      if (data && Array.isArray(data.list)) {
+        return data.list;
+      }
+    }
+    return null;
+  } catch (error) {
+    console.warn(`Gagal memuat ${collectionKey} dari Firestore:`, error);
+    return null;
+  }
+}
+
+/**
+ * Subscribe to real-time changes for a collection.
+ * Triggers callback immediately on snapshot changes, instantly syncing Website and Web App.
+ */
+export function subscribeCollectionFromFirestore<T>(
+  collectionKey: string,
+  callback: (list: T[]) => void
+): () => void {
+  return onSnapshot(
+    doc(db, 'app_data', collectionKey),
+    (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as AppCollectionEnvelope<T>;
+        if (data && Array.isArray(data.list)) {
+          callback(data.list);
+        }
+      }
+    },
+    (error) => {
+      console.warn(`Realtime subscription error for ${collectionKey}:`, error);
     }
   );
 }

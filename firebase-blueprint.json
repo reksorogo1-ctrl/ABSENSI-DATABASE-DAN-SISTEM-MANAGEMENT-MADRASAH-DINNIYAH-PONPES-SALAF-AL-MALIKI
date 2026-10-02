@@ -301,12 +301,35 @@
         }
       },
       "required": ["id", "email"]
+    },
+    "AppData": {
+      "title": "AppData",
+      "description": "Unified real-time synchronized data store for Al-Maliki Website and Web App",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Identifier for the synchronized collection list"
+        },
+        "updatedAt": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["id"]
     }
   },
   "firestore": {
     "/settings/{settingId}": {
       "schema": "AppSettings",
       "description": "Pengaturan menyeluruh aplikasi termasuk sosial media dan koordinat geofencing"
+    },
+    "/app_data/{docId}": {
+      "schema": "AppData",
+      "description": "Master synchronized collections for Website and Web App"
     },
     "/absensi_guru/{absensiId}": {
       "schema": "AbsensiGuru",

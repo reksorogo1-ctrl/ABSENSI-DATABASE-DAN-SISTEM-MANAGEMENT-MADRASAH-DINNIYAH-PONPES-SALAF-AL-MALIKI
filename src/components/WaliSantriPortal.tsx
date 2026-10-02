@@ -22,7 +22,7 @@ interface WaliSantriPortalProps {
   uangSakuList?: UangSakuRecord[];
   ujianList?: UjianSantriRecord[];
   onLogout: () => void;
-  spreadsheetId: string;
+  spreadsheetId?: string;
   settings?: AppSettings;
 }
 

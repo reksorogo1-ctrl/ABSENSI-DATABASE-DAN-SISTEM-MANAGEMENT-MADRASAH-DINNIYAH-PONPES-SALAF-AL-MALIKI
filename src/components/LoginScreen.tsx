@@ -30,7 +30,7 @@ interface LoginScreenProps {
   showForgotPasswordModal: boolean; setShowForgotPasswordModal: (b: boolean) => void;
   onSubmit: (e: React.FormEvent) => void;
   onGoogleSignIn: () => void;
-  onSyncSheets: () => void;
+  onSyncSheets?: () => void;
   onReplayIntro: () => void;
 }
 
@@ -320,7 +320,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
                 {socialLinks.map(({ href, Icon, t, id }) => (
                   <a key={t} href={href} target="_blank" rel="noreferrer" title={t} data-testid={id} className="w-10 h-10 rounded-full border-2 border-[#d4af37]/70 bg-[#031d12]/60 text-[#faebaa] hover:bg-[#d4af37] hover:text-black flex items-center justify-center transition shadow"><Icon className="w-4 h-4" /></a>
                 ))}
-                <button type="button" title="Sinkronisasi Google Sheets" data-testid="sync-sheets-btn" onClick={onSyncSheets} className="w-10 h-10 rounded-full border-2 border-[#d4af37]/70 bg-[#031d12]/60 text-[#faebaa] hover:bg-[#d4af37] hover:text-black flex items-center justify-center transition shadow"><Globe className="w-4 h-4" /></button>
+                <div title="Sistem Terintegrasi Real-Time Cloud Firestore" className="px-3 h-10 rounded-full border-2 border-emerald-500/60 bg-[#031d12]/80 text-emerald-300 flex items-center gap-2 text-[10px] font-bold shadow">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                  <span>Cloud Real-Time</span>
+                </div>
               </div>
             </div>
             <p className="font-serif italic normal-case text-right text-sm sm:text-base text-[#faebaa] leading-snug drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]" style={{ fontFamily: "'Amiri', serif" }}>

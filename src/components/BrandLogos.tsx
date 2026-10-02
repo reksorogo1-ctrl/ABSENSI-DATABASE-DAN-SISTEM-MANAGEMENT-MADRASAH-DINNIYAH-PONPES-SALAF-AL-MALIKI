@@ -1,6 +1,6 @@
 import React from 'react';
 import { AppSettings } from '../types';
-import { resolveLogos } from '../brand';
+import { resolveLogos, LOGO_MADRASAH, LOGO_PONDOK } from '../brand';
 
 type Size = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
@@ -13,7 +13,7 @@ const WIDE: Record<Size, string> = {
 const PAD: Record<Size, string> = { xs: 'p-[2px]', sm: 'p-[2px]', md: 'p-[3px]', lg: 'p-[3px]', xl: 'p-[4px]' };
 const RADIUS: Record<Size, string> = { xs: 'rounded-lg', sm: 'rounded-xl', md: 'rounded-2xl', lg: 'rounded-2xl', xl: 'rounded-3xl' };
 
-interface LogoFrameProps { src: string; alt?: string; shape?: 'round' | 'wide'; size?: Size; testId?: string; className?: string; }
+interface LogoFrameProps { src?: string | null; alt?: string; shape?: 'round' | 'wide'; size?: Size; testId?: string; className?: string; }
 
 export const LogoFrame: React.FC<LogoFrameProps> = ({ src, alt = "Logo Pondok Pesantren", shape = 'round', size = 'sm', testId, className = '' }) => {
   const round = shape === 'round';
@@ -22,10 +22,16 @@ export const LogoFrame: React.FC<LogoFrameProps> = ({ src, alt = "Logo Pondok Pe
   const glow = size === 'lg' || size === 'xl'
     ? 'shadow-[0_20px_45px_rgba(0,0,0,0.8),0_0_34px_rgba(212,175,55,0.4)]'
     : 'shadow-[0_6px_16px_rgba(0,0,0,0.6),0_0_12px_rgba(212,175,55,0.3)]';
+
+  const rawSrc = typeof src === 'string' ? src.trim() : '';
+  const finalSrc = rawSrc !== '' ? rawSrc : (round ? LOGO_MADRASAH : LOGO_PONDOK);
+
   return (
     <div data-testid={testId} className={`brand-logo-frame shrink-0 ${PAD[size]} ${outer} ${glow} bg-gradient-to-b from-[#fff2be] via-[#d4af37] to-[#7a5410] ${className}`}>
       <div className={`${inner} ${round ? ROUND[size] : WIDE[size]} bg-white overflow-hidden flex items-center justify-center`}>
-        <img src={src} alt={alt} className="w-full h-full object-contain p-[4%]" onError={(e) => { (e.target as HTMLElement).style.visibility = 'hidden'; }} />
+        {finalSrc ? (
+          <img src={finalSrc} alt={alt} className="w-full h-full object-contain p-[4%]" onError={(e) => { (e.target as HTMLElement).style.visibility = 'hidden'; }} />
+        ) : null}
       </div>
     </div>
   );

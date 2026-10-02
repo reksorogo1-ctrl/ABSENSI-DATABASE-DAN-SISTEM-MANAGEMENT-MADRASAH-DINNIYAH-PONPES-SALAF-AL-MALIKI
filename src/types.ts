@@ -1,15 +1,37 @@
+export type StatusSantri = 'Aktif' | 'Naik Kelas' | 'Tetap di Kelas' | 'Lulus' | 'Mutasi / Keluar';
+
+export interface RiwayatKelasItem {
+  tahunAjaran: string; // contoh: "2025/2026", "2026/2027"
+  kelas: string; // contoh: "1 TSANAWIYAH", "2 TSANAWIYAH"
+  status: StatusSantri | string; // "Naik Kelas", "Tetap di Kelas", "Lulus", "Mutasi / Keluar", "Aktif"
+  tanggalProses: string; // Tanggal pemrosesan sistem
+  keterangan?: string; // Deskripsi kenaikan / kelulusan
+  catatanManual?: string; // Catatan khusus dari admin
+}
+
 export interface Santri {
-  id: string; // NIS / ID Santri
+  id: string; // NIS / ID Santri - UNIK & TETAP SAMA SEPANJANG PENDIDIKAN
   nama: string;
   kelas: string;
   kamar: string;
   alamat: string;
   foto: string;
+  fotoThumbnail?: string; // Lightweight WebP/JPEG thumbnail (~10KB) untuk rendering super cepat
+  fotoStoragePath?: string; // Path referensi di Cloud / Object Storage 5 TB
+  fotoSizeBytes?: number; // Ukuran file asli dalam byte
   password?: string; // Password login wali santri (default: NIS / id)
   namaOrangTua?: string; // Nama Orang Tua / Wali
   namaWaliKelas?: string; // Nama Wali Kelas
   noWaWaliKelas?: string; // No WA Wali Kelas (contoh: 628123456789)
   saldoUangSaku?: number; // Saldo terkini tabungan uang saku santri
+  statusSantri?: StatusSantri; // Status akademik santri
+  jenisKelamin?: 'Putra' | 'Putri'; // Putra atau Putri
+  angkatan?: string; // e.g. "Angkatan 2024", "Angkatan 2025", "Angkatan 2026"
+  tahunAjaran?: string; // Tahun ajaran santri
+  kategoriMhf?: 'JAYYID' | 'MUTAWASIT' | 'RODI'; // Kategori penilaian muhafadzoh
+  tahunMasuk?: string; // Tahun pertama masuk (misal: "2024/2025")
+  tahunAjaranAktif?: string; // Tahun ajaran saat ini
+  riwayatKelas?: RiwayatKelasItem[]; // RIWAYAT LENGKAP: TAHUN AJARAN → KELAS → STATUS SANTRI
 
   // Kolom Nilai Ujian Terkoneksi ke Wali Santri
   nilaiKoreksianKitab?: number | string; // Nilai koreksian kitab (contoh: 90)
@@ -23,6 +45,68 @@ export interface Santri {
   tanggalUjianKitab?: string; // Tanggal pelaksanaan ujian
   kitabMuhafadzoh?: string;
   kitabBaca?: string;
+  kitabKoreksian?: string;
+}
+
+// Skema Objek Metadata Cloud Storage Skala Besar (Hingga ±5 TB)
+export interface StorageObjectMetadata {
+  id: string;
+  name: string;
+  storagePath: string; // e.g. "photos/santri/S-1001.webp" atau "videos/intro.mp4"
+  downloadUrl: string;
+  thumbnailUrl?: string; // Versi kompresi ringan untuk list view
+  sizeBytes: number;
+  mimeType: string;
+  category: 'foto' | 'video' | 'dokumen' | 'backup' | 'sistem';
+  uploadedAt: string;
+  uploader?: string;
+  checksum?: string;
+  isCloudSynced: boolean;
+  metadata?: Record<string, any>;
+}
+
+// Metrik Monitoring Kapasitas Penyimpanan Cloud Storage 5 TB
+export interface StorageMetrics {
+  totalCapacityBytes: number; // 5 TB = 5,497,558,138,880 bytes
+  usedBytes: number;
+  availableBytes: number;
+  totalFiles: number;
+  categoryBreakdown: {
+    foto: number;
+    video: number;
+    dokumen: number;
+    backup: number;
+    sistem: number;
+  };
+  lastUpdated: string;
+  compressionSavedBytes: number;
+  bandwidthServedBytes: number;
+}
+
+// Tipe Hasil Query Terpaginasi (Hanya memuat data yang sedang dibutuhkan)
+export interface PaginatedResult<T> {
+  items: T[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+}
+
+// Task Antrean Background Processing (Upload besar, Export chunked, Backup)
+export interface BackgroundTask {
+  id: string;
+  title: string;
+  type: 'upload' | 'export' | 'backup' | 'compression' | 'cleanup';
+  status: 'idle' | 'running' | 'completed' | 'failed' | 'paused';
+  progress: number; // 0 - 100
+  bytesTransferred?: number;
+  totalBytes?: number;
+  speedKBps?: number;
+  errorMessage?: string;
+  startedAt: string;
+  completedAt?: string;
 }
 
 export interface Pengurus {
@@ -271,7 +355,12 @@ export interface AppSettings {
   logo_madrasah: string;
   background_url?: string;
   password_admin?: string;
+  email_admin?: string;
   password_option_panel?: string;
+  tahun_ajaran?: string; // Tahun ajaran aktif, contoh: "2026/2027" atau "1447/1448 H"
+  daftar_tahun_ajaran?: string[]; // Daftar tahun ajaran yang dapat diedit di Option Panel
+  daftar_nadzhom?: string[]; // Daftar nama kitab nadzhom yang dapat diedit di Option Panel
+  semester_aktif?: string; // Semester aktif, contoh: "Semester Ganjil" / "Semester Genap"
   intro_video_url?: string; // URL video intro opening yang dapat diedit di Option Panel
   intro_video_name?: string; // Nama judul berkas video intro
   intro_video_type?: 'file' | 'url' | 'default' | 'indexeddb'; // Tipe sumber video intro

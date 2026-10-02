@@ -289,9 +289,9 @@ export const CinematicIntro: React.FC<CinematicIntroProps> = ({
       {/* WebGL canvas mount */}
       {!webglFailed ? (
         <div ref={mountRef} className="absolute inset-0 z-0 cursor-grab active:cursor-grabbing" />
-      ) : (
+      ) : (bgImage && bgImage.trim() !== '') ? (
         <img src={bgImage} alt="Islamic Library" className="absolute inset-0 w-full h-full object-cover animate-cameraGlide z-0" />
-      )}
+      ) : null}
 
       {/* Cinematic vignette + film grain overlay */}
       <div className="absolute inset-0 z-[1] pointer-events-none" style={{

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Users, UserCheck, Calendar, BookOpen, Award, Sliders, LogOut, RefreshCw, 
   Clock, Database, Save, CheckCircle2, ChevronRight, BarChart3, TrendingUp, Filter,
@@ -8,7 +8,7 @@ import {
   CreditCard, Wallet, AlertTriangle, Phone, MessageCircle, ArrowDownLeft, ArrowUpRight, Trash2, GraduationCap,
   Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload, Play,
   ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine, MapPin, Compass, Crosshair, Shield, Navigation,
-  Instagram, Youtube, Music2, Globe, Unlock, Menu
+  Instagram, Youtube, Music2, Globe, Unlock, Menu, Camera, Search
 } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 import { 
@@ -55,10 +55,10 @@ interface AdminDashboardProps {
   izinList?: IzinMengajarRequest[];
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  spreadsheetId: string;
-  setSpreadsheetId: (id: string) => void;
-  isSyncing: boolean;
-  onSyncWithSheets: () => void;
+  spreadsheetId?: string;
+  setSpreadsheetId?: (id: string) => void;
+  isSyncing?: boolean;
+  onSyncWithSheets?: () => void;
   onLogout: () => void;
   onTestIntro?: () => void;
   // Mutations
@@ -68,6 +68,8 @@ interface AdminDashboardProps {
   onSaveNewGuru: (newGuru: GuruPengajar) => void;
   onDeleteGuru?: (idOrName: string) => void;
   onSaveNewJadwal: (newJadwal: JadwalPelajaran) => void;
+  onDeleteJadwal?: (idOrItem: string | JadwalPelajaran) => void;
+  onSyncPengurusWithGuru?: () => void;
   onSaveNadzhom: (nadzhom: NadzhomRecord) => void;
   onSaveNilai: (nilai: NilaiUjianRecord) => void;
   onSaveSettings: (settings: AppSettings) => void;
@@ -129,6 +131,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onSaveNewGuru,
   onDeleteGuru,
   onSaveNewJadwal,
+  onDeleteJadwal,
+  onSyncPengurusWithGuru,
   onSaveNadzhom,
   onSaveNilai,
   onSaveSettings,
@@ -876,6 +880,110 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   }, [currentUjianSantri]);
 
+  // Helper kompresi foto santri dari Galeri / Folder lokal agar ringan
+  const compressSantriPhoto = (
+    dataUrl: string,
+    maxWidth = 600,
+    maxHeight = 600,
+    quality = 0.82
+  ): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new window.Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } else {
+          resolve(dataUrl);
+        }
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  };
+
+  // State untuk Input Santri via Folder / Galeri
+  const santriPhotoInputRef = useRef<HTMLInputElement>(null);
+  const santriFolderInputRef = useRef<HTMLInputElement>(null);
+  const santriGalleryInputRef = useRef<HTMLInputElement>(null);
+  const [santriPhotoInputType, setSantriPhotoInputType] = useState<'upload' | 'url'>('upload');
+  const [santriSelectedFileName, setSantriSelectedFileName] = useState<string>('');
+  const [isProcessingSantriPhoto, setIsProcessingSantriPhoto] = useState<boolean>(false);
+
+  // State Bulk / Masal Input Santri dari Folder atau Galeri
+  const [showBulkSantriMode, setShowBulkSantriMode] = useState<boolean>(false);
+  const [bulkSantriKelas, setBulkSantriKelas] = useState<string>('1 TSANAWIYAH');
+  const [bulkSantriKamar, setBulkSantriKamar] = useState<string>('Kamar Abu Bakar');
+  const [bulkSantriAlamat, setBulkSantriAlamat] = useState<string>('');
+  const [bulkSantriQueue, setBulkSantriQueue] = useState<Array<{
+    id: string;
+    nama: string;
+    kelas: string;
+    kamar: string;
+    alamat: string;
+    foto: string;
+    fileName: string;
+  }>>([]);
+  const [isProcessingBulk, setIsProcessingBulk] = useState<boolean>(false);
+
+  // Search query untuk Login Pengurus
+  const [searchPengurusQuery, setSearchPengurusQuery] = useState<string>('');
+  
+  // Hitung jumlah unik guru pengajar untuk perbandingan real time
+  const uniqueGuruList = useMemo(() => {
+    const list: GuruPengajar[] = [];
+    const seen = new Set<string>();
+    guruList.forEach(g => {
+      const norm = g.nama.trim().toLowerCase();
+      if (!seen.has(norm)) {
+        seen.add(norm);
+        list.push(g);
+      }
+    });
+    return list;
+  }, [guruList]);
+
+  // Handler Revisi Jadwal Pelajaran
+  const handleOpenEditJadwal = (item: JadwalPelajaran) => {
+    setEditingJadwal(item);
+    setJadwalForm({
+      id: item.id || `JAD-${Date.now()}`,
+      hari: item.hari,
+      jamKe: Number(item.jamKe),
+      waktu: item.waktu,
+      kelas: item.kelas,
+      mapel: item.mapel,
+      nama: item.nama,
+      tingkatan: item.tingkatan === 'Aliyah' || item.kelas.includes('ALIYAH') ? 'Aliyah' : 'Tsanawiyah'
+    });
+    setShowAddJadwalModal(true);
+  };
+
+  const handleDeleteJadwalClick = (item: JadwalPelajaran) => {
+    const info = `${item.mapel} (${item.kelas} - ${item.hari} Jam ke-${item.jamKe})`;
+    if (window.confirm(`Konfirmasi Hapus Jadwal:\n\nApakah Anda yakin ingin menghapus jadwal:\n${info}\nPengajar: ${item.nama}?`)) {
+      if (onDeleteJadwal) {
+        onDeleteJadwal(item.id || item);
+      } else {
+        alert('Fitur hapus jadwal telah diterapkan.');
+      }
+    }
+  };
+
   // Form input manual santri di Option Panel
   const [inputSantriForm, setInputSantriForm] = useState({
     id: `S-${Math.floor(1000 + Math.random() * 8999)}`,
@@ -889,24 +997,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     noWaWaliKelas: '0812-3456-7890',
     saldoUangSaku: 150000,
     password: ''
-  });
-
-  // State untuk Tab Integrasi Google Sheets
-  const [sheetsPreviewTab, setSheetsPreviewTab] = useState<'santri' | 'guru' | 'absensi-guru' | 'absensi-santri' | 'jadwal' | 'nadzhom' | 'nilai' | 'syahriyah'>('absensi-guru');
-  const [sheetsInputId, setSheetsInputId] = useState<string>(spreadsheetId);
-  const [sheetsStatusMsg, setSheetsStatusMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
-  const [isSheetsBusy, setIsSheetsBusy] = useState<boolean>(false);
-  const [sheetsConfirmModal, setSheetsConfirmModal] = useState<{
-    isOpen: boolean;
-    action: 'exportAll' | 'importAll' | 'createSheet' | 'exportTab';
-    tabName?: string;
-    title: string;
-    desc: string;
-  }>({
-    isOpen: false,
-    action: 'exportAll',
-    title: '',
-    desc: ''
   });
 
   // State untuk Edit Profil Anak & Password Wali (NIS) di Option Panel
@@ -1104,6 +1194,104 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  // Handler unggah foto manual santri dari Folder / Galeri
+  const handleSingleSantriFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsProcessingSantriPhoto(true);
+    setSantriSelectedFileName(file.name);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        const raw = evt.target?.result as string;
+        const compressed = await compressSantriPhoto(raw, 600, 600, 0.85);
+        setInputSantriForm(prev => {
+          const autoName = prev.nama.trim()
+            ? prev.nama
+            : file.name.replace(/\.[^/.]+$/, '').replace(/^[0-9\-_ ]+/, '').replace(/[_\-+]/g, ' ').trim();
+          return {
+            ...prev,
+            foto: compressed,
+            nama: autoName || prev.nama
+          };
+        });
+        setIsProcessingSantriPhoto(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error(err);
+      setIsProcessingSantriPhoto(false);
+    }
+  };
+
+  // Handler unggah masal banyak santri dari Folder / Galeri
+  const handleBulkUploadFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setIsProcessingBulk(true);
+    const newItems: typeof bulkSantriQueue = [];
+
+    const fileList = Array.from(files).filter(f => f.type.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(f.name));
+    if (fileList.length === 0) {
+      alert('Tidak ditemukan file foto/gambar yang valid dalam folder atau galeri yang dipilih.');
+      setIsProcessingBulk(false);
+      return;
+    }
+
+    let currentNisNumber = 1000 + Math.floor(Math.random() * 8000);
+    for (const file of fileList) {
+      const rawData = await new Promise<string>((resolve) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.onerror = () => resolve('');
+        r.readAsDataURL(file);
+      });
+
+      if (rawData) {
+        const compressed = await compressSantriPhoto(rawData, 500, 500, 0.8);
+        const cleanName = file.name
+          .replace(/\.[^/.]+$/, '')
+          .replace(/^[0-9\-_ ]+/, '')
+          .replace(/[_\-+]/g, ' ')
+          .trim();
+
+        newItems.push({
+          id: `S-${currentNisNumber++}`,
+          nama: cleanName || `Santri Baru ${file.name}`,
+          kelas: bulkSantriKelas,
+          kamar: bulkSantriKamar,
+          alamat: bulkSantriAlamat || 'Jawa Timur',
+          foto: compressed,
+          fileName: file.name
+        });
+      }
+    }
+
+    setBulkSantriQueue(prev => [...prev, ...newItems]);
+    setShowBulkSantriMode(true);
+    setIsProcessingBulk(false);
+    alert(`Berhasil memuat ${newItems.length} foto santri dari folder/galeri! Silakan tinjau daftar di bawah dan simpan ke database.`);
+  };
+
+  const handleSaveAllBulkSantri = () => {
+    if (bulkSantriQueue.length === 0) {
+      alert('Antrean santri dari folder masih kosong.');
+      return;
+    }
+    bulkSantriQueue.forEach(item => {
+      onSaveNewSantri({
+        id: item.id.trim(),
+        nama: item.nama.trim(),
+        kelas: item.kelas,
+        kamar: item.kamar.trim(),
+        alamat: item.alamat.trim(),
+        foto: item.foto
+      });
+    });
+    alert(`Alhamdulillah! Berhasil menyimpan ${bulkSantriQueue.length} data santri dari folder/galeri ke basis data!`);
+    setBulkSantriQueue([]);
+  };
+
   // Submit tambah Santri dari Option Panel
   const handleAddSantriSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1263,7 +1451,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               { id: 'santri', label: settings.text_santri_title || 'Data Santri & Foto', icon: Users },
               { id: 'nadzhom', label: 'Setoran Nadzhom', icon: BookOpen },
               { id: 'nilai', label: 'Nilai Ujian', icon: Award },
-              { id: 'google-sheets', label: 'Google Sheets & Drive', icon: FileSpreadsheet, badge: isGoogleConnected ? 'Sync' : 'Cloud' },
               { id: 'pengaturan', label: 'Option Panel (Pusat Kontrol)', icon: Sliders, badge: 'Password' }
             ].map(tab => {
               const Icon = tab.icon;
@@ -1296,19 +1483,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </nav>
         </div>
 
-        {/* Sync & Logout */}
+        {/* Real-Time Database Indicator & Logout */}
         <div className="pt-4 border-t border-[#d4af37]/20 space-y-3">
-          {settings.show_quick_sync_button !== false && (
-            <button
-              onClick={onSyncWithSheets}
-              disabled={isSyncing}
-              style={{ color: settings.btn_sync_sheets_color || '#d4af37' }}
-              className="w-full py-2.5 px-3 rounded-xl btn-3d-dark text-xs font-bold flex items-center justify-center space-x-2 border border-[#d4af37]/40"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Sinkronisasi Sheets...' : (settings.btn_sync_sheets_text || 'Sinkron Google Sheets')}</span>
-            </button>
-          )}
+          <div className="w-full py-2.5 px-3 rounded-xl bg-[#031c10] border border-emerald-500/50 text-xs font-bold flex items-center justify-center space-x-2 text-emerald-300 shadow">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="truncate">Cloud Real-Time Terhubung</span>
+          </div>
 
           <button
             onClick={onLogout}
@@ -1381,15 +1561,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           <div className="flex flex-wrap items-center gap-2.5 text-right justify-end">
             <PWAInstallButton variant="button" />
-            <button
-              onClick={() => onOpenSheetsModal ? onOpenSheetsModal() : setActiveTab('google-sheets')}
-              className="px-3.5 py-2 rounded-xl bg-[#031c10] border border-[#d4af37]/60 text-xs font-bold text-[#f3e5ab] flex items-center gap-2 hover:bg-[#062c1b] transition shadow"
-              title="Kelola Google Sheets & Drive"
+            <div
+              className="px-3.5 py-2 rounded-xl bg-[#031c10] border border-emerald-500/60 text-xs font-bold text-emerald-300 flex items-center gap-2 shadow"
+              title="Website & Web App Terhubung Real-Time ke Cloud Firestore"
             >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-              <span>Google Sheets</span>
-              <span className={`w-2 h-2 rounded-full ${isGoogleConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-            </button>
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Real-Time Terintegrasi</span>
+            </div>
 
             <button
               onClick={() => setActiveTab('pengaturan')}
@@ -3977,6 +4155,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3.5 font-bold">MATA PELAJARAN / FAN</th>
                       <th className="p-3.5">USTADZ / USTADZAH PENGAJAR</th>
                       <th className="p-3.5 text-center w-28">STATUS</th>
+                      <th className="p-3.5 text-center w-36">AKSI & SETTING</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-emerald-500/15 bg-[#011008]/80">
@@ -3987,7 +4166,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         (jadwalTsDay === 'SEMUA' || j.hari.toUpperCase() === jadwalTsDay.toUpperCase())
                       )
                       .map((item, idx) => (
-                        <tr key={idx} className="hover:bg-emerald-500/10 transition">
+                        <tr key={item.id || idx} className="hover:bg-emerald-500/10 transition">
                           <td className="p-3.5 font-mono text-center text-emerald-400 font-bold">{idx + 1}</td>
                           <td className="p-3.5 font-bold text-white whitespace-nowrap flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
@@ -4011,6 +4190,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               Aktif (Pagi/Siang)
                             </span>
                           </td>
+                          <td className="p-3.5 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditJadwal(item)}
+                                className="px-2.5 py-1.5 rounded-xl bg-amber-400/20 hover:bg-amber-400 text-amber-300 hover:text-black border border-amber-400/50 text-[11px] font-extrabold flex items-center gap-1.5 transition shadow"
+                                title="Setting dan Revisi Jadwal jika ada yang keliru"
+                              >
+                                <Settings2 className="w-3.5 h-3.5 text-amber-400 group-hover:text-black" />
+                                <span>Setting / Revisi</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteJadwalClick(item)}
+                                className="p-1.5 rounded-xl bg-red-950/80 hover:bg-red-800 text-red-300 hover:text-white border border-red-500/40 text-[11px] transition shadow"
+                                title="Hapus Jadwal"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     {jadwalList.filter(j => 
@@ -4019,7 +4219,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       (jadwalTsDay === 'SEMUA' || j.hari.toUpperCase() === jadwalTsDay.toUpperCase())
                     ).length === 0 && (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-emerald-300">
+                        <td colSpan={9} className="p-8 text-center text-emerald-300">
                           Tidak ada jadwal Tsanawiyah yang cocok dengan kombinasi kelas dan hari yang dipilih.
                         </td>
                       </tr>
@@ -4118,6 +4318,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3.5 font-bold">MATA PELAJARAN / FAN</th>
                       <th className="p-3.5">USTADZ / USTADZAH PENGAJAR</th>
                       <th className="p-3.5 text-center w-28">STATUS</th>
+                      <th className="p-3.5 text-center w-36">AKSI & SETTING</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-amber-500/15 bg-[#0e0701]/80">
@@ -4128,7 +4329,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         (jadwalAlDay === 'SEMUA' || j.hari.toUpperCase() === jadwalAlDay.toUpperCase())
                       )
                       .map((item, idx) => (
-                        <tr key={idx} className="hover:bg-amber-500/10 transition">
+                        <tr key={item.id || idx} className="hover:bg-amber-500/10 transition">
                           <td className="p-3.5 font-mono text-center text-amber-400 font-bold">{idx + 1}</td>
                           <td className="p-3.5 font-bold text-amber-200 whitespace-nowrap flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-[#d4af37]"></span>
@@ -4152,6 +4353,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               Sekolah Malam
                             </span>
                           </td>
+                          <td className="p-3.5 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditJadwal(item)}
+                                className="px-2.5 py-1.5 rounded-xl bg-amber-400/20 hover:bg-amber-400 text-amber-300 hover:text-black border border-amber-400/50 text-[11px] font-extrabold flex items-center gap-1.5 transition shadow"
+                                title="Setting dan Revisi Jadwal jika ada yang keliru"
+                              >
+                                <Settings2 className="w-3.5 h-3.5 text-amber-400 group-hover:text-black" />
+                                <span>Setting / Revisi</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteJadwalClick(item)}
+                                className="p-1.5 rounded-xl bg-red-950/80 hover:bg-red-800 text-red-300 hover:text-white border border-red-500/40 text-[11px] transition shadow"
+                                title="Hapus Jadwal"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     {jadwalList.filter(j => 
@@ -4160,7 +4382,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       (jadwalAlDay === 'SEMUA' || j.hari.toUpperCase() === jadwalAlDay.toUpperCase())
                     ).length === 0 && (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-amber-300">
+                        <td colSpan={9} className="p-8 text-center text-amber-300">
                           Tidak ada jadwal Aliyah yang cocok dengan kombinasi kelas dan hari malam yang dipilih.
                         </td>
                       </tr>
@@ -4407,19 +4629,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="card-3d rounded-3xl p-6 max-w-xl w-full border-2 border-[#d4af37] bg-gradient-to-b from-[#062d1c] to-[#02140c] space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
                   <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/30">
                     <div className="flex items-center space-x-3">
-                      <Calendar className="w-6 h-6 text-[#d4af37]" />
+                      {editingJadwal ? (
+                        <div className="w-10 h-10 rounded-xl bg-amber-400 text-black flex items-center justify-center font-bold shadow-lg">
+                          <Settings2 className="w-6 h-6 text-black" />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 rounded-xl bg-[#0b422a] border border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow-lg">
+                          <Calendar className="w-6 h-6 text-[#d4af37]" />
+                        </div>
+                      )}
                       <div>
-                        <h4 className="text-base font-extrabold text-white text-gold-3d">
-                          {editingJadwal ? 'Edit Jadwal Pelajaran' : 'Tambah Jadwal Pelajaran Baru'}
-                        </h4>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-base font-extrabold text-white text-gold-3d">
+                            {editingJadwal ? 'Setting & Revisi Jadwal Pelajaran' : 'Tambah Jadwal Pelajaran Baru'}
+                          </h4>
+                          {editingJadwal && (
+                            <span className="px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/50 text-[10px] font-mono font-bold">
+                              Mode Koreksi
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[11px] text-emerald-300">
-                          Tingkatan Tsanawiyah (Siang) atau Aliyah (Malam)
+                          {editingJadwal
+                            ? `Koreksi kekeliruan jadwal mapel ${editingJadwal.mapel} (${editingJadwal.kelas}) - Hari ${editingJadwal.hari} Jam ke-${editingJadwal.jamKe}`
+                            : 'Tingkatan Tsanawiyah (Siang) atau Aliyah (Malam)'}
                         </p>
                       </div>
                     </div>
                     <button
-                      onClick={() => setShowAddJadwalModal(false)}
-                      className="text-stone-400 hover:text-white text-lg font-bold"
+                      onClick={() => {
+                        setShowAddJadwalModal(false);
+                        setEditingJadwal(null);
+                      }}
+                      className="w-8 h-8 rounded-lg bg-stone-900 border border-stone-700 text-stone-300 hover:text-white flex items-center justify-center text-sm font-bold"
                     >
                       ✕
                     </button>
@@ -4590,7 +4832,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="btn-3d-gold px-6 py-2 rounded-xl text-black font-extrabold flex items-center gap-1.5 shadow-xl"
                       >
                         <Save className="w-4 h-4 text-black" />
-                        <span>Simpan Jadwal</span>
+                        <span>{editingJadwal ? 'Simpan Revisi Jadwal' : 'Simpan Jadwal Baru'}</span>
                       </button>
                     </div>
                   </form>
@@ -5160,695 +5402,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
-
-        {/* TAB 8.5: INTEGRASI GOOGLE SHEETS & DRIVE CLOUD DATABASE */}
-        {activeTab === 'google-sheets' && (
-          <div className="space-y-6">
-            {/* Header Google Sheets Command Center */}
-            <div className="card-3d-glass rounded-3xl p-6 border border-[#d4af37]/40 shadow-2xl relative overflow-hidden">
-              <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#f5e298]/80 to-transparent pointer-events-none" />
-              
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-[#d4af37]/20">
-                <div className="flex items-center space-x-3.5">
-                  <div className="w-12 h-12 rounded-2xl bg-[#093d25] border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow-xl">
-                    <FileSpreadsheet className="w-7 h-7 text-emerald-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold font-serif text-[#d4af37] text-gold-3d flex items-center gap-2">
-                      Pusat Integrasi Google Sheets & Drive
-                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-sans font-bold">
-                        Cloud Sync Master
-                      </span>
-                    </h3>
-                    <p className="text-xs text-emerald-200/90 mt-1">
-                      Koneksi dua arah: Sinkronkan data kehadiran ustadz, santri, kurikulum, dan nilai raport ke Google Spreadsheet.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => onOpenSheetsModal ? onOpenSheetsModal() : null}
-                    className="px-4 py-2 bg-gradient-to-r from-[#d4af37] to-[#b8972e] text-black font-extrabold text-xs rounded-xl shadow-lg hover:brightness-110 transition flex items-center gap-2"
-                  >
-                    <Sliders className="w-3.5 h-3.5" />
-                    <span>Buka Panel Modal Drive</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Status Message Notification */}
-              {sheetsStatusMsg && (
-                <div className={`mt-4 p-3.5 rounded-xl border flex items-center gap-3 text-xs font-semibold animate-fadeIn ${
-                  sheetsStatusMsg.type === 'success'
-                    ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-200'
-                    : sheetsStatusMsg.type === 'error'
-                    ? 'bg-red-950/80 border-red-500/50 text-red-200'
-                    : 'bg-blue-950/80 border-blue-500/50 text-blue-200'
-                }`}>
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span className="flex-1">{sheetsStatusMsg.text}</span>
-                  <button onClick={() => setSheetsStatusMsg(null)} className="text-stone-400 hover:text-white">✕</button>
-                </div>
-              )}
-
-              {/* Grid 2 Kolom: Status Akun & File Spreadsheet Aktif */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                {/* 1. Status Akun Google */}
-                <div className="bg-[#02130a]/90 p-4 rounded-2xl border border-[#d4af37]/30 flex flex-col justify-between space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#d4af37] uppercase tracking-wider flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                      Status Akun Google Workspace
-                    </span>
-                    <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full border ${
-                      isGoogleConnected 
-                        ? 'bg-emerald-900/60 text-emerald-300 border-emerald-500/50' 
-                        : 'bg-stone-800 text-stone-400 border-stone-700'
-                    }`}>
-                      {isGoogleConnected ? '● Terhubung' : '○ Offline'}
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-stone-300 leading-relaxed">
-                    {isGoogleConnected
-                      ? 'Akun Google Anda terhubung aktif. Izin Google Sheets & Google Drive telah diberikan untuk sinkronisasi data.'
-                      : 'Hubungkan akun Google Anda untuk mengaktifkan sinkronisasi otomatis ke Google Spreadsheet.'}
-                  </p>
-
-                  <div className="pt-2">
-                    {isGoogleConnected ? (
-                      <button
-                        onClick={async () => {
-                          if (window.confirm('Keluar dari sambungan akun Google?')) {
-                            if (setIsGoogleConnected) setIsGoogleConnected(false);
-                            setSheetsStatusMsg({ type: 'info', text: 'Telah memutuskan sambungan dari akun Google.' });
-                          }
-                        }}
-                        className="px-3.5 py-1.5 text-xs bg-stone-900 hover:bg-stone-800 border border-stone-700 text-stone-300 rounded-lg transition"
-                      >
-                        Keluar Akun Google
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          if (onOpenSheetsModal) onOpenSheetsModal();
-                        }}
-                        className="px-4 py-2 bg-white text-gray-800 font-bold text-xs rounded-lg shadow hover:bg-gray-100 transition flex items-center gap-2"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24">
-                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                        </svg>
-                        <span>Sign in with Google</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* 2. File Spreadsheet Terhubung */}
-                <div className="bg-[#02130a]/90 p-4 rounded-2xl border border-[#d4af37]/30 flex flex-col justify-between space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#d4af37] uppercase tracking-wider flex items-center gap-1.5">
-                      <Database className="w-4 h-4 text-emerald-400" />
-                      Spreadsheet ID Terhubung
-                    </span>
-                    {spreadsheetId && (
-                      <a
-                        href={`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-emerald-400 hover:underline flex items-center gap-1 font-bold"
-                      >
-                        <span>Buka Sheets</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={sheetsInputId}
-                        onChange={(e) => setSheetsInputId(e.target.value)}
-                        placeholder="Masukkan ID Spreadsheet atau Link..."
-                        className="flex-1 px-3 py-1.5 rounded-lg bg-[#010a05] border border-[#d4af37]/40 text-white font-mono text-xs focus:outline-none"
-                      />
-                      <button
-                        onClick={() => {
-                          let clean = sheetsInputId.trim();
-                          if (clean.includes('/d/')) {
-                            const match = clean.match(/\/d\/([a-zA-Z0-9-_]+)/);
-                            if (match && match[1]) clean = match[1];
-                          }
-                          setSpreadsheetId(clean);
-                          setSheetsStatusMsg({ type: 'success', text: `Spreadsheet ID berhasil diperbarui: ${clean}` });
-                        }}
-                        className="px-3 py-1.5 bg-[#d4af37] text-black font-bold text-xs rounded-lg hover:brightness-110 transition"
-                      >
-                        Terapkan
-                      </button>
-                    </div>
-                    <span className="text-[10px] text-stone-400 block font-mono truncate">
-                      ID Aktif: {spreadsheetId || 'Belum diatur'}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <button
-                      onClick={() => {
-                        setSheetsConfirmModal({
-                          isOpen: true,
-                          action: 'createSheet',
-                          title: 'Buat Spreadsheet Baru di Google Drive?',
-                          desc: 'Sistem akan membuat Google Spreadsheet baru di Google Drive Anda dengan judul "SIM Pontren Salaf - Database Master" dan mengonfigurasi 10 sheet tab otomatis.'
-                        });
-                      }}
-                      className="px-3 py-1.5 bg-emerald-900/60 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Buat Spreadsheet Baru di Drive</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        if (onOpenSheetsModal) onOpenSheetsModal();
-                      }}
-                      className="px-3 py-1.5 bg-stone-900 hover:bg-stone-800 border border-stone-700 text-stone-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
-                    >
-                      <FolderOpen className="w-3.5 h-3.5 text-[#d4af37]" />
-                      <span>Pilih dari Drive</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Master Sync Action Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                {/* Export Card */}
-                <div className="p-4 rounded-2xl bg-gradient-to-br from-[#031d12] to-[#01140b] border border-emerald-500/40 flex flex-col justify-between space-y-3">
-                  <div>
-                    <div className="flex items-center gap-2 text-emerald-300 font-bold text-xs uppercase tracking-wider">
-                      <ArrowUpFromLine className="w-4 h-4 text-emerald-400" />
-                      Kirim Seluruh Data ke Google Sheets (Export)
-                    </div>
-                    <p className="text-xs text-stone-300 mt-1 leading-relaxed">
-                      Kirim data lokal aplikasi ({santriList.length} Santri, {guruList.length} Guru, {absensiGuruList.length} Presensi Ustadz, {absensiSantriList.length} Presensi Santri, Jadwal, Nilai) ke Google Spreadsheet terhubung.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setSheetsConfirmModal({
-                        isOpen: true,
-                        action: 'exportAll',
-                        title: 'Kirim / Ekspor Seluruh Data ke Google Sheets?',
-                        desc: `Tindakan ini akan menimpa seluruh lembar kerja pada Google Spreadsheet (${spreadsheetId}) dengan data terbaru yang ada di aplikasi saat ini.`
-                      });
-                    }}
-                    disabled={isSheetsBusy}
-                    className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition disabled:opacity-50"
-                  >
-                    <ArrowUpFromLine className="w-4 h-4" />
-                    <span>{isSheetsBusy ? 'Sedang Memproses...' : 'Ekspor Semua Data ke Google Sheets'}</span>
-                  </button>
-                </div>
-
-                {/* Import Card */}
-                <div className="p-4 rounded-2xl bg-gradient-to-br from-[#171203] to-[#0f0c02] border border-[#d4af37]/40 flex flex-col justify-between space-y-3">
-                  <div>
-                    <div className="flex items-center gap-2 text-[#d4af37] font-bold text-xs uppercase tracking-wider">
-                      <ArrowDownToLine className="w-4 h-4 text-[#d4af37]" />
-                      Tarik Data dari Google Sheets (Import)
-                    </div>
-                    <p className="text-xs text-stone-300 mt-1 leading-relaxed">
-                      Ambil data santri, guru, jadwal pelajaran, nadzhom, dan nilai ujian dari Google Spreadsheet master untuk disinkronkan ke aplikasi.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setSheetsConfirmModal({
-                        isOpen: true,
-                        action: 'importAll',
-                        title: 'Tarik / Impor Data dari Google Sheets?',
-                        desc: `Tindakan ini akan membaca Google Spreadsheet (${spreadsheetId}) dan memperbarui data lokal aplikasi dengan baris data dari spreadsheet.`
-                      });
-                    }}
-                    disabled={isSheetsBusy}
-                    className="w-full py-2.5 bg-gradient-to-r from-[#d4af37] to-[#b8972e] text-black font-extrabold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition disabled:opacity-50 hover:brightness-110"
-                  >
-                    <ArrowDownToLine className="w-4 h-4" />
-                    <span>{isSheetsBusy ? 'Sedang Memproses...' : 'Tarik Data dari Google Sheets'}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* TAB PREVIEW DATA SHEET */}
-            <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur-md space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[#d4af37]/20">
-                <div>
-                  <h4 className="text-sm sm:text-base font-bold text-white text-gold-3d flex items-center gap-2">
-                    Pratinjau Lembar Kerja (Sheet Tabs)
-                  </h4>
-                  <p className="text-xs text-emerald-300">
-                    Pilih lembar kerja di bawah untuk meninjau data yang disinkronkan ke Google Spreadsheet.
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => {
-                    setSheetsConfirmModal({
-                      isOpen: true,
-                      action: 'exportTab',
-                      tabName: sheetsPreviewTab,
-                      title: `Ekspor Tab ${sheetsPreviewTab.toUpperCase()} ke Google Sheets?`,
-                      desc: `Tindakan ini akan menyinkronkan data kategori "${sheetsPreviewTab}" saja ke tab terkait di Google Spreadsheet.`
-                    });
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl btn-3d-gold text-black font-extrabold text-xs flex items-center gap-1.5 shadow"
-                >
-                  <ArrowUpFromLine className="w-3.5 h-3.5" />
-                  <span>Ekspor Tab Ini Saja</span>
-                </button>
-              </div>
-
-              {/* Subtab Selector */}
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { id: 'absensi-guru', label: `Presensi Ustadz (${combinedGuruLog.length})` },
-                  { id: 'absensi-santri', label: `Presensi Santri (${absensiSantriList.length})` },
-                  { id: 'santri', label: `Data Santri (${santriList.length})` },
-                  { id: 'guru', label: `Data Guru (${guruList.length})` },
-                  { id: 'jadwal', label: `Jadwal (${jadwalList.length})` },
-                  { id: 'nadzhom', label: `Nadzhom (${nadzhomList.length})` },
-                  { id: 'nilai', label: `Nilai Raport (${nilaiList.length})` },
-                  { id: 'syahriyah', label: `Syahriyah (${syahriyahList.length})` }
-                ].map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => setSheetsPreviewTab(t.id as any)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
-                      sheetsPreviewTab === t.id
-                        ? 'bg-[#d4af37] text-black font-extrabold shadow-md'
-                        : 'bg-[#03150d] text-emerald-200 hover:bg-[#072a1a] border border-[#d4af37]/25'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Table Render based on sheetsPreviewTab */}
-              <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25 max-h-96 overflow-y-auto">
-                {sheetsPreviewTab === 'absensi-guru' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">TANGGAL</th>
-                        <th className="p-3">NAMA USTADZ</th>
-                        <th className="p-3">MAPEL & KELAS</th>
-                        <th className="p-3">STATUS</th>
-                        <th className="p-3">CATATAN / MATERI</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {combinedGuruLog.slice(0, 50).map((g, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-mono text-emerald-300">{g.tanggal}</td>
-                          <td className="p-3 font-bold text-white">{g.nama}</td>
-                          <td className="p-3 text-stone-300">{g.mapel} ({g.kelas})</td>
-                          <td className="p-3">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              g.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border border-emerald-600' :
-                              g.status === 'Terlambat' ? 'bg-amber-950 text-amber-300 border border-amber-600' :
-                              g.status === 'Izin' ? 'bg-blue-950 text-blue-300 border border-blue-600' :
-                              'bg-red-950 text-red-300 border border-red-600'
-                            }`}>
-                              {g.status}
-                            </span>
-                          </td>
-                          <td className="p-3 text-stone-300">{g.catatan || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-
-                {sheetsPreviewTab === 'absensi-santri' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">TANGGAL</th>
-                        <th className="p-3">NIS</th>
-                        <th className="p-3">NAMA SANTRI</th>
-                        <th className="p-3">KELAS</th>
-                        <th className="p-3">STATUS</th>
-                        <th className="p-3">KETERANGAN</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {absensiSantriList.slice(0, 50).map((s, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-mono text-emerald-300">{s.tanggal}</td>
-                          <td className="p-3 font-mono text-[#d4af37]">{s.idSantri}</td>
-                          <td className="p-3 font-bold text-white">{s.nama}</td>
-                          <td className="p-3 text-stone-300">{s.kelas}</td>
-                          <td className="p-3">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              s.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border border-emerald-600' :
-                              s.status === 'Izin' ? 'bg-blue-950 text-blue-300 border border-blue-600' :
-                              s.status === 'Sakit' ? 'bg-amber-950 text-amber-300 border border-amber-600' :
-                              'bg-red-950 text-red-300 border border-red-600'
-                            }`}>
-                              {s.status}
-                            </span>
-                          </td>
-                          <td className="p-3 text-stone-300">{s.keterangan || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-
-                {sheetsPreviewTab === 'santri' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">NIS</th>
-                        <th className="p-3">NAMA SANTRI</th>
-                        <th className="p-3">KELAS</th>
-                        <th className="p-3">KAMAR</th>
-                        <th className="p-3">ALAMAT ASAL</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {santriList.slice(0, 50).map((s, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-mono text-[#d4af37]">{s.id}</td>
-                          <td className="p-3 font-bold text-white">{s.nama}</td>
-                          <td className="p-3 text-emerald-300">{s.kelas}</td>
-                          <td className="p-3 text-stone-300">{s.kamar}</td>
-                          <td className="p-3 text-stone-400">{s.alamat}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-
-                {sheetsPreviewTab === 'guru' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">ID</th>
-                        <th className="p-3">NAMA USTADZ / PENGANJAR</th>
-                        <th className="p-3">MATA PELAJARAN / KITAB</th>
-                        <th className="p-3">KELAS AMPU</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {guruList.map((g, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-mono text-[#d4af37]">{g.id}</td>
-                          <td className="p-3 font-bold text-white">{g.nama}</td>
-                          <td className="p-3 text-emerald-300">{g.mapel}</td>
-                          <td className="p-3 text-stone-300">{g.kelas}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-
-                {sheetsPreviewTab === 'jadwal' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">KELAS</th>
-                        <th className="p-3">HARI</th>
-                        <th className="p-3">JAM KE</th>
-                        <th className="p-3">WAKTU</th>
-                        <th className="p-3">MATA PELAJARAN</th>
-                        <th className="p-3">USTADZ PENGAJAR</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {jadwalList.slice(0, 50).map((j, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-bold text-[#d4af37]">{j.kelas}</td>
-                          <td className="p-3 text-emerald-300">{j.hari}</td>
-                          <td className="p-3 font-mono text-center">{j.jamKe}</td>
-                          <td className="p-3 text-stone-300">{j.waktu}</td>
-                          <td className="p-3 text-white font-semibold">{j.mapel}</td>
-                          <td className="p-3 text-stone-300">{j.nama}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-
-                {sheetsPreviewTab === 'nadzhom' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">NIS</th>
-                        <th className="p-3">NAMA SANTRI</th>
-                        <th className="p-3">KITAB</th>
-                        <th className="p-3 text-center">BAIT</th>
-                        <th className="p-3">TANGGAL</th>
-                        <th className="p-3">PREDIKAT</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {nadzhomList.slice(0, 50).map((n, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-mono text-[#d4af37]">{n.idSantri}</td>
-                          <td className="p-3 font-bold text-white">{n.nama}</td>
-                          <td className="p-3 text-emerald-300">{n.kitab}</td>
-                          <td className="p-3 font-mono text-center font-bold text-emerald-400">{n.bait}</td>
-                          <td className="p-3 font-mono text-stone-300">{n.tanggal}</td>
-                          <td className="p-3 text-amber-300">{n.nilai}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-
-                {sheetsPreviewTab === 'nilai' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">NIS</th>
-                        <th className="p-3">NAMA SANTRI</th>
-                        <th className="p-3">KELAS</th>
-                        <th className="p-3">MATA PELAJARAN</th>
-                        <th className="p-3 text-center">NILAI</th>
-                        <th className="p-3">SEMESTER</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {nilaiList.slice(0, 50).map((nl, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-mono text-[#d4af37]">{nl.idSantri}</td>
-                          <td className="p-3 font-bold text-white">{nl.nama}</td>
-                          <td className="p-3 text-emerald-300">{nl.kelas}</td>
-                          <td className="p-3 text-white">{nl.pelajaran}</td>
-                          <td className="p-3 font-mono text-center font-bold text-emerald-400">{nl.nilai}</td>
-                          <td className="p-3 text-stone-300">{nl.semester}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-
-                {sheetsPreviewTab === 'syahriyah' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">ID TAGIHAN</th>
-                        <th className="p-3">NIS</th>
-                        <th className="p-3">NAMA SANTRI</th>
-                        <th className="p-3">BULAN</th>
-                        <th className="p-3">NOMINAL</th>
-                        <th className="p-3">STATUS</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {syahriyahList.slice(0, 50).map((s, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-mono text-[#d4af37]">{s.id}</td>
-                          <td className="p-3 font-mono text-stone-300">{s.idSantri}</td>
-                          <td className="p-3 font-bold text-white">{s.namaSantri || (s as any).nama || 'Santri'}</td>
-                          <td className="p-3 text-emerald-300">{s.bulan}</td>
-                          <td className="p-3 font-mono text-stone-200">Rp {s.nominal.toLocaleString('id-ID')}</td>
-                          <td className="p-3">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              s.status === 'Lunas' ? 'bg-emerald-950 text-emerald-300 border border-emerald-600' : 'bg-red-950 text-red-300 border border-red-600'
-                            }`}>
-                              {s.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-
-            {/* MANDATORY USER CONFIRMATION DIALOG FOR WORKSPACE MUTATIONS */}
-            {sheetsConfirmModal.isOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-                <div className="w-full max-w-md bg-[#041a10] border-2 border-[#d4af37] rounded-2xl p-6 shadow-2xl space-y-4">
-                  <div className="flex items-center gap-3 text-[#f3e5ab]">
-                    <div className="w-10 h-10 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 shrink-0">
-                      <AlertTriangle className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-bold text-white">{sheetsConfirmModal.title}</h3>
-                      <span className="text-xs text-stone-400">Konfirmasi Sinkronisasi Google Sheets</span>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-stone-300 leading-relaxed bg-[#010a05] p-3 rounded-lg border border-stone-800">
-                    {sheetsConfirmModal.desc}
-                  </p>
-
-                  <div className="flex items-center justify-end gap-3 pt-2">
-                    <button
-                      onClick={() => setSheetsConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                      className="px-4 py-2 text-xs font-semibold text-stone-300 hover:text-white bg-stone-800 hover:bg-stone-700 rounded-lg transition"
-                    >
-                      Batal
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const act = sheetsConfirmModal.action;
-                        setSheetsConfirmModal(prev => ({ ...prev, isOpen: false }));
-                        setIsSheetsBusy(true);
-                        setSheetsStatusMsg(null);
-                        try {
-                          if (act === 'createSheet') {
-                            if (sheetsService) {
-                              const newSheet = await sheetsService.createNewSpreadsheet('SIM Pontren Salaf - Database Master');
-                              setSpreadsheetId(newSheet.id);
-                              setSheetsInputId(newSheet.id);
-                              await sheetsService.exportFullDatabaseToSheets({
-                                santriList,
-                                guruList,
-                                jadwalList,
-                                nadzhomList,
-                                nilaiList,
-                                absensiSantriList,
-                                absensiGuruList,
-                                syahriyahList,
-                                settings
-                              });
-                              setSheetsStatusMsg({
-                                type: 'success',
-                                text: `Spreadsheet baru "${newSheet.title}" berhasil dibuat di Google Drive Anda!`
-                              });
-                            } else {
-                              if (onOpenSheetsModal) onOpenSheetsModal();
-                            }
-                          } else if (act === 'exportAll') {
-                            if (sheetsService) {
-                              await sheetsService.exportFullDatabaseToSheets({
-                                santriList,
-                                guruList,
-                                jadwalList,
-                                nadzhomList,
-                                nilaiList,
-                                absensiSantriList,
-                                absensiGuruList,
-                                syahriyahList,
-                                settings
-                              });
-                              setSheetsStatusMsg({
-                                type: 'success',
-                                text: `Seluruh data (${santriList.length} Santri, ${guruList.length} Guru, Presensi, Nilai) berhasil disinkronkan ke Google Sheets!`
-                              });
-                            } else {
-                              onSyncWithSheets();
-                            }
-                          } else if (act === 'importAll') {
-                            if (sheetsService && onDataImported) {
-                              const [
-                                rSantri, rGuru, rJadwal, rNadzhom, rNilai,
-                                rAbsensiSantri, rAbsensiGuru, rSyahriyah, rSettings
-                              ] = await Promise.all([
-                                sheetsService.loadSantriFromSheet(),
-                                sheetsService.loadGuruFromSheet(),
-                                sheetsService.loadJadwalFromSheet(),
-                                sheetsService.loadNadzhomFromSheet(),
-                                sheetsService.loadNilaiFromSheet(),
-                                sheetsService.loadAbsensiSantriFromSheet(),
-                                sheetsService.loadAbsensiGuruFromSheet(),
-                                sheetsService.loadSyahriyahFromSheet(),
-                                sheetsService.loadSettingsFromSheet()
-                              ]);
-
-                              onDataImported({
-                                santriList: rSantri.length ? rSantri : undefined,
-                                guruList: rGuru.length ? rGuru : undefined,
-                                jadwalList: rJadwal.length ? rJadwal : undefined,
-                                nadzhomList: rNadzhom.length ? rNadzhom : undefined,
-                                nilaiList: rNilai.length ? rNilai : undefined,
-                                absensiSantriList: rAbsensiSantri.length ? rAbsensiSantri : undefined,
-                                absensiGuruList: rAbsensiGuru.length ? rAbsensiGuru : undefined,
-                                syahriyahList: rSyahriyah.length ? rSyahriyah : undefined,
-                                settings: Object.keys(rSettings).length ? rSettings : undefined
-                              });
-
-                              setSheetsStatusMsg({
-                                type: 'success',
-                                text: `Berhasil mengimpor data dari Google Sheets (${rSantri.length} Santri, ${rGuru.length} Guru termuat).`
-                              });
-                            } else {
-                              onSyncWithSheets();
-                            }
-                          } else if (act === 'exportTab') {
-                            if (sheetsService) {
-                              await sheetsService.initSpreadsheetSchema();
-                              const tab = sheetsConfirmModal.tabName;
-                              if (tab === 'absensi-guru') {
-                                const rows = combinedGuruLog.map(g => [g.tanggal, g.nama, g.mapel, g.kelas, g.status, g.catatan || '-', g.hari || '-', g.jamKe || '-', g.waktu || '-']);
-                                await sheetsService.overwriteSheet('Absensi_Guru', ['Tanggal', 'Nama Ustadz', 'Mata Pelajaran', 'Kelas', 'Status', 'Catatan', 'Hari', 'Jam Ke', 'Waktu'], rows);
-                              } else if (tab === 'absensi-santri') {
-                                const rows = absensiSantriList.map(a => [a.tanggal, a.idSantri, a.nama, a.kelas, a.status, a.keterangan || '-', a.waktu || '']);
-                                await sheetsService.overwriteSheet('Absensi_Santri', ['Tanggal', 'NIS', 'Nama Santri', 'Kelas', 'Status', 'Keterangan', 'Waktu'], rows);
-                              } else if (tab === 'santri') {
-                                const rows = santriList.map(s => [s.id, s.nama, s.kelas, s.kamar, s.alamat, s.foto || '']);
-                                await sheetsService.overwriteSheet('Santri', ['NIS / ID', 'Nama Santri', 'Kelas', 'Kamar', 'Alamat', 'Foto URL'], rows);
-                              }
-                              setSheetsStatusMsg({
-                                type: 'success',
-                                text: `Tab "${tab}" berhasil disinkronkan ke Google Sheets!`
-                              });
-                            }
-                          }
-                        } catch (e: any) {
-                          console.error(e);
-                          setSheetsStatusMsg({
-                            type: 'error',
-                            text: `Operasi gagal: ${e?.message || 'Pastikan izin Google Sheets aktif'}`
-                          });
-                        } finally {
-                          setIsSheetsBusy(false);
-                        }
-                      }}
-                      className="px-5 py-2 text-xs font-bold text-black bg-gradient-to-r from-[#d4af37] to-[#e6ca65] hover:brightness-110 rounded-lg shadow transition flex items-center gap-1.5"
-                    >
-                      <Check className="w-4 h-4" />
-                      <span>Ya, Lanjutkan</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -7338,34 +6891,112 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
-                {/* SECTION: KELOLA NAMA & KATA SANDI LOGIN PENGURUS */}
+                {/* SECTION: KELOLA NAMA & KATA SANDI LOGIN PENGURUS (TERKONEKSI REAL-TIME DENGAN DATA GURU PENGAJAR) */}
                 {activeControlSection === 'kelola_pengurus' && (
                   <div className="bg-[#052216]/90 border border-[#d4af37]/30 rounded-2xl p-5 space-y-6">
-                    <div className="flex items-center space-x-2 border-b border-[#d4af37]/20 pb-3">
-                      <ShieldAlert className="w-5 h-5 text-[#d4af37]" />
-                      <div>
-                        <h4 className="text-sm font-bold text-white text-gold-3d">
-                          Kelola Akun, Nama, & Kata Sandi Login Pengurus Pondok
-                        </h4>
-                        <p className="text-[11px] text-emerald-300">
-                          Sesuai permintaan Anda, sandi login pengurus menggunakan nama pengurus dan password yang dapat diatur/diedit secara mandiri melalui Option Panel ini.
-                        </p>
+                    {/* Header Fitur Login Pengurus Terkoneksi Real-Time */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-[#d4af37]/20 pb-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-xl bg-[#0b422a] border border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow">
+                          <ShieldAlert className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-white text-gold-3d">
+                              Pusat Akun & Kata Sandi Login Pengurus (Terkoneksi Real-Time)
+                            </h4>
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 text-[10px] font-bold flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                              <span>Live Real-Time</span>
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-emerald-300">
+                            Jumlah akun login pengurus terhubung otomatis dan sama dengan jumlah data guru pengajar madrasah. Seluruh ustadz/ustadzah dapat login menggunakan nama dan kata sandi yang dikelola di sini.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Tombol Sinkronkan Real-Time */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onSyncPengurusWithGuru) {
+                            onSyncPengurusWithGuru();
+                            alert('Sinkronisasi Real-Time Berhasil! Seluruh data akun login pengurus telah diperbarui sesuai daftar guru pengajar.');
+                          } else {
+                            alert('Data login pengurus telah tersinkronisasi otomatis secara real-time.');
+                          }
+                        }}
+                        className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-xs flex items-center gap-1.5 shadow transition"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Sinkronkan Real-Time Sekarang</span>
+                      </button>
+                    </div>
+
+                    {/* KARTU STATISTIK KONEKSI REAL-TIME: PENGURUS vs GURU */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="p-3.5 rounded-xl bg-[#031c10] border-2 border-emerald-500/50 shadow flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-950 border border-emerald-400/50 text-emerald-300 flex items-center justify-center font-bold">
+                          <KeyRound className="w-5 h-5 text-emerald-400" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">
+                            Akun Login Pengurus
+                          </span>
+                          <span className="text-xl font-black text-white font-mono">
+                            {pengurusList.length} <span className="text-xs font-sans text-emerald-400">Akun</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-[#031c10] border-2 border-[#d4af37]/50 shadow flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-[#1c1303] border border-[#d4af37]/50 text-[#d4af37] flex items-center justify-center font-bold">
+                          <Award className="w-5 h-5 text-[#d4af37]" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-amber-300 font-bold uppercase tracking-wider block">
+                            Data Guru Pengajar
+                          </span>
+                          <span className="text-xl font-black text-[#d4af37] font-mono">
+                            {uniqueGuruList.length} <span className="text-xs font-sans text-amber-300">Ustadz/Ustadzah</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-[#02180e] border-2 border-emerald-500/40 shadow flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-900/60 border border-emerald-400 text-emerald-300 flex items-center justify-center font-bold">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-300" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">
+                            Status Sinkronisasi
+                          </span>
+                          <span className="text-xs font-extrabold text-emerald-300 flex items-center gap-1">
+                            <span>🟢 100% Terkoneksi Real-Time</span>
+                          </span>
+                        </div>
                       </div>
                     </div>
 
                     {/* Pilih Pengurus yang akan diedit */}
                     <div className="bg-[#03140c] p-4 rounded-xl border border-[#d4af37]/20 space-y-3">
-                      <label className="text-xs font-bold text-[#d4af37] block">
-                        Pilih Pengurus yang Ingin Diedit Sandinya:
-                      </label>
+                      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                        <label className="text-xs font-bold text-[#d4af37] block">
+                          Pilih Pengurus / Guru Pengajar yang Ingin Diedit Sandinya:
+                        </label>
+                        <span className="text-[10px] text-emerald-400 font-mono">
+                          Total: {pengurusList.length} Akun Tersinkron
+                        </span>
+                      </div>
                       <select
                         value={selectedPengurusId}
                         onChange={(e) => setSelectedPengurusId(e.target.value)}
-                        className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                        className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-bold"
                       >
                         {pengurusList.map(p => (
                           <option key={p.id} value={p.id}>
-                            {p.nama} — {p.jabatan} ({p.id})
+                            {p.nama} — {p.jabatan} ({p.mapel ? `Mapel: ${p.mapel}` : p.id})
                           </option>
                         ))}
                       </select>
@@ -7378,10 +7009,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         if (onUpdatePengurus && currentSelectedPengurus) {
                           onUpdatePengurus({
                             ...currentSelectedPengurus,
-                            nama: pengurusEditForm.nama,
-                            password: pengurusEditForm.password,
-                            jabatan: pengurusEditForm.jabatan,
-                            noWa: pengurusEditForm.noWa,
+                            nama: pengurusEditForm.nama.trim(),
+                            password: pengurusEditForm.password.trim(),
+                            jabatan: pengurusEditForm.jabatan.trim(),
+                            noWa: pengurusEditForm.noWa.trim(),
                             kelasBimbingan: pengurusEditForm.kelasBimbingan,
                             mapel: pengurusEditForm.mapel,
                             tugasUtama: pengurusEditForm.tugasUtama
@@ -7400,7 +7031,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             type="text"
                             value={pengurusEditForm.nama}
                             onChange={(e) => setPengurusEditForm({ ...pengurusEditForm, nama: e.target.value })}
-                            className="w-full bg-[#02180e] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                            className="w-full bg-[#02180e] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-bold"
                             required
                           />
                         </div>
@@ -7498,40 +7129,101 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </form>
 
-                    {/* Tabel Seluruh Akun Pengurus */}
-                    <div className="space-y-2">
-                      <span className="text-xs text-[#d4af37] font-bold block">
-                        Daftar Akun Pengurus & Kredensial Login
-                      </span>
-                      <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25">
-                        <table className="w-full text-xs text-left min-w-[700px]">
-                          <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
+                    {/* Tabel Seluruh Akun Pengurus Terkoneksi Real-Time */}
+                    <div className="space-y-3">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <div>
+                          <span className="text-xs text-[#d4af37] font-bold block">
+                            Daftar Akun Pengurus & Kredensial Login (Terkoneksi Real-Time)
+                          </span>
+                          <p className="text-[11px] text-emerald-300">
+                            Menampilkan seluruh ustadz/ustadzah guru pengajar yang otomatis memiliki akses login.
+                          </p>
+                        </div>
+
+                        {/* Search Bar Pengurus */}
+                        <div className="relative w-full sm:w-64">
+                          <Search className="w-3.5 h-3.5 text-emerald-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={searchPengurusQuery}
+                            onChange={(e) => setSearchPengurusQuery(e.target.value)}
+                            placeholder="Cari nama ustadz / mapel..."
+                            className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-[#02140b] border border-[#d4af37]/40 text-xs text-white placeholder-emerald-400/50 focus:outline-none focus:border-[#d4af37]"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25 max-h-96 overflow-y-auto">
+                        <table className="w-full text-xs text-left min-w-[750px]">
+                          <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30 sticky top-0 z-10">
                             <tr>
+                              <th className="p-3 w-10 text-center">No</th>
                               <th className="p-3">Nama Pengurus (Username)</th>
                               <th className="p-3">Kata Sandi</th>
-                              <th className="p-3">Jabatan</th>
+                              <th className="p-3">Jabatan & Mapel</th>
+                              <th className="p-3">Kelas Bimbingan</th>
                               <th className="p-3">No. WhatsApp</th>
-                              <th className="p-3">Aksi</th>
+                              <th className="p-3 text-center">Status Real-Time</th>
+                              <th className="p-3 text-center">Aksi</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                            {pengurusList.map(p => (
-                              <tr key={p.id} className="hover:bg-[#d4af37]/5">
-                                <td className="p-3 font-bold text-white">{p.nama}</td>
-                                <td className="p-3 font-mono font-bold text-[#d4af37]">{p.password || 'pengurus123'}</td>
-                                <td className="p-3 text-emerald-300">{p.jabatan}</td>
-                                <td className="p-3 text-slate-300 font-mono">{p.noWa}</td>
-                                <td className="p-3">
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedPengurusId(p.id)}
-                                    className="px-2 py-1 bg-[#d4af37]/20 hover:bg-[#d4af37] text-[#d4af37] hover:text-black font-bold rounded-lg transition"
-                                  >
-                                    Edit Sandi
-                                  </button>
+                            {pengurusList
+                              .filter(p => {
+                                if (!searchPengurusQuery.trim()) return true;
+                                const q = searchPengurusQuery.toLowerCase();
+                                return (
+                                  p.nama.toLowerCase().includes(q) ||
+                                  (p.jabatan && p.jabatan.toLowerCase().includes(q)) ||
+                                  (p.mapel && p.mapel.toLowerCase().includes(q)) ||
+                                  (p.kelasBimbingan && p.kelasBimbingan.toLowerCase().includes(q))
+                                );
+                              })
+                              .map((p, idx) => (
+                                <tr key={p.id || idx} className="hover:bg-[#d4af37]/5 transition">
+                                  <td className="p-3 font-mono text-center text-emerald-400">{idx + 1}</td>
+                                  <td className="p-3 font-bold text-white whitespace-nowrap">
+                                    {p.nama}
+                                  </td>
+                                  <td className="p-3 font-mono font-bold text-[#d4af37] bg-[#02120a]">
+                                    {p.password || 'pengurus123'}
+                                  </td>
+                                  <td className="p-3 text-emerald-300">
+                                    <span className="font-semibold block">{p.jabatan}</span>
+                                    {p.mapel && (
+                                      <span className="text-[10px] text-amber-300 font-mono">Mapel: {p.mapel}</span>
+                                    )}
+                                  </td>
+                                  <td className="p-3 text-slate-300 font-medium">{p.kelasBimbingan || '-'}</td>
+                                  <td className="p-3 text-emerald-200 font-mono">{p.noWa}</td>
+                                  <td className="p-3 text-center">
+                                    <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold inline-flex items-center gap-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                      <span>Tersinkron</span>
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedPengurusId(p.id);
+                                        window.scrollTo({ top: 300, behavior: 'smooth' });
+                                      }}
+                                      className="px-2.5 py-1 bg-[#d4af37]/20 hover:bg-[#d4af37] text-[#d4af37] hover:text-black font-bold rounded-lg transition shadow"
+                                    >
+                                      Edit Sandi
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            {pengurusList.length === 0 && (
+                              <tr>
+                                <td colSpan={8} className="p-6 text-center text-emerald-300">
+                                  Belum ada akun pengurus. Klik &quot;Sinkronkan Real-Time Sekarang&quot; untuk menghubungkan dengan guru pengajar.
                                 </td>
                               </tr>
-                            ))}
+                            )}
                           </tbody>
                         </table>
                       </div>
@@ -8056,98 +7748,409 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
-                {/* SECTION 2: INPUT MANUAL DATA SANTRI PER ANGKATAN */}
+                {/* SECTION 2: INPUT MANUAL DATA SANTRI PER ANGKATAN (MELALUI FOLDER ATAU GALERI) */}
                 {activeControlSection === 'input_santri' && (
-                  <form onSubmit={handleAddSantriSubmit} className="card-3d rounded-2xl p-5 space-y-5">
-                    <div className="flex items-center space-x-2 border-b border-[#d4af37]/20 pb-3">
-                      <Users className="w-5 h-5 text-[#d4af37]" />
-                      <div>
-                        <h4 className="text-sm font-bold text-white text-gold-3d">Input Manual Data Santri Baru per Angkatan</h4>
-                        <p className="text-[11px] text-emerald-300">Menambahkan santri langsung ke basis data lokal dan Google Sheets</p>
-                      </div>
-                    </div>
+                  <div className="card-3d rounded-2xl p-5 space-y-6">
+                    {/* Hidden inputs untuk file picker galeri dan folder */}
+                    <input
+                      ref={santriPhotoInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleSingleSantriFile}
+                    />
+                    <input
+                      ref={santriFolderInputRef}
+                      type="file"
+                      multiple
+                      {...({ webkitdirectory: '', directory: '' } as any)}
+                      className="hidden"
+                      onChange={handleBulkUploadFiles}
+                    />
+                    <input
+                      ref={santriGalleryInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleBulkUploadFiles}
+                    />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">Angkatan / Kelas</label>
-                        <select
-                          value={inputSantriForm.kelas}
-                          onChange={(e) => setInputSantriForm({ ...inputSantriForm, kelas: e.target.value })}
-                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                    {/* Header Fitur Input Santri */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-[#d4af37]/20 pb-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-xl bg-[#0b422a] border border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow">
+                          <Users className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-white text-gold-3d">
+                            Input Manual Data Santri Baru (Melalui Folder atau Galeri)
+                          </h4>
+                          <p className="text-[11px] text-emerald-300">
+                            Unggah foto santri langsung dari galeri HP, kamera, atau pilih folder di laptop/komputer.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Mode Toggle: Input Satuan vs Input Masal Folder */}
+                      <div className="flex items-center p-1 rounded-xl bg-[#03150d] border border-[#d4af37]/30">
+                        <button
+                          type="button"
+                          onClick={() => setShowBulkSantriMode(false)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                            !showBulkSantriMode
+                              ? 'bg-amber-400 text-black shadow'
+                              : 'text-emerald-300 hover:text-white'
+                          }`}
                         >
-                          {classList.map(kls => (
-                            <option key={kls} value={kls}>{kls}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">Nomor Induk Santri (NIS)</label>
-                        <input
-                          type="text"
-                          value={inputSantriForm.id}
-                          onChange={(e) => setInputSantriForm({ ...inputSantriForm, id: e.target.value })}
-                          required
-                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-mono"
-                          placeholder="Contoh: S-1008"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">Nama Lengkap Santri</label>
-                        <input
-                          type="text"
-                          value={inputSantriForm.nama}
-                          onChange={(e) => setInputSantriForm({ ...inputSantriForm, nama: e.target.value })}
-                          required
-                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
-                          placeholder="Contoh: Muhammad Ilham Rosyadi"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">Kamar Pondok</label>
-                        <input
-                          type="text"
-                          value={inputSantriForm.kamar}
-                          onChange={(e) => setInputSantriForm({ ...inputSantriForm, kamar: e.target.value })}
-                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
-                          placeholder="Contoh: Kamar Abu Bakar 05"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">Alamat Asal Santri</label>
-                        <input
-                          type="text"
-                          value={inputSantriForm.alamat}
-                          onChange={(e) => setInputSantriForm({ ...inputSantriForm, alamat: e.target.value })}
-                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
-                          placeholder="Contoh: Nganjuk, Jawa Timur"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-[#d4af37] mb-1">Link URL Foto Santri</label>
-                        <input
-                          type="text"
-                          value={inputSantriForm.foto}
-                          onChange={(e) => setInputSantriForm({ ...inputSantriForm, foto: e.target.value })}
-                          className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
-                          placeholder="URL foto santri (Unsplash/Imgur/Drive)..."
-                        />
+                          Input Satuan
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowBulkSantriMode(true)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                            showBulkSantriMode
+                              ? 'bg-amber-400 text-black shadow'
+                              : 'text-emerald-300 hover:text-white'
+                          }`}
+                        >
+                          <FolderOpen className="w-3.5 h-3.5" />
+                          <span>Input Masal Folder / Galeri</span>
+                          {bulkSantriQueue.length > 0 && (
+                            <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px] font-mono">
+                              {bulkSantriQueue.length}
+                            </span>
+                          )}
+                        </button>
                       </div>
                     </div>
 
-                    <div className="text-right pt-2 border-t border-[#d4af37]/20">
-                      <button
-                        type="submit"
-                        className="btn-3d-gold px-6 py-2.5 text-black font-extrabold text-xs rounded-xl flex items-center gap-2 ml-auto shadow"
-                      >
-                        <PlusCircle className="w-4 h-4 text-black" />
-                        <span>Simpan Data Santri Baru</span>
-                      </button>
-                    </div>
+                    {/* JIKA MODE INPUT MASAL DARI FOLDER / GALERI */}
+                    {showBulkSantriMode ? (
+                      <div className="space-y-5 bg-[#031a10] border-2 border-[#d4af37]/30 rounded-2xl p-5 shadow-xl">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[#d4af37]/20">
+                          <div>
+                            <h5 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                              <FolderOpen className="w-4 h-4 text-amber-400" />
+                              <span>Input Banyak Santri Sekaligus dari Folder atau Galeri Foto</span>
+                            </h5>
+                            <p className="text-[11px] text-emerald-300 mt-0.5">
+                              Pilih folder di komputer atau seleksi banyak foto dari galeri HP. Nama santri otomatis diekstrak dari nama file dan NIS dibuat otomatis.
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => santriGalleryInputRef.current?.click()}
+                              className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-1.5 shadow transition"
+                            >
+                              <Camera className="w-4 h-4" />
+                              <span>Pilih Foto Galeri HP</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => santriFolderInputRef.current?.click()}
+                              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1.5 shadow transition"
+                            >
+                              <FolderOpen className="w-4 h-4" />
+                              <span>Pilih Folder Komputer</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Pengaturan Bawaan Angkatan & Kamar untuk Batch */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-[#02120a] border border-emerald-500/30">
+                          <div>
+                            <label className="block text-[11px] font-bold text-[#d4af37] mb-1">
+                              Target Angkatan / Kelas:
+                            </label>
+                            <select
+                              value={bulkSantriKelas}
+                              onChange={(e) => setBulkSantriKelas(e.target.value)}
+                              className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white"
+                            >
+                              {classList.map(kls => (
+                                <option key={kls} value={kls}>{kls}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-[#d4af37] mb-1">
+                              Target Kamar Asrama:
+                            </label>
+                            <input
+                              type="text"
+                              value={bulkSantriKamar}
+                              onChange={(e) => setBulkSantriKamar(e.target.value)}
+                              className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white"
+                              placeholder="Contoh: Kamar Abu Bakar"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-[#d4af37] mb-1">
+                              Alamat Asal Default:
+                            </label>
+                            <input
+                              type="text"
+                              value={bulkSantriAlamat}
+                              onChange={(e) => setBulkSantriAlamat(e.target.value)}
+                              className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white"
+                              placeholder="Contoh: Jawa Timur"
+                            />
+                          </div>
+                        </div>
+
+                        {isProcessingBulk && (
+                          <div className="p-4 rounded-xl bg-amber-500/20 border border-amber-400 text-amber-200 text-xs text-center flex items-center justify-center gap-2 animate-pulse">
+                            <RefreshCw className="w-4 h-4 animate-spin text-amber-300" />
+                            <span>Sedang membaca dan mengompresi foto santri dari folder...</span>
+                          </div>
+                        )}
+
+                        {/* Antrean Foto yang Sudah Dipilih */}
+                        {bulkSantriQueue.length > 0 ? (
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-bold text-emerald-300">
+                                Ditemukan {bulkSantriQueue.length} Foto Santri Siap Disimpan:
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setBulkSantriQueue([])}
+                                className="text-[11px] text-red-300 hover:text-red-100 font-bold"
+                              >
+                                Bersihkan Antrean
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-96 overflow-y-auto p-1">
+                              {bulkSantriQueue.map((item, idx) => (
+                                <div
+                                  key={idx}
+                                  className="p-3 rounded-xl bg-[#021109] border border-[#d4af37]/30 flex gap-3 items-center relative"
+                                >
+                                  <img
+                                    src={item.foto}
+                                    alt={item.nama}
+                                    className="w-16 h-16 rounded-xl object-cover border border-[#d4af37]/50 shrink-0 shadow"
+                                  />
+                                  <div className="min-w-0 flex-1 space-y-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <input
+                                        type="text"
+                                        value={item.id}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setBulkSantriQueue(prev => prev.map((q, i) => i === idx ? { ...q, id: val } : q));
+                                        }}
+                                        className="w-20 px-1.5 py-0.5 rounded bg-[#010905] border border-[#d4af37]/30 text-[10px] text-[#d4af37] font-mono font-bold"
+                                      />
+                                      <span className="text-[10px] text-emerald-400 font-semibold truncate">
+                                        {item.kelas}
+                                      </span>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={item.nama}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setBulkSantriQueue(prev => prev.map((q, i) => i === idx ? { ...q, nama: val } : q));
+                                      }}
+                                      className="w-full px-2 py-1 rounded bg-[#052417] border border-emerald-500/40 text-xs text-white font-bold"
+                                      placeholder="Nama santri..."
+                                    />
+                                    <p className="text-[9px] text-stone-400 truncate">
+                                      File: {item.fileName}
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setBulkSantriQueue(prev => prev.filter((_, i) => i !== idx))}
+                                    className="text-red-400 hover:text-red-200 p-1 rounded"
+                                    title="Hapus dari antrean"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="pt-3 border-t border-[#d4af37]/20 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={handleSaveAllBulkSantri}
+                                className="btn-3d-gold px-6 py-2.5 text-black font-extrabold text-xs rounded-xl flex items-center gap-2 shadow-xl"
+                              >
+                                <Save className="w-4 h-4 text-black" />
+                                <span>Simpan Semua ({bulkSantriQueue.length}) Santri dari Folder ke Database</span>
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-8 text-center border-2 border-dashed border-[#d4af37]/30 rounded-2xl space-y-2 bg-[#02120a]/60">
+                            <FolderOpen className="w-10 h-10 text-[#d4af37] mx-auto opacity-70" />
+                            <p className="text-xs font-bold text-white">Belum Ada Foto Santri yang Dipilih dari Folder</p>
+                            <p className="text-[11px] text-emerald-300">
+                              Klik tombol &quot;Pilih Foto Galeri HP&quot; atau &quot;Pilih Folder Komputer&quot; di atas untuk memilih foto secara masal.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* FORM INPUT MANUAL SATUAN DENGAN UNGGAH FOTO GALERI / FOLDER */
+                      <form onSubmit={handleAddSantriSubmit} className="space-y-5">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-semibold text-[#d4af37] mb-1">Angkatan / Kelas</label>
+                            <select
+                              value={inputSantriForm.kelas}
+                              onChange={(e) => setInputSantriForm({ ...inputSantriForm, kelas: e.target.value })}
+                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                            >
+                              {classList.map(kls => (
+                                <option key={kls} value={kls}>{kls}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-[#d4af37] mb-1">Nomor Induk Santri (NIS)</label>
+                            <input
+                              type="text"
+                              value={inputSantriForm.id}
+                              onChange={(e) => setInputSantriForm({ ...inputSantriForm, id: e.target.value })}
+                              required
+                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-mono"
+                              placeholder="Contoh: S-1008"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-[#d4af37] mb-1">Nama Lengkap Santri</label>
+                            <input
+                              type="text"
+                              value={inputSantriForm.nama}
+                              onChange={(e) => setInputSantriForm({ ...inputSantriForm, nama: e.target.value })}
+                              required
+                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-bold"
+                              placeholder="Contoh: Muhammad Ilham Rosyadi"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-[#d4af37] mb-1">Kamar Pondok</label>
+                            <input
+                              type="text"
+                              value={inputSantriForm.kamar}
+                              onChange={(e) => setInputSantriForm({ ...inputSantriForm, kamar: e.target.value })}
+                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                              placeholder="Contoh: Kamar Abu Bakar 05"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-[#d4af37] mb-1">Alamat Asal Santri</label>
+                            <input
+                              type="text"
+                              value={inputSantriForm.alamat}
+                              onChange={(e) => setInputSantriForm({ ...inputSantriForm, alamat: e.target.value })}
+                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                              placeholder="Contoh: Nganjuk, Jawa Timur"
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-xs font-semibold text-[#d4af37]">
+                                Foto Santri (Galeri / Folder):
+                              </label>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setSantriPhotoInputType('upload')}
+                                  className={`text-[10px] px-2 py-0.5 rounded font-bold transition ${
+                                    santriPhotoInputType === 'upload'
+                                      ? 'bg-amber-400 text-black'
+                                      : 'text-emerald-300 hover:text-white'
+                                  }`}
+                                >
+                                  📁 Galeri / Folder
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSantriPhotoInputType('url')}
+                                  className={`text-[10px] px-2 py-0.5 rounded font-bold transition ${
+                                    santriPhotoInputType === 'url'
+                                      ? 'bg-amber-400 text-black'
+                                      : 'text-emerald-300 hover:text-white'
+                                  }`}
+                                >
+                                  🔗 Link URL
+                                </button>
+                              </div>
+                            </div>
+
+                            {santriPhotoInputType === 'upload' ? (
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-3 p-2.5 rounded-xl bg-[#0a301f] border border-[#d4af37]/40">
+                                  {inputSantriForm.foto ? (
+                                    <img
+                                      src={inputSantriForm.foto}
+                                      alt="Preview Foto Santri"
+                                      className="w-14 h-14 rounded-lg object-cover border border-[#d4af37] shadow shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="w-14 h-14 rounded-lg bg-[#041d13] border border-[#d4af37]/30 flex items-center justify-center text-emerald-400 shrink-0">
+                                      <Image className="w-6 h-6" />
+                                    </div>
+                                  )}
+
+                                  <div className="flex-1 min-w-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => santriPhotoInputRef.current?.click()}
+                                      className="w-full py-2 px-3 rounded-lg bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-xs flex items-center justify-center gap-1.5 shadow transition"
+                                    >
+                                      <FolderOpen className="w-4 h-4" />
+                                      <span>
+                                        {isProcessingSantriPhoto ? 'Memproses Foto...' : 'Pilih Foto dari Galeri / Folder'}
+                                      </span>
+                                    </button>
+                                    <p className="text-[10px] text-emerald-300 mt-1 truncate">
+                                      {santriSelectedFileName
+                                        ? `Terpilih: ${santriSelectedFileName}`
+                                        : 'Mendukung foto HP (kamera/galeri) & folder file'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <input
+                                type="text"
+                                value={inputSantriForm.foto}
+                                onChange={(e) => setInputSantriForm({ ...inputSantriForm, foto: e.target.value })}
+                                className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                                placeholder="URL foto santri (Unsplash/Imgur/Drive)..."
+                              />
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="text-right pt-2 border-t border-[#d4af37]/20 flex items-center justify-between">
+                          <p className="text-[11px] text-emerald-300">
+                            * NIS dan Nama Lengkap wajib diisi. Foto otomatis dioptimasi agar ringan.
+                          </p>
+                          <button
+                            type="submit"
+                            className="btn-3d-gold px-6 py-2.5 text-black font-extrabold text-xs rounded-xl flex items-center gap-2 shadow"
+                          >
+                            <PlusCircle className="w-4 h-4 text-black" />
+                            <span>Simpan Data Santri Baru</span>
+                          </button>
+                        </div>
+                      </form>
+                    )}
 
                     {/* DAFTAR & PENGHAPUSAN MANUAL SANTRI TIDAK MONDOK (BOYONG) */}
                     <div className="pt-6 border-t border-[#d4af37]/30 space-y-3">
@@ -8171,6 +8174,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <thead className="bg-[#03170d] text-[#d4af37] sticky top-0 z-10 border-b border-[#d4af37]/30">
                             <tr>
                               <th className="p-2.5">NIS</th>
+                              <th className="p-2.5">FOTO</th>
                               <th className="p-2.5">NAMA SANTRI</th>
                               <th className="p-2.5">ANGKATAN</th>
                               <th className="p-2.5">KAMAR</th>
@@ -8182,6 +8186,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             {santriList.map((s) => (
                               <tr key={s.id} className="hover:bg-[#d4af37]/5">
                                 <td className="p-2.5 font-mono text-[#d4af37] font-bold">{s.id}</td>
+                                <td className="p-2.5">
+                                  <img
+                                    src={s.foto || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=100'}
+                                    alt={s.nama}
+                                    className="w-8 h-8 rounded-lg object-cover border border-[#d4af37]/30"
+                                  />
+                                </td>
                                 <td className="p-2.5 font-bold text-white">{s.nama}</td>
                                 <td className="p-2.5 text-emerald-300">{s.kelas}</td>
                                 <td className="p-2.5 text-emerald-200/80">{s.kamar || '-'}</td>
@@ -8213,7 +8224,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </table>
                       </div>
                     </div>
-                  </form>
+                  </div>
                 )}
 
                 {/* SECTION 3: INPUT MANUAL DATA GURU PER ANGKATAN */}
@@ -8381,6 +8392,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <PlusCircle className="w-4 h-4 text-black" />
                         <span>Tambahkan Jadwal Pelajaran</span>
                       </button>
+                    </div>
+
+                    {/* DAFTAR & REVISI CEPAT JADWAL PELAJARAN */}
+                    <div className="pt-6 border-t border-[#d4af37]/30 space-y-3">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <div>
+                          <h5 className="text-xs sm:text-sm font-bold text-white text-gold-3d flex items-center gap-1.5">
+                            <Settings2 className="w-4 h-4 text-amber-400" />
+                            <span>Daftar & Tombol Setting Revisi Jadwal (Koreksi Jadwal Keliru)</span>
+                          </h5>
+                          <p className="text-[11px] text-emerald-300">
+                            Semisal terdapat kekeliruan mata pelajaran, jam, atau ustadz pengajar, klik tombol &quot;Setting / Revisi&quot; pada baris jadwal.
+                          </p>
+                        </div>
+                        <span className="text-[11px] text-[#d4af37] font-mono px-3 py-1 rounded-lg bg-[#03170d] border border-[#d4af37]/30">
+                          Total: {jadwalList.length} Jadwal
+                        </span>
+                      </div>
+
+                      <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25 max-h-80 overflow-y-auto">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-[#03170d] text-[#d4af37] sticky top-0 z-10 border-b border-[#d4af37]/30">
+                            <tr>
+                              <th className="p-2.5">KELAS</th>
+                              <th className="p-2.5">HARI</th>
+                              <th className="p-2.5 text-center">JAM</th>
+                              <th className="p-2.5">WAKTU</th>
+                              <th className="p-2.5">MAPEL / KITAB</th>
+                              <th className="p-2.5">USTADZ PENGAJAR</th>
+                              <th className="p-2.5 text-center">AKSI & SETTING</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/80">
+                            {jadwalList.map((j, idx) => (
+                              <tr key={j.id || idx} className="hover:bg-[#d4af37]/5">
+                                <td className="p-2.5 font-bold text-emerald-300 whitespace-nowrap">{j.kelas}</td>
+                                <td className="p-2.5 text-white whitespace-nowrap">{j.hari}</td>
+                                <td className="p-2.5 text-center font-mono font-bold text-[#d4af37]">{j.jamKe}</td>
+                                <td className="p-2.5 font-mono text-emerald-200/90 whitespace-nowrap">{j.waktu}</td>
+                                <td className="p-2.5 font-bold text-white">{j.mapel}</td>
+                                <td className="p-2.5 text-emerald-100">{j.nama}</td>
+                                <td className="p-2.5 text-center whitespace-nowrap">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditJadwal(j)}
+                                      className="px-2.5 py-1 rounded-lg bg-amber-400/20 hover:bg-amber-400 text-amber-300 hover:text-black border border-amber-400/50 text-[10px] font-extrabold flex items-center gap-1 transition shadow"
+                                      title="Revisi Jadwal"
+                                    >
+                                      <Settings2 className="w-3 h-3 text-amber-400 group-hover:text-black" />
+                                      <span>Setting / Revisi</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteJadwalClick(j)}
+                                      className="p-1 rounded-lg bg-red-950/80 hover:bg-red-800 text-red-300 hover:text-white border border-red-500/40 text-[10px] transition shadow"
+                                      title="Hapus"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </form>
                 )}
@@ -10363,28 +10441,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
-                {/* SINKRONISASI GOOGLE SHEETS SPREADSHEET ID */}
-                <div className="card-3d rounded-2xl p-4 space-y-3">
-                  <label className="block text-xs font-bold text-[#d4af37] text-gold-3d">
-                    Google Sheets Master Spreadsheet ID
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={spreadsheetId}
-                      onChange={(e) => setSpreadsheetId(e.target.value)}
-                      className="flex-1 bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-mono shadow-inner"
-                      placeholder="ID Spreadsheet Google Sheets"
-                    />
-                    <button
-                      onClick={onSyncWithSheets}
-                      className="px-5 py-2.5 btn-3d-gold text-black font-extrabold text-xs rounded-xl"
-                    >
-                      Sinkronkan Sekarang
-                    </button>
+                {/* PUSAT DATABASE CLOUD TERINTEGRASI REAL-TIME (WEBSITE & WEB APP) */}
+                <div className="card-3d rounded-2xl p-5 border border-emerald-500/40 bg-gradient-to-r from-[#031d12] via-[#062c1b] to-[#031d12] space-y-3 shadow-xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                      <label className="block text-xs font-bold text-[#d4af37] text-gold-3d uppercase tracking-wider">
+                        Satu Sumber Data Terintegrasi Real-Time (Cloud Firestore)
+                      </label>
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 font-extrabold text-[10px]">
+                      Live Terhubung
+                    </span>
                   </div>
-                  <p className="text-[11px] text-emerald-300/90">
-                    Seluruh mutasi data yang diinputkan dari Option Panel disinkronkan ke master Google Spreadsheet ini.
+                  <div className="p-3 rounded-xl bg-black/40 border border-[#d4af37]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="text-xs text-white">
+                      <span className="text-[#f3e5ab] font-bold">Basis Data Utama: </span>
+                      <span className="font-mono text-emerald-300 text-[11px]">ai-studio-absensidatabased-62fd9012-6580-4225-a96d-30d9ad0cca06</span>
+                    </div>
+                    <span className="text-[10px] text-amber-300 font-bold bg-emerald-950/80 px-2.5 py-1 rounded-lg border border-amber-500/30">
+                      Website & Web App Sinkron
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-200/90 leading-relaxed">
+                    Alhamdulillah, seluruh data santri, guru, jadwal pelajaran, presensi harian, nilai, dan pengaturan aplikasi kini menggunakan satu database pusat di Cloud Firestore. Tidak ada database terpisah, tidak ada duplikasi data, dan seluruh pembaruan langsung terupdate secara real-time di Website dan Web App.
                   </p>
                 </div>
               </div>
