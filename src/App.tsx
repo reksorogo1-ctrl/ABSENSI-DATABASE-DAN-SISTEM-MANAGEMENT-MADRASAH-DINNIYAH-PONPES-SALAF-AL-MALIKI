@@ -12,18 +12,10 @@ import {
   INITIAL_NILAI_LIST, INITIAL_ABSENSI_SANTRI, INITIAL_ABSENSI_GURU,
   INITIAL_SYAHRIYAH_LIST, INITIAL_UANG_SAKU_LIST, INITIAL_KURIKULUM_LIST,
   INITIAL_PENGURUS_LIST, INITIAL_KALENDER_AKADEMIK, INITIAL_UJIAN_SANTRI_LIST,
-  INITIAL_IZIN_MENGAJAR_LIST, INITIAL_SILABUS_MEMAKNAI
+  INITIAL_IZIN_MENGAJAR_LIST, INITIAL_SILABUS_MEMAKNAI,
+  sanitizePengurusList
 } from './data';
 import { googleSignIn, initAuth } from './googleAuth';
-import { 
-  loadSettingsFromFirestore, 
-  saveSettingsToFirestore, 
-  subscribeSettingsFromFirestore,
-  signInWithGoogleFirebase,
-  saveCollectionToFirestore,
-  loadCollectionFromFirestore,
-  subscribeCollectionFromFirestore
-} from './firebase';
 import { broadcastAttendanceUpdate, subscribeAttendanceUpdates } from './serverTime';
 import { AdminDashboard } from './components/AdminDashboard';
 import { WaliSantriPortal } from './components/WaliSantriPortal';
@@ -49,7 +41,7 @@ export default function App() {
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState<boolean>(false);
   const [isGoogleConnected, setIsGoogleConnected] = useState<boolean>(false);
 
-  // App Data (Local + Cloud Firestore Real-Time Master Store)
+  // App Data (Local Storage Real-Time Master Store)
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem('sim_settings');
     return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
@@ -108,7 +100,17 @@ export default function App() {
   // Pengurus, Kalender Akademik, & Ujian Santri Data States
   const [pengurusList, setPengurusList] = useState<Pengurus[]>(() => {
     const saved = localStorage.getItem('sim_pengurus');
-    return saved ? JSON.parse(saved) : INITIAL_PENGURUS_LIST;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const sanitized = sanitizePengurusList(parsed);
+        localStorage.setItem('sim_pengurus', JSON.stringify(sanitized));
+        return sanitized;
+      } catch {
+        return sanitizePengurusList(INITIAL_PENGURUS_LIST);
+      }
+    }
+    return sanitizePengurusList(INITIAL_PENGURUS_LIST);
   });
   const [kalenderList, setKalenderList] = useState<KalenderAkademikEvent[]>(() => {
     const saved = localStorage.getItem('sim_kalender');
@@ -194,8 +196,7 @@ export default function App() {
   const [loginError, setLoginError] = useState<string>('');
 
   // -------------------------------------------------------------------------
-  // CLOUD FIRESTORE REAL-TIME SYNCHRONIZATION ENGINE
-  // (Website & Web App Satu Sumber Data Utama Terintegrasi Real-Time)
+  // LOCAL & CROSS-TAB REAL-TIME SYNCHRONIZATION ENGINE
   // -------------------------------------------------------------------------
   useEffect(() => {
     initAuth(
@@ -207,195 +208,30 @@ export default function App() {
       }
     );
 
-    // 1. Sinkronisasi Settings Real-Time
-    loadSettingsFromFirestore().then((remoteSettings) => {
-      if (remoteSettings && Object.keys(remoteSettings).length > 0) {
-        setSettings((prev) => ({ ...prev, ...remoteSettings }));
-      } else {
-        saveSettingsToFirestore(DEFAULT_SETTINGS);
-      }
-    });
-
-    const unsubSettings = subscribeSettingsFromFirestore((remoteSettings) => {
-      if (remoteSettings) {
-        setSettings((prev) => ({ ...prev, ...remoteSettings }));
-        localStorage.setItem('sim_settings', JSON.stringify(remoteSettings));
-      }
-    });
-
-    // 2. Langganan Real-Time Seluruh Koleksi (Website & Web App Sinkron < 100ms)
-    const unsubSantri = subscribeCollectionFromFirestore<Santri>('santri', (cloudList) => {
-      if (cloudList && cloudList.length > 0) {
-        setSantriList(cloudList);
-        localStorage.setItem('sim_santri', JSON.stringify(cloudList));
-      }
-    });
-
-    const unsubGuru = subscribeCollectionFromFirestore<GuruPengajar>('guru', (cloudList) => {
-      if (cloudList && cloudList.length > 0) {
-        setGuruList(cloudList);
-        localStorage.setItem('sim_guru', JSON.stringify(cloudList));
-      }
-    });
-
-    const unsubJadwal = subscribeCollectionFromFirestore<JadwalPelajaran>('jadwal', (cloudList) => {
-      if (cloudList && cloudList.length > 0) {
-        setJadwalList(cloudList);
-        localStorage.setItem('sim_jadwal', JSON.stringify(cloudList));
-      }
-    });
-
-    const unsubPengurus = subscribeCollectionFromFirestore<Pengurus>('pengurus', (cloudList) => {
-      if (cloudList && cloudList.length > 0) {
-        setPengurusList(cloudList);
-        localStorage.setItem('sim_pengurus', JSON.stringify(cloudList));
-      }
-    });
-
-    const unsubAbsensiSantri = subscribeCollectionFromFirestore<AbsensiSantriRecord>('absensi_santri', (cloudList) => {
-      if (cloudList) {
-        setAbsensiSantriList(cloudList);
-        localStorage.setItem('sim_absensi_santri', JSON.stringify(cloudList));
-      }
-    });
-
-    const unsubAbsensiGuru = subscribeCollectionFromFirestore<AbsensiGuruRecord>('absensi_guru', (cloudList) => {
-      if (cloudList) {
-        setAbsensiGuruList(cloudList);
-        localStorage.setItem('sim_absensi_guru', JSON.stringify(cloudList));
-      }
-    });
-
-    const unsubNadzhom = subscribeCollectionFromFirestore<NadzhomRecord>('nadzhom', (cloudList) => {
-      if (cloudList) {
-        setNadzhomList(cloudList);
-        localStorage.setItem('sim_nadzhom', JSON.stringify(cloudList));
-      }
-    });
-
-    const unsubNilai = subscribeCollectionFromFirestore<NilaiUjianRecord>('nilai', (cloudList) => {
-      if (cloudList) {
-        setNilaiList(cloudList);
-        localStorage.setItem('sim_nilai', JSON.stringify(cloudList));
-      }
-    });
-
-    const unsubSyahriyah = subscribeCollectionFromFirestore<SyahriyahRecord>('syahriyah', (cloudList) => {
-      if (cloudList) {
-        setSyahriyahList(cloudList);
-        localStorage.setItem('sim_syahriyah', JSON.stringify(cloudList));
-      }
-    });
-
-    const unsubUangSaku = subscribeCollectionFromFirestore<UangSakuRecord>('uang_saku', (cloudList) => {
-      if (cloudList) {
-        setUangSakuList(cloudList);
-        localStorage.setItem('sim_uang_saku', JSON.stringify(cloudList));
-      }
-    });
-
-    const unsubKurikulum = subscribeCollectionFromFirestore<KurikulumKitabRecord>('kurikulum', (cloudList) => {
-      if (cloudList) {
-        setKurikulumList(cloudList);
-        localStorage.setItem('sim_kurikulum', JSON.stringify(cloudList));
-      }
-    });
-
-    const unsubSilabus = subscribeCollectionFromFirestore<SilabusMemaknaiRecord>('silabus', (cloudList) => {
-      if (cloudList) {
-        setSilabusList(cloudList);
-        localStorage.setItem('sim_silabus', JSON.stringify(cloudList));
-      }
-    });
-
-    const unsubKalender = subscribeCollectionFromFirestore<KalenderAkademikEvent>('kalender', (cloudList) => {
-      if (cloudList) {
-        setKalenderList(cloudList);
-        localStorage.setItem('sim_kalender', JSON.stringify(cloudList));
-      }
-    });
-
-    const unsubUjian = subscribeCollectionFromFirestore<UjianSantriRecord>('ujian', (cloudList) => {
-      if (cloudList) {
-        setUjianList(cloudList);
-        localStorage.setItem('sim_ujian_kitab', JSON.stringify(cloudList));
-      }
-    });
-
-    const unsubIzin = subscribeCollectionFromFirestore<IzinMengajarRequest>('izin_mengajar', (cloudList) => {
-      if (cloudList) {
-        setIzinMengajarList(cloudList);
-        localStorage.setItem('sim_izin_mengajar', JSON.stringify(cloudList));
-      }
-    });
-
-    // 3. Initial Seed Check to Firestore: Jika cloud Firestore masih kosong, unggah data inisial sekali
-    const seedCloudDatabaseIfNeeded = async () => {
+    // Cross-tab / multi-window real-time synchronization
+    const handleStorage = (e: StorageEvent) => {
       try {
-        const cloudSantri = await loadCollectionFromFirestore('santri');
-        if (!cloudSantri || cloudSantri.length === 0) {
-          await saveCollectionToFirestore('santri', santriList);
+        if (e.key === 'sim_absensi_santri' && e.newValue) {
+          setAbsensiSantriList(JSON.parse(e.newValue));
+        } else if (e.key === 'sim_absensi_guru' && e.newValue) {
+          setAbsensiGuruList(JSON.parse(e.newValue));
+        } else if (e.key === 'sim_santri' && e.newValue) {
+          setSantriList(JSON.parse(e.newValue));
+        } else if (e.key === 'sim_guru' && e.newValue) {
+          setGuruList(JSON.parse(e.newValue));
+        } else if (e.key === 'sim_jadwal' && e.newValue) {
+          setJadwalList(JSON.parse(e.newValue));
+        } else if (e.key === 'sim_pengurus' && e.newValue) {
+          setPengurusList(sanitizePengurusList(JSON.parse(e.newValue)));
+        } else if (e.key === 'sim_settings' && e.newValue) {
+          setSettings(JSON.parse(e.newValue));
         }
-        const cloudGuru = await loadCollectionFromFirestore('guru');
-        if (!cloudGuru || cloudGuru.length === 0) {
-          await saveCollectionToFirestore('guru', guruList);
-        }
-        const cloudJadwal = await loadCollectionFromFirestore('jadwal');
-        if (!cloudJadwal || cloudJadwal.length === 0) {
-          await saveCollectionToFirestore('jadwal', jadwalList);
-        }
-        const cloudPengurus = await loadCollectionFromFirestore('pengurus');
-        if (!cloudPengurus || cloudPengurus.length === 0) {
-          await saveCollectionToFirestore('pengurus', pengurusList);
-        }
-        const cloudNadzhom = await loadCollectionFromFirestore('nadzhom');
-        if (!cloudNadzhom || cloudNadzhom.length === 0) {
-          await saveCollectionToFirestore('nadzhom', nadzhomList);
-        }
-        const cloudNilai = await loadCollectionFromFirestore('nilai');
-        if (!cloudNilai || cloudNilai.length === 0) {
-          await saveCollectionToFirestore('nilai', nilaiList);
-        }
-        const cloudKurikulum = await loadCollectionFromFirestore('kurikulum');
-        if (!cloudKurikulum || cloudKurikulum.length === 0) {
-          await saveCollectionToFirestore('kurikulum', kurikulumList);
-        }
-        const cloudSilabus = await loadCollectionFromFirestore('silabus');
-        if (!cloudSilabus || cloudSilabus.length === 0) {
-          await saveCollectionToFirestore('silabus', silabusList);
-        }
-        const cloudKalender = await loadCollectionFromFirestore('kalender');
-        if (!cloudKalender || cloudKalender.length === 0) {
-          await saveCollectionToFirestore('kalender', kalenderList);
-        }
-        const cloudUjian = await loadCollectionFromFirestore('ujian');
-        if (!cloudUjian || cloudUjian.length === 0) {
-          await saveCollectionToFirestore('ujian', ujianList);
-        }
-      } catch (err) {
-        console.warn('Initial cloud seed error:', err);
-      }
+      } catch {}
     };
 
-    seedCloudDatabaseIfNeeded();
-
+    window.addEventListener('storage', handleStorage);
     return () => {
-      unsubSettings();
-      unsubSantri();
-      unsubGuru();
-      unsubJadwal();
-      unsubPengurus();
-      unsubAbsensiSantri();
-      unsubAbsensiGuru();
-      unsubNadzhom();
-      unsubNilai();
-      unsubSyahriyah();
-      unsubUangSaku();
-      unsubKurikulum();
-      unsubSilabus();
-      unsubKalender();
-      unsubUjian();
-      unsubIzin();
+      window.removeEventListener('storage', handleStorage);
     };
   }, []);
 
@@ -484,48 +320,39 @@ export default function App() {
     if (imported.santriList && imported.santriList.length > 0) {
       setSantriList(imported.santriList);
       localStorage.setItem('sim_santri', JSON.stringify(imported.santriList));
-      saveCollectionToFirestore('santri', imported.santriList);
     }
     if (imported.guruList && imported.guruList.length > 0) {
       setGuruList(imported.guruList);
       localStorage.setItem('sim_guru', JSON.stringify(imported.guruList));
-      saveCollectionToFirestore('guru', imported.guruList);
     }
     if (imported.jadwalList && imported.jadwalList.length > 0) {
       setJadwalList(imported.jadwalList);
       localStorage.setItem('sim_jadwal', JSON.stringify(imported.jadwalList));
-      saveCollectionToFirestore('jadwal', imported.jadwalList);
     }
     if (imported.nadzhomList && imported.nadzhomList.length > 0) {
       setNadzhomList(imported.nadzhomList);
       localStorage.setItem('sim_nadzhom', JSON.stringify(imported.nadzhomList));
-      saveCollectionToFirestore('nadzhom', imported.nadzhomList);
     }
     if (imported.nilaiList && imported.nilaiList.length > 0) {
       setNilaiList(imported.nilaiList);
       localStorage.setItem('sim_nilai', JSON.stringify(imported.nilaiList));
-      saveCollectionToFirestore('nilai', imported.nilaiList);
     }
     if (imported.absensiSantriList && imported.absensiSantriList.length > 0) {
       setAbsensiSantriList(imported.absensiSantriList);
       localStorage.setItem('sim_absensi_santri', JSON.stringify(imported.absensiSantriList));
-      saveCollectionToFirestore('absensi_santri', imported.absensiSantriList);
     }
     if (imported.absensiGuruList && imported.absensiGuruList.length > 0) {
       setAbsensiGuruList(imported.absensiGuruList);
       localStorage.setItem('sim_absensi_guru', JSON.stringify(imported.absensiGuruList));
-      saveCollectionToFirestore('absensi_guru', imported.absensiGuruList);
     }
     if (imported.syahriyahList && imported.syahriyahList.length > 0) {
       setSyahriyahList(imported.syahriyahList);
       localStorage.setItem('sim_syahriyah', JSON.stringify(imported.syahriyahList));
-      saveCollectionToFirestore('syahriyah', imported.syahriyahList);
     }
     if (imported.settings) {
       setSettings(prev => {
         const updated = { ...prev, ...imported.settings };
         localStorage.setItem('sim_settings', JSON.stringify(updated));
-        saveSettingsToFirestore(updated);
         return updated;
       });
     }
@@ -533,21 +360,13 @@ export default function App() {
 
   const handleGoogleLoginFlow = async () => {
     try {
-      let fbEmail = '';
-      try {
-        const fbUser = await signInWithGoogleFirebase();
-        if (fbUser) fbEmail = fbUser.email || '';
-      } catch (fbErr) {
-        console.warn('Firebase popup sign in fallback:', fbErr);
-      }
-
       const res = await googleSignIn();
-      if (res?.user || fbEmail) {
+      if (res?.user) {
         setIsGoogleConnected(true);
         setShowDoors(true);
         setSession({
           role: 'admin',
-          identifier: fbEmail || res?.user?.email || res?.user?.displayName || 'admin_google'
+          identifier: res.user.email || res.user.displayName || 'admin_google'
         });
       }
     } catch (e: any) {
@@ -657,7 +476,6 @@ export default function App() {
       try {
         localStorage.setItem('sim_absensi_santri', JSON.stringify(updated));
       } catch {}
-      saveCollectionToFirestore('absensi_santri', updated);
       return updated;
     });
 
@@ -673,12 +491,43 @@ export default function App() {
       try {
         localStorage.setItem('sim_absensi_guru', JSON.stringify(updated));
       } catch {}
-      saveCollectionToFirestore('absensi_guru', updated);
       return updated;
     });
 
     // Broadcast update secara real-time ke Dashboard Admin
     broadcastAttendanceUpdate('guru', records, session?.pengurusData?.nama || 'Ustadz / Pengurus');
+  };
+
+  const handleDeleteAbsensiSantri = (target: { tanggal: string; idSantri?: string; nama: string }) => {
+    setAbsensiSantriList(prev => {
+      const updated = prev.filter(p => !(p.tanggal === target.tanggal && (p.idSantri === target.idSantri || p.nama.trim().toLowerCase() === target.nama.trim().toLowerCase())));
+      try {
+        localStorage.setItem('sim_absensi_santri', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    try {
+      const prevHS = JSON.parse(localStorage.getItem('sim_rekap_santri_harian_history') || '[]');
+      const filteredHS = prevHS.filter((p: any) => !(p.tanggal === target.tanggal && (p.idSantri === target.idSantri || p.nama.trim().toLowerCase() === target.nama.trim().toLowerCase())));
+      localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(filteredHS));
+    } catch {}
+    broadcastAttendanceUpdate('santri', [], session?.pengurusData?.nama || 'Admin');
+  };
+
+  const handleDeleteAbsensiGuru = (target: { tanggal: string; nama: string; kelas?: string; jamKe?: number | string }) => {
+    setAbsensiGuruList(prev => {
+      const updated = prev.filter(p => !(p.tanggal === target.tanggal && p.nama.trim().toLowerCase() === target.nama.trim().toLowerCase() && (!target.kelas || p.kelas === target.kelas)));
+      try {
+        localStorage.setItem('sim_absensi_guru', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    try {
+      const prevHG = JSON.parse(localStorage.getItem('sim_rekap_guru_harian_history') || '[]');
+      const filteredHG = prevHG.filter((p: any) => !(p.tanggal === target.tanggal && p.nama.trim().toLowerCase() === target.nama.trim().toLowerCase() && (!target.kelas || p.kelas === target.kelas)));
+      localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(filteredHG));
+    } catch {}
+    broadcastAttendanceUpdate('guru', [], session?.pengurusData?.nama || 'Admin');
   };
 
   // Sinkronisasi data presensi real-time lintas tab & komponen
@@ -705,14 +554,12 @@ export default function App() {
     const updated = [newSantri, ...santriList];
     setSantriList(updated);
     localStorage.setItem('sim_santri', JSON.stringify(updated));
-    saveCollectionToFirestore('santri', updated);
   };
 
   const handleUpdateSantriProfile = (updatedSantri: Santri) => {
     const updated = santriList.map(s => s.id === updatedSantri.id ? updatedSantri : s);
     setSantriList(updated);
     localStorage.setItem('sim_santri', JSON.stringify(updated));
-    saveCollectionToFirestore('santri', updated);
     if (session?.role === 'wali_santri' && session.identifier === updatedSantri.id) {
       setSession({
         ...session,
@@ -726,7 +573,6 @@ export default function App() {
     const updated = santriList.filter(s => s.id !== id);
     setSantriList(updated);
     localStorage.setItem('sim_santri', JSON.stringify(updated));
-    saveCollectionToFirestore('santri', updated);
 
     // Also remove from active session if logged in as that santri
     if (session?.role === 'wali_santri' && session.identifier === id) {
@@ -739,7 +585,6 @@ export default function App() {
     const updated = [newGuru, ...guruList];
     setGuruList(updated);
     localStorage.setItem('sim_guru', JSON.stringify(updated));
-    saveCollectionToFirestore('guru', updated);
   };
 
   const handleDeleteGuru = (idOrName: string) => {
@@ -747,7 +592,6 @@ export default function App() {
     const updated = guruList.filter(g => (g.id ? g.id !== idOrName : true) && g.nama !== idOrName);
     setGuruList(updated);
     localStorage.setItem('sim_guru', JSON.stringify(updated));
-    saveCollectionToFirestore('guru', updated);
     alert(`Data ustadz / guru pengajar "${target?.nama || idOrName}" telah berhasil dihapus secara manual.`);
   };
 
@@ -762,7 +606,6 @@ export default function App() {
     }
     setSilabusList(updated);
     localStorage.setItem('sim_silabus', JSON.stringify(updated));
-    saveCollectionToFirestore('silabus', updated);
 
     // Update ustadz / guru mapping if needed
     if (rec.ustadzPengampu) {
@@ -772,7 +615,6 @@ export default function App() {
         upGuru[guruIdx] = { ...upGuru[guruIdx], kitab: rec.namaKitab };
         setGuruList(upGuru);
         localStorage.setItem('sim_guru', JSON.stringify(upGuru));
-        saveCollectionToFirestore('guru', upGuru);
       }
     }
   };
@@ -781,7 +623,6 @@ export default function App() {
     const updated = silabusList.filter(s => s.id !== id);
     setSilabusList(updated);
     localStorage.setItem('sim_silabus', JSON.stringify(updated));
-    saveCollectionToFirestore('silabus', updated);
   };
 
   const handleSaveNewJadwal = (newJadwal: JadwalPelajaran) => {
@@ -797,7 +638,6 @@ export default function App() {
         updated = [...prev, preparedJadwal];
       }
       localStorage.setItem('sim_jadwal', JSON.stringify(updated));
-      saveCollectionToFirestore('jadwal', updated);
       return updated;
     });
   };
@@ -809,7 +649,6 @@ export default function App() {
         return j.id !== idOrItem.id && j !== idOrItem;
       });
       localStorage.setItem('sim_jadwal', JSON.stringify(updated));
-      saveCollectionToFirestore('jadwal', updated);
       return updated;
     });
   };
@@ -818,14 +657,12 @@ export default function App() {
     const updated = [rec, ...nadzhomList];
     setNadzhomList(updated);
     localStorage.setItem('sim_nadzhom', JSON.stringify(updated));
-    saveCollectionToFirestore('nadzhom', updated);
   };
 
   const handleSaveNilai = (rec: NilaiUjianRecord) => {
     const updated = [rec, ...nilaiList];
     setNilaiList(updated);
     localStorage.setItem('sim_nilai', JSON.stringify(updated));
-    saveCollectionToFirestore('nilai', updated);
   };
 
   const handleSaveSyahriyah = (rec: SyahriyahRecord) => {
@@ -839,14 +676,12 @@ export default function App() {
     }
     setSyahriyahList(updated);
     localStorage.setItem('sim_syahriyah', JSON.stringify(updated));
-    saveCollectionToFirestore('syahriyah', updated);
   };
 
   const handleSaveUangSaku = (rec: UangSakuRecord) => {
     const updated = [rec, ...uangSakuList];
     setUangSakuList(updated);
     localStorage.setItem('sim_uang_saku', JSON.stringify(updated));
-    saveCollectionToFirestore('uang_saku', updated);
 
     // Update santri's live balance
     const target = santriList.find(s => s.id === rec.idSantri);
@@ -866,48 +701,52 @@ export default function App() {
     }
     setKurikulumList(updated);
     localStorage.setItem('sim_kurikulum', JSON.stringify(updated));
-    saveCollectionToFirestore('kurikulum', updated);
   };
 
   const handleDeleteKurikulum = (id: string) => {
     const updated = kurikulumList.filter(k => k.id !== id);
     setKurikulumList(updated);
     localStorage.setItem('sim_kurikulum', JSON.stringify(updated));
-    saveCollectionToFirestore('kurikulum', updated);
   };
 
   // Real-time synchronization: Guru Pengajar & Login Pengurus
   const syncPengurusWithGuru = () => {
     const uniqueGurus: GuruPengajar[] = [];
-    const seenNames = new Set<string>();
+    const seenTeacherNames = new Set<string>();
     guruList.forEach(g => {
-      const norm = g.nama.trim().toLowerCase();
-      if (!seenNames.has(norm)) {
-        seenNames.add(norm);
+      const norm = (g.nama || '').trim().toLowerCase();
+      if (norm && !seenTeacherNames.has(norm)) {
+        seenTeacherNames.add(norm);
         uniqueGurus.push(g);
       }
     });
 
+    const currentPengurus = sanitizePengurusList(pengurusList);
     const existingMap = new Map<string, Pengurus>();
-    pengurusList.forEach(p => {
-      existingMap.set(p.nama.trim().toLowerCase(), p);
-      if (p.id) existingMap.set(p.id.toLowerCase(), p);
+    currentPengurus.forEach(p => {
+      if (p.nama) existingMap.set(p.nama.trim().toLowerCase(), p);
     });
 
-    const synced: Pengurus[] = uniqueGurus.map((g, idx) => {
-      const norm = g.nama.trim().toLowerCase();
-      const exist = existingMap.get(norm);
-      if (exist) {
+    const updatedPengurus: Pengurus[] = currentPengurus.map(p => {
+      const norm = (p.nama || '').trim().toLowerCase();
+      const matchedGuru = uniqueGurus.find(g => (g.nama || '').trim().toLowerCase() === norm);
+      if (matchedGuru) {
         return {
-          ...exist,
-          kelasBimbingan: exist.kelasBimbingan || g.kelas,
-          mapel: exist.mapel || g.mapel,
-          noWa: exist.noWa || g.noWa || '081234567800',
-          foto: exist.foto || g.foto
+          ...p,
+          kelasBimbingan: p.kelasBimbingan || matchedGuru.kelas,
+          mapel: p.mapel || matchedGuru.mapel,
+          noWa: p.noWa || matchedGuru.noWa || '081234567800',
+          foto: p.foto || matchedGuru.foto
         };
-      } else {
-        return {
-          id: `PNG-${String(idx + 1).padStart(3, '0')}`,
+      }
+      return p;
+    });
+
+    for (const g of uniqueGurus) {
+      const norm = (g.nama || '').trim().toLowerCase();
+      if (!existingMap.has(norm)) {
+        updatedPengurus.push({
+          id: '',
           nama: g.nama.trim(),
           password: 'pengurus123',
           jabatan: `Ustadz Pengajar ${g.mapel}`,
@@ -917,13 +756,13 @@ export default function App() {
           foto: g.foto,
           email: `${g.nama.toLowerCase().replace(/[^a-z0-9]/g, '')}@almaliki.ac.id`,
           tugasUtama: `Pengampu Fan ${g.mapel} & Pembimbing Kelas ${g.kelas}`
-        };
+        });
       }
-    });
+    }
 
+    const synced = sanitizePengurusList(updatedPengurus);
     setPengurusList(synced);
     localStorage.setItem('sim_pengurus', JSON.stringify(synced));
-    saveCollectionToFirestore('pengurus', synced);
     return synced;
   };
 
@@ -931,13 +770,11 @@ export default function App() {
     const uniqueNames = new Set(guruList.map(g => g.nama.trim().toLowerCase()));
     const existingNames = new Set(pengurusList.map(p => p.nama.trim().toLowerCase()));
 
-    let needsSync = uniqueNames.size !== pengurusList.length;
-    if (!needsSync) {
-      for (const name of uniqueNames) {
-        if (!existingNames.has(name)) {
-          needsSync = true;
-          break;
-        }
+    let needsSync = false;
+    for (const name of uniqueNames) {
+      if (!existingNames.has(name)) {
+        needsSync = true;
+        break;
       }
     }
 
@@ -948,17 +785,15 @@ export default function App() {
 
   // Pengurus Handlers
   const handleSavePengurus = (newP: Pengurus) => {
-    const updated = [newP, ...pengurusList];
+    const updated = sanitizePengurusList([newP, ...pengurusList]);
     setPengurusList(updated);
     localStorage.setItem('sim_pengurus', JSON.stringify(updated));
-    saveCollectionToFirestore('pengurus', updated);
   };
 
   const handleUpdatePengurus = (upP: Pengurus) => {
-    const updated = pengurusList.map(p => p.id === upP.id ? upP : p);
+    const updated = sanitizePengurusList(pengurusList.map(p => p.id === upP.id ? upP : p));
     setPengurusList(updated);
     localStorage.setItem('sim_pengurus', JSON.stringify(updated));
-    saveCollectionToFirestore('pengurus', updated);
     if (session?.role === 'pengurus' && session.identifier === upP.id) {
       setSession({
         ...session,
@@ -979,14 +814,12 @@ export default function App() {
     }
     setKalenderList(updated);
     localStorage.setItem('sim_kalender', JSON.stringify(updated));
-    saveCollectionToFirestore('kalender', updated);
   };
 
   const handleDeleteKalender = (id: string) => {
     const updated = kalenderList.filter(e => e.id !== id);
     setKalenderList(updated);
     localStorage.setItem('sim_kalender', JSON.stringify(updated));
-    saveCollectionToFirestore('kalender', updated);
   };
 
   // Ujian Santri Handlers
@@ -1001,7 +834,6 @@ export default function App() {
     }
     setUjianList(updated);
     localStorage.setItem('sim_ujian_kitab', JSON.stringify(updated));
-    saveCollectionToFirestore('ujian', updated);
 
     // Also sync directly into santriList so it immediately reflects in Wali Santri profile column
     const target = santriList.find(s => s.id === rec.idSantri);
@@ -1023,7 +855,6 @@ export default function App() {
   const handleSaveSettings = async (st: AppSettings) => {
     setSettings(st);
     localStorage.setItem('sim_settings', JSON.stringify(st));
-    saveSettingsToFirestore(st);
   };
 
   const handleSaveDashboardAndReset = () => {
@@ -1046,8 +877,6 @@ export default function App() {
     setAbsensiGuruList([]);
     localStorage.setItem('sim_absensi_santri', JSON.stringify([]));
     localStorage.setItem('sim_absensi_guru', JSON.stringify([]));
-    saveCollectionToFirestore('absensi_santri', []);
-    saveCollectionToFirestore('absensi_guru', []);
     alert('Rekap dashboard telah disimpan ke riwayat rekapan dan seluruh sesi absensi harian berhasil direset ke nol (0).');
   };
 
@@ -1056,7 +885,6 @@ export default function App() {
     const updated = [newReq, ...izinMengajarList];
     setIzinMengajarList(updated);
     localStorage.setItem('sim_izin_mengajar', JSON.stringify(updated));
-    saveCollectionToFirestore('izin_mengajar', updated);
   };
 
   const handleApproveIzinMengajar = (
@@ -1084,7 +912,6 @@ export default function App() {
 
     setIzinMengajarList(updatedIzinList);
     localStorage.setItem('sim_izin_mengajar', JSON.stringify(updatedIzinList));
-    saveCollectionToFirestore('izin_mengajar', updatedIzinList);
 
     // KETIKA ADMIN MENYETUJUI STATUS KEHADIRAN PADA ABSENSI USTADZ USTADZAH LANGSUNG MENJADI IZIN DAN SEBELAHNYA ADA NAMA USTAD PENGANTINYA!
     if (status === 'Disetujui') {
@@ -1122,7 +949,6 @@ export default function App() {
 
       setAbsensiGuruList(updatedAbsensi);
       localStorage.setItem('sim_absensi_guru', JSON.stringify(updatedAbsensi));
-      saveCollectionToFirestore('absensi_guru', updatedAbsensi);
     }
   };
 
@@ -1214,6 +1040,8 @@ export default function App() {
             onLogout={handleLogout}
             onSaveAbsensiSantri={handleSaveAbsensiSantri}
             onSaveAbsensiGuru={handleSaveAbsensiGuru}
+            onDeleteAbsensiSantri={handleDeleteAbsensiSantri}
+            onDeleteAbsensiGuru={handleDeleteAbsensiGuru}
             onSaveNewSantri={handleSaveNewSantri}
             onSaveNewGuru={handleSaveNewGuru}
             onDeleteGuru={handleDeleteGuru}

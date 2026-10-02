@@ -6,7 +6,7 @@ import {
   Settings2, ToggleLeft, ToggleRight, Sparkles, Check, PieChart as PieChartIcon,
   Type, Megaphone, Copy, FileSpreadsheet, Newspaper, CheckCheck, RotateCcw,
   CreditCard, Wallet, AlertTriangle, Phone, MessageCircle, ArrowDownLeft, ArrowUpRight, Trash2, GraduationCap,
-  Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload, Play,
+  Download, Printer, FileText, Send, ShieldCheck, X, Film, Upload, Play,
   ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine, MapPin, Compass, Crosshair, Shield, Navigation,
   Instagram, Youtube, Music2, Globe, Unlock, Menu, Camera, Search
 } from 'lucide-react';
@@ -64,6 +64,8 @@ interface AdminDashboardProps {
   // Mutations
   onSaveAbsensiSantri: (records: AbsensiSantriRecord[]) => void;
   onSaveAbsensiGuru: (records: AbsensiGuruRecord[]) => void;
+  onDeleteAbsensiSantri?: (target: { tanggal: string; idSantri?: string; nama: string }) => void;
+  onDeleteAbsensiGuru?: (target: { tanggal: string; nama: string; kelas?: string; jamKe?: number | string }) => void;
   onSaveNewSantri: (newSantri: Santri) => void;
   onSaveNewGuru: (newGuru: GuruPengajar) => void;
   onDeleteGuru?: (idOrName: string) => void;
@@ -127,6 +129,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDataImported,
   onSaveAbsensiSantri,
   onSaveAbsensiGuru,
+  onDeleteAbsensiSantri,
+  onDeleteAbsensiGuru,
   onSaveNewSantri,
   onSaveNewGuru,
   onDeleteGuru,
@@ -271,9 +275,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   }, [absensiGuruList, rekapGuruLog]);
 
+  // Gabungkan absensiSantriList (live real-time) dengan rekapSantriLog (arsip riwayat)
+  const combinedSantriLog = useMemo(() => {
+    const map = new Map<string, AbsensiSantriRecord>();
+    // Tambahkan absensiSantriList live real-time
+    (absensiSantriList || []).forEach(item => {
+      const key = `${item.tanggal}_${item.idSantri || item.nama}`;
+      map.set(key, item);
+    });
+    // Tambahkan rekapSantriLog arsip
+    rekapSantriLog.forEach(item => {
+      const key = `${item.tanggal}_${item.idSantri || item.nama}`;
+      if (!map.has(key)) {
+        map.set(key, item);
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => {
+      return (b.tanggal || '').localeCompare(a.tanggal || '');
+    });
+  }, [absensiSantriList, rekapSantriLog]);
+
+  // Handler interaktif untuk update status dan hapus absensi secara real-time
+  const handleUpdateRecordSantriStatus = (record: AbsensiSantriRecord, newStatus: 'Hadir' | 'Izin' | 'Sakit' | 'Alpha') => {
+    const updated = { ...record, status: newStatus };
+    onSaveAbsensiSantri([updated]);
+  };
+
+  const handleDeleteRecordSantri = (record: AbsensiSantriRecord) => {
+    if (window.confirm(`Hapus data absensi santri ${record.nama} pada tanggal ${record.tanggal}?`)) {
+      if (onDeleteAbsensiSantri) {
+        onDeleteAbsensiSantri(record);
+      }
+      setRekapSantriLog(prev => {
+        const filtered = prev.filter(r => !(r.tanggal === record.tanggal && (r.idSantri === record.idSantri || r.nama.trim().toLowerCase() === record.nama.trim().toLowerCase())));
+        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(filtered));
+        return filtered;
+      });
+    }
+  };
+
+  const handleUpdateRecordGuruStatus = (record: AbsensiGuruRecord, newStatus: 'Hadir' | 'Terlambat' | 'Izin' | 'Alpha') => {
+    const updated = { ...record, status: newStatus };
+    onSaveAbsensiGuru([updated]);
+  };
+
+  const handleDeleteRecordGuru = (record: AbsensiGuruRecord) => {
+    if (window.confirm(`Hapus data absensi ustadz ${record.nama} pada tanggal ${record.tanggal}?`)) {
+      if (onDeleteAbsensiGuru) {
+        onDeleteAbsensiGuru(record);
+      }
+      setRekapGuruLog(prev => {
+        const filtered = prev.filter(r => !(r.tanggal === record.tanggal && r.nama.trim().toLowerCase() === record.nama.trim().toLowerCase() && (!record.kelas || r.kelas === record.kelas)));
+        localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(filtered));
+        return filtered;
+      });
+    }
+  };
+
   // State Pilihan Bulan untuk Rekapitulasi Bulanan (Tanggal 1 - 30)
   const [selectedBulanSantri, setSelectedBulanSantri] = useState<string>('September 2026');
   const [selectedBulanGuru, setSelectedBulanGuru] = useState<string>('September 2026');
+  const [riwayatRekapSubTab, setRiwayatRekapSubTab] = useState<'rekap_guru' | 'rekap_santri'>('rekap_guru');
 
   // Filter Tipe Kehadiran Ustadz: SEMUA | NORMAL | PENGGANTI | TERLAMBAT | BELUM HADIR | BERHALANGAN
   const [filterGuruAbsensiTipe, setFilterGuruAbsensiTipe] = useState<'SEMUA' | 'NORMAL' | 'PENGGANTI' | 'TERLAMBAT' | 'BELUM HADIR' | 'BERHALANGAN'>('SEMUA');
@@ -414,73 +476,135 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     alert('Absensi seluruh santri berhasil disimpan dan direkap!');
   };
 
-  // Kalkulasi Rekapan Bulanan Santri (Tanggal 1 sampai 30)
-  const rekapBulananSantri = useMemo(() => {
-    return santriList.map((santri, index) => {
-      // Hitung dari rekaman absensi santri yang cocok
-      const records = absensiSantriList.filter(a => a.idSantri === santri.id || a.nama === santri.nama);
-      const actualHadir = records.filter(r => r.status === 'Hadir').length;
-      const actualIzin = records.filter(r => r.status === 'Izin').length;
-      const actualSakit = records.filter(r => r.status === 'Sakit').length;
-      const actualAlpha = records.filter(r => r.status === 'Alpha').length;
+  const BULAN_NAMES = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
 
-      // Buat baseline kumulatif 30 hari yang konsisten dan realistis berbasis data santri
-      const pseudoHash = (santri.id.charCodeAt(santri.id.length - 1) + index * 7) % 5;
-      const baseHadir = Math.min(30, 26 + (pseudoHash % 4) + actualHadir);
-      const baseIzin = (pseudoHash === 1 ? 1 : 0) + actualIzin;
-      const baseSakit = (pseudoHash === 3 ? 1 : 0) + actualSakit;
-      const baseAlpha = (pseudoHash === 4 ? 1 : 0) + actualAlpha;
-      const totalDays = 30; // Rentang tgl 1 s/d 30
-      const totalKehadiran = Math.min(30, baseHadir);
-      const persentase = Math.min(100, Math.round((totalKehadiran / totalDays) * 100));
+  const BULAN_OPTIONS = [
+    'Januari 2025', 'Februari 2025', 'Maret 2025', 'April 2025',
+    'Mei 2025', 'Juni 2025', 'Juli 2025', 'Agustus 2025',
+    'September 2025', 'Oktober 2025', 'November 2025', 'Desember 2025',
+    'Januari 2026', 'Februari 2026', 'Maret 2026', 'April 2026',
+    'Mei 2026', 'Juni 2026', 'Juli 2026', 'Agustus 2026',
+    'September 2026', 'Oktober 2026', 'November 2026', 'Desember 2026',
+    'Januari 2027', 'Februari 2027', 'Maret 2027', 'April 2027',
+    'Mei 2027', 'Juni 2027', 'Juli 2027', 'Agustus 2027',
+    'September 2027', 'Oktober 2027', 'November 2027', 'Desember 2027'
+  ];
+
+  // Helper memeriksa apakah tanggal berada di bulan & tahun yang dipilih
+  const isDateInMonthYear = (dateStr: string | undefined | null, selectedMY: string): boolean => {
+    if (!dateStr || !selectedMY) return false;
+    const tokens = selectedMY.trim().split(/\s+/);
+    if (tokens.length < 2) return false;
+    const monthName = tokens[0].toLowerCase();
+    const yearNum = parseInt(tokens[1], 10);
+    const monthIdx = BULAN_NAMES.findIndex(b => b.toLowerCase() === monthName);
+    if (monthIdx === -1 || isNaN(yearNum)) return false;
+
+    const clean = dateStr.trim().split('T')[0];
+    if (clean.includes('-')) {
+      const parts = clean.split('-');
+      if (parts.length >= 3) {
+        if (parts[0].length === 4) {
+          // YYYY-MM-DD
+          const recYear = parseInt(parts[0], 10);
+          const recMonth = parseInt(parts[1], 10) - 1;
+          return recYear === yearNum && recMonth === monthIdx;
+        } else if (parts[2].length === 4) {
+          // DD-MM-YYYY
+          const recYear = parseInt(parts[2], 10);
+          const recMonth = parseInt(parts[1], 10) - 1;
+          return recYear === yearNum && recMonth === monthIdx;
+        }
+      }
+    } else if (clean.includes('/')) {
+      const parts = clean.split('/');
+      if (parts.length >= 3) {
+        // DD/MM/YYYY
+        const recYear = parseInt(parts[2], 10);
+        const recMonth = parseInt(parts[1], 10) - 1;
+        return recYear === yearNum && recMonth === monthIdx;
+      }
+    }
+    return false;
+  };
+
+  // Kalkulasi Rekapan Bulanan Santri Otomatis Berdasarkan Bulan & Tahun yang Dipilih
+  // Saat berganti bulan, perhitungan dimulai dari 0 jika belum ada data bulan tersebut.
+  // Data real-time terkoneksi langsung dengan combinedSantriLog (absensiSantriList & rekapSantriLog).
+  const rekapBulananSantri = useMemo(() => {
+    return santriList.map((santri) => {
+      // Filter rekaman absensi santri HANYA di bulan & tahun yang dipilih
+      const records = combinedSantriLog.filter(a => {
+        if (!isDateInMonthYear(a.tanggal, selectedBulanSantri)) return false;
+        return a.idSantri === santri.id || a.nama.trim().toLowerCase() === santri.nama.trim().toLowerCase();
+      });
+
+      const hadir = records.filter(r => r.status === 'Hadir').length;
+      const izin = records.filter(r => r.status === 'Izin').length;
+      const sakit = records.filter(r => r.status === 'Sakit').length;
+      const alpha = records.filter(r => r.status === 'Alpha').length;
+      const totalSesi = hadir + izin + sakit + alpha;
+      const persentase = totalSesi > 0 ? Math.round((hadir / totalSesi) * 100) : 0;
 
       return {
         id: santri.id,
         nama: santri.nama,
         kelas: santri.kelas,
-        hadir: totalKehadiran,
-        izin: baseIzin,
-        sakit: baseSakit,
-        alpha: baseAlpha,
+        hadir,
+        izin,
+        sakit,
+        alpha,
+        totalSesi,
         persentase,
-        keterangan: persentase >= 95 ? 'Sangat Rajin' : persentase >= 85 ? 'Disiplin' : 'Perlu Pembinaan'
+        keterangan: totalSesi === 0 
+          ? 'Belum Ada Sesi' 
+          : persentase >= 95 ? 'Sangat Rajin' : persentase >= 85 ? 'Disiplin' : 'Perlu Pembinaan'
       };
     });
-  }, [santriList, absensiSantriList]);
+  }, [santriList, combinedSantriLog, selectedBulanSantri]);
 
-  // Kalkulasi Rekapan Bulanan Guru (Tanggal 1 sampai 30)
+  // Kalkulasi Rekapan Bulanan Guru Otomatis Berdasarkan Bulan & Tahun yang Dipilih
+  // Saat berganti bulan, perhitungan dimulai dari 0 jika belum ada data bulan tersebut.
+  // Data real-time terkoneksi langsung dengan absensiGuruList & combinedGuruLog.
   const rekapBulananGuru = useMemo(() => {
-    return guruList.map((guru, index) => {
-      // Cari rekap guru dari log dan jadwal (menggunakan combinedGuruLog yang terhubung live real-time)
-      const logs = combinedGuruLog.filter(l => l.nama.toLowerCase() === guru.nama.toLowerCase());
-      const actualHadir = logs.filter(l => l.status === 'Hadir').length;
-      const actualTerlambat = logs.filter(l => l.status === 'Terlambat').length;
-      const actualIzin = logs.filter(l => l.status === 'Izin').length;
-      const actualAlpha = logs.filter(l => l.status === 'Alpha').length;
+    return guruList.map((guru) => {
+      const norm = (guru.nama || '').trim().toLowerCase();
+      // Filter log absensi ustadz / guru HANYA di bulan & tahun yang dipilih
+      const logs = combinedGuruLog.filter(l => {
+        if (!isDateInMonthYear(l.tanggal, selectedBulanGuru)) return false;
+        const nameMatch = (l.nama || '').trim().toLowerCase() === norm;
+        if (!nameMatch) return false;
+        if (l.kelas && guru.kelas && l.kelas !== guru.kelas) return false;
+        return true;
+      });
 
-      // Basis kalkulasi mengajar tanggal 1 sampai 30 (rata-rata 24 s/d 28 sesi mengajar per bulan)
-      const guruHash = (guru.nama.charCodeAt(2) + index * 5) % 6;
-      const totalSesiBulan = 26; // Rata-rata sesi mengajar per bulan tgl 1-30
-      const totalHadir = Math.min(totalSesiBulan, 23 + (guruHash % 3) + actualHadir);
-      const totalIzin = (guruHash === 2 ? 1 : 0) + actualIzin;
-      const totalSakitTelat = (guruHash === 4 ? 1 : 0) + actualTerlambat;
-      const totalAlpha = actualAlpha;
-      const persentase = Math.min(100, Math.round((totalHadir / totalSesiBulan) * 100));
+      const hadir = logs.filter(l => l.status === 'Hadir' || l.tipeAbsensi === 'Pengganti' || (l.status as string) === 'Pengganti').length;
+      const terlambat = logs.filter(l => l.status === 'Terlambat').length;
+      const izin = logs.filter(l => l.status === 'Izin').length;
+      const sakitTelat = logs.filter(l => l.status === 'Terlambat' || (l as any).status === 'Sakit').length;
+      const alpha = logs.filter(l => l.status === 'Alpha').length;
+      const totalSesi = logs.length;
+      const persentase = totalSesi > 0 ? Math.round(((hadir + (terlambat * 0.5)) / totalSesi) * 100) : 0;
 
       return {
         nama: guru.nama,
         mapel: guru.mapel,
         kelas: guru.kelas,
-        totalSesi: totalSesiBulan,
-        hadir: totalHadir,
-        izin: totalIzin,
-        sakitTelat: totalSakitTelat,
-        alpha: totalAlpha,
+        totalSesi,
+        hadir,
+        izin,
+        sakitTelat,
+        alpha,
         persentase,
-        predikat: persentase >= 95 ? 'Sangat Teladan' : persentase >= 85 ? 'Tertib' : 'Evaluasi Disiplin'
+        predikat: totalSesi === 0 
+          ? 'Belum Ada Sesi' 
+          : persentase >= 95 ? 'Sangat Teladan' : persentase >= 85 ? 'Tertib' : 'Evaluasi Disiplin'
       };
     });
-  }, [guruList, combinedGuruLog]);
+  }, [guruList, combinedGuruLog, selectedBulanGuru]);
 
   // Helper Ekspor Data (Google Sheets / CSV, Microsoft Word, dan Print / PDF)
   const downloadCSV = (filename: string, headers: string[], rows: (string | number)[][]) => {
@@ -576,9 +700,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return santriList.filter(s => Number(s.nilaiMuhafadzoh ?? 88) < 75).length;
   }, [santriList]);
 
-  // State untuk QR Code Presensi Terpadu
-  const [qrAngkatan, setQrAngkatan] = useState<string>('SEMUA');
-  const [simulasiScanMsg, setSimulasiScanMsg] = useState<string | null>(null);
   const [dashboardRekapTab, setDashboardRekapTab] = useState<'santri' | 'guru'>('santri');
   const [muhafadzohYear, setMuhafadzohYear] = useState<string>('2026/2027');
 
@@ -2135,6 +2256,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </button>
                   </div>
 
+                  {/* Filter Bulan & Tahun */}
+                  <div className="flex items-center gap-1.5 bg-[#042013] border border-[#d4af37]/40 rounded-xl px-2.5 py-1">
+                    <span className="text-[11px] text-emerald-300 font-medium">Bulan:</span>
+                    <select
+                      value={dashboardRekapTab === 'santri' ? selectedBulanSantri : selectedBulanGuru}
+                      onChange={(e) => {
+                        setSelectedBulanSantri(e.target.value);
+                        setSelectedBulanGuru(e.target.value);
+                      }}
+                      className="bg-[#052216] border border-[#d4af37]/30 rounded-lg px-2 py-0.5 text-xs text-[#f3e5ab] font-bold focus:outline-none cursor-pointer"
+                    >
+                      {BULAN_OPTIONS.map(b => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </select>
+                  </div>
+
                   {/* Export Buttons: PDF, Word, Spreadsheet */}
                   <div className="flex items-center gap-1.5">
                     <button
@@ -2708,192 +2846,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* ========================================================================= */}
-            {/* 7. LINK QR CODE PER ANGKATAN UNTUK MENCOCOKKAN ABSENSI & JADWAL           */}
-            {/* ========================================================================= */}
-            <div className="card-3d rounded-3xl p-6 border-2 border-[#d4af37]/60 bg-gradient-to-r from-[#031e13] via-[#062c1c] to-[#031e13] shadow-2xl space-y-6">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-[#d4af37]/30">
-                <div className="flex items-center space-x-3.5">
-                  <div className="w-12 h-12 rounded-2xl bg-[#0b3824] border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow">
-                    <QrCode className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <h3 className="text-base sm:text-lg font-black text-white text-gold-3d flex items-center gap-2">
-                      <span>QR Code Presensi Cerdas Per Angkatan</span>
-                      <span className="px-2 py-0.5 rounded-full bg-[#d4af37] text-black font-extrabold text-[10px]">
-                        1 QR Code Untuk Semua
-                      </span>
-                    </h3>
-                    <p className="text-xs text-emerald-200 mt-0.5">
-                      Pindai QR Code untuk mencocokkan kehadiran santri dan ustadz secara instan sesuai jadwal pelajaran aktif hari ini.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Filter Angkatan QR Code */}
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    onClick={() => setQrAngkatan('SEMUA')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                      qrAngkatan === 'SEMUA' ? 'btn-3d-gold text-black shadow' : 'bg-[#03140c] text-slate-300 border border-[#d4af37]/30'
-                    }`}
-                  >
-                    1 QR Code Master (Semua)
-                  </button>
-                  {classList.map(c => (
-                    <button
-                      key={c}
-                      onClick={() => setQrAngkatan(c)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                        qrAngkatan === c ? 'btn-3d-gold text-black shadow' : 'bg-[#03140c] text-slate-300 border border-[#d4af37]/30'
-                      }`}
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Tampilan Visual QR Code & Koneksi Jadwal */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-                {/* QR Code Graphic Box */}
-                <div className="lg:col-span-4 flex flex-col items-center justify-center p-6 rounded-3xl bg-[#020e08] border-2 border-[#d4af37]/60 shadow-2xl relative">
-                  <div className="w-56 h-56 p-3 bg-white rounded-2xl shadow-xl flex items-center justify-center relative overflow-hidden">
-                    {/* SVG Authentic Vector QR Code */}
-                    <svg viewBox="0 0 200 200" className="w-full h-full">
-                      {/* Background */}
-                      <rect width="200" height="200" fill="#ffffff" />
-                      {/* Top-Left Finder */}
-                      <rect x="15" y="15" width="50" height="50" fill="#042014" rx="6" />
-                      <rect x="23" y="23" width="34" height="34" fill="#ffffff" rx="4" />
-                      <rect x="31" y="31" width="18" height="18" fill="#d4af37" rx="2" />
-                      {/* Top-Right Finder */}
-                      <rect x="135" y="15" width="50" height="50" fill="#042014" rx="6" />
-                      <rect x="143" y="23" width="34" height="34" fill="#ffffff" rx="4" />
-                      <rect x="151" y="31" width="18" height="18" fill="#d4af37" rx="2" />
-                      {/* Bottom-Left Finder */}
-                      <rect x="15" y="135" width="50" height="50" fill="#042014" rx="6" />
-                      <rect x="23" y="143" width="34" height="34" fill="#ffffff" rx="4" />
-                      <rect x="31" y="151" width="18" height="18" fill="#d4af37" rx="2" />
-                      {/* Data Pattern Modules */}
-                      <g fill="#042014">
-                        <rect x="75" y="20" width="10" height="10" />
-                        <rect x="95" y="20" width="10" height="10" />
-                        <rect x="115" y="20" width="10" height="10" />
-                        <rect x="75" y="40" width="10" height="10" />
-                        <rect x="85" y="50" width="10" height="10" />
-                        <rect x="105" y="40" width="10" height="10" />
-                        <rect x="20" y="75" width="10" height="10" />
-                        <rect x="40" y="85" width="10" height="10" />
-                        <rect x="55" y="75" width="10" height="10" />
-                        <rect x="75" y="75" width="12" height="12" fill="#d4af37" />
-                        <rect x="95" y="75" width="10" height="10" />
-                        <rect x="115" y="75" width="12" height="12" fill="#d4af37" />
-                        <rect x="135" y="75" width="10" height="10" />
-                        <rect x="155" y="85" width="10" height="10" />
-                        <rect x="175" y="75" width="10" height="10" />
-                        <rect x="75" y="95" width="10" height="10" />
-                        <rect x="85" y="105" width="10" height="10" />
-                        <rect x="105" y="95" width="10" height="10" />
-                        <rect x="115" y="105" width="10" height="10" />
-                        <rect x="135" y="95" width="10" height="10" />
-                        <rect x="75" y="115" width="12" height="12" fill="#d4af37" />
-                        <rect x="95" y="115" width="10" height="10" />
-                        <rect x="115" y="115" width="10" height="10" />
-                        <rect x="75" y="135" width="10" height="10" />
-                        <rect x="95" y="145" width="10" height="10" />
-                        <rect x="115" y="135" width="10" height="10" />
-                        <rect x="135" y="145" width="10" height="10" />
-                        <rect x="155" y="135" width="10" height="10" />
-                        <rect x="175" y="145" width="10" height="10" />
-                        <rect x="75" y="155" width="10" height="10" />
-                        <rect x="95" y="165" width="10" height="10" />
-                        <rect x="115" y="155" width="10" height="10" />
-                        <rect x="135" y="165" width="10" height="10" />
-                        <rect x="155" y="155" width="10" height="10" />
-                      </g>
-                      {/* Center Salaf Emblem */}
-                      <circle cx="100" cy="100" r="16" fill="#052e16" stroke="#d4af37" strokeWidth="2.5" />
-                      <text x="100" y="104" textAnchor="middle" fill="#d4af37" fontSize="9" fontWeight="bold">SIM</text>
-                    </svg>
-                  </div>
-
-                  <span className="mt-3 text-xs font-extrabold text-[#d4af37] font-mono tracking-wider">
-                    {qrAngkatan === 'SEMUA' ? '1 QR CODE UNTUK SEMUA ANGKATAN' : `QR CODE ${qrAngkatan}`}
-                  </span>
-                  <span className="text-[10px] text-emerald-300 font-mono">
-                    ID: QR-PP-SALAF-{qrAngkatan.replace(' ', '-')}
-                  </span>
-                </div>
-
-                {/* Detail Koneksi Jadwal & Tombol Scan */}
-                <div className="lg:col-span-8 space-y-4">
-                  <div className="bg-[#03140c] border border-[#d4af37]/30 rounded-2xl p-4 space-y-2">
-                    <span className="text-xs font-bold text-[#d4af37] flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-[#d4af37]" />
-                      <span>Koneksi Jadwal Pelajaran Hari Ini Terkait QR Code:</span>
-                    </span>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      Ketika santri atau ustadz memindai QR Code di atas, sistem secara otomatis mencocokkan waktu saat ini dengan jam ke- dan mata pelajaran di angkatan <b>{qrAngkatan}</b>.
-                    </p>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
-                      {jadwalList
-                        .filter(j => qrAngkatan === 'SEMUA' || j.kelas === qrAngkatan)
-                        .slice(0, 4)
-                        .map((j, i) => (
-                          <div key={i} className="p-2.5 rounded-xl bg-[#062417] border border-[#d4af37]/20 text-xs">
-                            <span className="font-bold text-white block">{j.mapel}</span>
-                            <span className="text-[11px] text-emerald-300 font-mono">{j.hari} • {j.waktu}</span>
-                            <span className="text-[10px] text-[#d4af37] block mt-0.5">Pengampu: {j.nama}</span>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-
-                  {/* Tombol Interaktif & Hasil Simulasi Scan */}
-                  <div className="flex flex-wrap items-center gap-3">
-                    <button
-                      onClick={() => {
-                        const targetCount = qrAngkatan === 'SEMUA' 
-                          ? santriList.length 
-                          : santriList.filter(s => s.kelas === qrAngkatan).length;
-                        setSimulasiScanMsg(`✅ Berhasil! QR Code ${qrAngkatan} berhasil dicocokkan dengan jadwal hari ini. ${targetCount} Santri & Ustadz Pengajar otomatis dicatat HADIR TEPAT WAKTU.`);
-                        setTimeout(() => setSimulasiScanMsg(null), 8000);
-                      }}
-                      className="btn-3d-gold px-5 py-2.5 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow-lg"
-                    >
-                      <QrCode className="w-4 h-4 text-black" />
-                      <span>Simulasi Scan QR Presensi Sekarang</span>
-                    </button>
-
-                    <button
-                      onClick={printTable}
-                      className="px-4 py-2.5 rounded-xl bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-bold text-xs flex items-center gap-1.5 hover:bg-emerald-900 transition"
-                    >
-                      <Printer className="w-4 h-4" />
-                      <span>Cetak Lembar QR Code</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        alert(`QR Code ${qrAngkatan} siap diunduh dan dipasang pada pintu kelas madrasah atau aula pondok.`);
-                      }}
-                      className="px-4 py-2.5 rounded-xl bg-blue-950 border border-blue-500/50 text-blue-200 font-bold text-xs flex items-center gap-1.5 hover:bg-blue-900 transition"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>Unduh Berkas QR</span>
-                    </button>
-                  </div>
-
-                  {simulasiScanMsg && (
-                    <div className="p-3.5 rounded-2xl bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 text-xs font-bold shadow-lg animate-bounce">
-                      {simulasiScanMsg}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
@@ -3258,13 +3210,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <th className="p-2.5 w-24">TANGGAL</th>
                         <th className="p-2.5">NAMA SANTRI & NIS</th>
                         <th className="p-2.5 w-32">ANGKATAN</th>
-                        <th className="p-2.5 w-28 text-center">STATUS</th>
+                        <th className="p-2.5 w-36 text-center">STATUS (EDIT LANGSUNG)</th>
                         <th className="p-2.5">KETERANGAN / SUMBER INPUT</th>
-                        <th className="p-2.5 w-28 text-center">SINKRONISASI</th>
+                        <th className="p-2.5 w-20 text-center">AKSI</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                      {absensiSantriList.slice(0, 8).map((rec, i) => (
+                      {absensiSantriList.map((rec, i) => (
                         <tr key={i} className="hover:bg-[#d4af37]/5 transition">
                           <td className="p-2.5 font-mono text-emerald-300 font-bold">{rec.tanggal}</td>
                           <td className="p-2.5 font-bold text-white">
@@ -3275,25 +3227,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </td>
                           <td className="p-2.5 text-emerald-200 font-semibold">{rec.kelas}</td>
                           <td className="p-2.5 text-center">
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold inline-block border ${
-                              rec.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50' :
-                              rec.status === 'Izin' ? 'bg-amber-950 text-amber-300 border-amber-500/50' :
-                              rec.status === 'Sakit' ? 'bg-blue-950 text-blue-300 border-blue-500/50' :
-                              'bg-red-950 text-red-300 border-red-500/50'
-                            }`}>
-                              {rec.status === 'Hadir' && '✓ Hadir'}
-                              {rec.status === 'Izin' && '✉ Izin'}
-                              {rec.status === 'Sakit' && '🏥 Sakit'}
-                              {rec.status === 'Alpha' && '✗ Alpha'}
-                            </span>
+                            <select
+                              value={rec.status}
+                              onChange={(e) => handleUpdateRecordSantriStatus(rec, e.target.value as any)}
+                              className={`px-2 py-1 rounded-lg text-xs font-bold border cursor-pointer focus:outline-none ${
+                                rec.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50' :
+                                rec.status === 'Izin' ? 'bg-amber-950 text-amber-300 border-amber-500/50' :
+                                rec.status === 'Sakit' ? 'bg-blue-950 text-blue-300 border-blue-500/50' :
+                                'bg-red-950 text-red-300 border-red-500/50'
+                              }`}
+                            >
+                              <option value="Hadir">✓ Hadir</option>
+                              <option value="Izin">✉ Izin</option>
+                              <option value="Sakit">🏥 Sakit</option>
+                              <option value="Alpha">✗ Alpha</option>
+                            </select>
                           </td>
                           <td className="p-2.5 text-slate-300 text-[11px] italic">
                             {rec.keterangan || 'Presensi otomatis/manual'}
                           </td>
                           <td className="p-2.5 text-center">
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold font-mono">
-                              ✓ Real-Time
-                            </span>
+                            <button
+                              onClick={() => handleDeleteRecordSantri(rec)}
+                              className="p-1 rounded bg-red-950/60 hover:bg-red-800 text-red-400 hover:text-white border border-red-500/30 transition"
+                              title="Hapus rekaman absensi santri ini"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -3402,12 +3362,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <select
                     value={selectedBulanSantri}
                     onChange={(e) => setSelectedBulanSantri(e.target.value)}
-                    className="bg-[#052216] border border-[#d4af37]/40 rounded-xl px-3 py-1.5 text-xs text-[#f3e5ab] font-bold shadow-inner focus:outline-none"
+                    className="bg-[#052216] border border-[#d4af37]/40 rounded-xl px-3 py-1.5 text-xs text-[#f3e5ab] font-bold shadow-inner focus:outline-none cursor-pointer"
                   >
-                    <option value="September 2026">September 2026</option>
-                    <option value="Oktober 2026">Oktober 2026</option>
-                    <option value="November 2026">November 2026</option>
-                    <option value="Desember 2026">Desember 2026</option>
+                    {BULAN_OPTIONS.map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -3621,6 +3580,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3 text-center w-24">Jarak</th>
                       <th className="p-3 text-center w-24">Akurasi GPS</th>
                       <th className="p-3 min-w-[150px]">Zona</th>
+                      <th className="p-3 text-center w-36">Status / Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/15">
@@ -3700,12 +3660,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <td className="p-3 text-slate-300 text-[11px] truncate max-w-[180px]" title={zonaDisplay}>
                               {zonaDisplay}
                             </td>
+                            <td className="p-3 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <select
+                                  value={item.status}
+                                  onChange={(e) => handleUpdateRecordGuruStatus(item, e.target.value as any)}
+                                  className={`px-2 py-1 rounded-lg text-xs font-bold border cursor-pointer focus:outline-none ${
+                                    item.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50' :
+                                    item.status === 'Terlambat' ? 'bg-orange-950 text-orange-300 border-orange-500/50' :
+                                    item.status === 'Izin' ? 'bg-amber-950 text-amber-300 border-amber-500/50' :
+                                    'bg-red-950 text-red-300 border-red-500/50'
+                                  }`}
+                                >
+                                  <option value="Hadir">Hadir</option>
+                                  <option value="Terlambat">Terlambat</option>
+                                  <option value="Izin">Izin</option>
+                                  <option value="Alpha">Alpha</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteRecordGuru(item)}
+                                  className="p-1 rounded bg-red-950/60 hover:bg-red-800 text-red-400 hover:text-white border border-red-500/30 transition"
+                                  title="Hapus rekaman absensi guru ini"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         );
                       })}
                     {combinedGuruLog.length === 0 && (
                       <tr>
-                        <td colSpan={11} className="p-8 text-center text-emerald-300">
+                        <td colSpan={12} className="p-8 text-center text-emerald-300">
                           Belum ada catatan absensi ustadz hari ini. Pengurus/Asatidz dapat melakukan presensi melalui Dashboard Pengurus.
                         </td>
                       </tr>
@@ -3847,12 +3834,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <select
                     value={selectedBulanGuru}
                     onChange={(e) => setSelectedBulanGuru(e.target.value)}
-                    className="bg-[#052216] border border-[#d4af37]/40 rounded-xl px-3 py-1.5 text-xs text-[#f3e5ab] font-bold shadow-inner focus:outline-none"
+                    className="bg-[#052216] border border-[#d4af37]/40 rounded-xl px-3 py-1.5 text-xs text-[#f3e5ab] font-bold shadow-inner focus:outline-none cursor-pointer"
                   >
-                    <option value="September 2026">September 2026</option>
-                    <option value="Oktober 2026">Oktober 2026</option>
-                    <option value="November 2026">November 2026</option>
-                    <option value="Desember 2026">Desember 2026</option>
+                    {BULAN_OPTIONS.map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -6642,9 +6628,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <div className="flex items-center gap-1.5 p-0.5 bg-[#052216] rounded-xl border border-[#d4af37]/30 text-xs">
                             <button
                               type="button"
-                              onClick={() => setSelectedBulanGuru('rekap_guru')}
+                              onClick={() => setRiwayatRekapSubTab('rekap_guru')}
                               className={`px-3 py-1 rounded-lg font-bold transition ${
-                                selectedBulanGuru === 'rekap_guru' || selectedBulanGuru !== 'rekap_santri'
+                                riwayatRekapSubTab === 'rekap_guru'
                                   ? 'bg-[#d4af37] text-black font-extrabold shadow'
                                   : 'text-emerald-300 hover:text-white'
                               }`}
@@ -6653,9 +6639,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </button>
                             <button
                               type="button"
-                              onClick={() => setSelectedBulanGuru('rekap_santri')}
+                              onClick={() => setRiwayatRekapSubTab('rekap_santri')}
                               className={`px-3 py-1 rounded-lg font-bold transition ${
-                                selectedBulanGuru === 'rekap_santri'
+                                riwayatRekapSubTab === 'rekap_santri'
                                   ? 'bg-[#d4af37] text-black font-extrabold shadow'
                                   : 'text-emerald-300 hover:text-white'
                               }`}
@@ -6665,7 +6651,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         </div>
 
-                        {selectedBulanGuru !== 'rekap_santri' ? (
+                        {riwayatRekapSubTab === 'rekap_guru' ? (
                           <div className="overflow-x-auto rounded-xl border border-[#d4af37]/20">
                             <table className="w-full text-left text-xs min-w-[750px]">
                               <thead className="bg-[#03180f] text-[#d4af37]">
@@ -6677,6 +6663,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   <th className="p-2.5">KELAS</th>
                                   <th className="p-2.5 w-24">STATUS</th>
                                   <th className="p-2.5">CATATAN MATERI</th>
+                                  <th className="p-2.5 w-16 text-center">AKSI</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-[#d4af37]/10 bg-[#052216]/60">
@@ -6698,11 +6685,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       </span>
                                     </td>
                                     <td className="p-2.5 text-slate-300">{g.catatan || '-'}</td>
+                                    <td className="p-2.5 text-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteRecordGuru(g)}
+                                        className="p-1 rounded bg-red-950/60 hover:bg-red-800 text-red-400 hover:text-white border border-red-500/30 transition"
+                                        title="Hapus riwayat rekapan guru ini"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </td>
                                   </tr>
                                 ))}
                                 {rekapGuruLog.length === 0 && (
                                   <tr>
-                                    <td colSpan={7} className="p-6 text-center text-emerald-300">
+                                    <td colSpan={8} className="p-6 text-center text-emerald-300">
                                       Belum ada riwayat rekapan absensi ustadz. Klik tombol "Simpan Rekap & Reset Harian ke Nol (0)" di atas untuk mengarsipkan sesi hari ini.
                                     </td>
                                   </tr>
@@ -6722,6 +6719,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   <th className="p-2.5">KELAS</th>
                                   <th className="p-2.5 w-24">STATUS</th>
                                   <th className="p-2.5">KETERANGAN</th>
+                                  <th className="p-2.5 w-16 text-center">AKSI</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-[#d4af37]/10 bg-[#052216]/60">
@@ -6743,11 +6741,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       </span>
                                     </td>
                                     <td className="p-2.5 text-slate-300">{s.keterangan || '-'}</td>
+                                    <td className="p-2.5 text-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteRecordSantri(s)}
+                                        className="p-1 rounded bg-red-950/60 hover:bg-red-800 text-red-400 hover:text-white border border-red-500/30 transition"
+                                        title="Hapus riwayat rekapan santri ini"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </td>
                                   </tr>
                                 ))}
                                 {rekapSantriLog.length === 0 && (
                                   <tr>
-                                    <td colSpan={7} className="p-6 text-center text-emerald-300">
+                                    <td colSpan={8} className="p-6 text-center text-emerald-300">
                                       Belum ada riwayat rekapan absensi santri. Klik tombol "Simpan Rekap & Reset Harian ke Nol (0)" di atas untuk mengarsipkan sesi hari ini.
                                     </td>
                                   </tr>
@@ -6994,8 +7002,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onChange={(e) => setSelectedPengurusId(e.target.value)}
                         className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-bold"
                       >
-                        {pengurusList.map(p => (
-                          <option key={p.id} value={p.id}>
+                        {pengurusList.map((p, idx) => (
+                          <option key={`${p.id}-${idx}`} value={p.id}>
                             {p.nama} — {p.jabatan} ({p.mapel ? `Mapel: ${p.mapel}` : p.id})
                           </option>
                         ))}
@@ -7181,7 +7189,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 );
                               })
                               .map((p, idx) => (
-                                <tr key={p.id || idx} className="hover:bg-[#d4af37]/5 transition">
+                                <tr key={`${p.id || 'p'}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
                                   <td className="p-3 font-mono text-center text-emerald-400">{idx + 1}</td>
                                   <td className="p-3 font-bold text-white whitespace-nowrap">
                                     {p.nama}

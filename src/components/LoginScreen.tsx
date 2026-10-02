@@ -225,11 +225,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
                       <User className="w-4 h-4 text-[#d4af37] absolute left-4 top-1/2 -translate-y-1/2" />
                       <input data-testid="login-username-input" type="text" list="santri-name-suggestions" value={santriNamaInput} required placeholder="Nama Lengkap / NISN Santri" className={inputCls}
                         onChange={(e) => { setSantriNamaInput(e.target.value); const m = santriList.find(s => s.nama.toLowerCase() === e.target.value.toLowerCase()); if (m) setSantriPasswordInput(m.password || m.id); }} />
-                      <datalist id="santri-name-suggestions">{santriList.map(s => <option key={s.id} value={s.nama}>{s.kelas} — {s.id}</option>)}</datalist>
+                      <datalist id="santri-name-suggestions">{santriList.map((s, idx) => <option key={`${s.id}-${idx}`} value={s.nama}>{s.kelas} — {s.id}</option>)}</datalist>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {santriList.slice(0, 4).map(d => (
-                        <button key={d.id} type="button" data-testid={`demo-chip-${d.id}`} onClick={() => { setSantriNamaInput(d.nama); setSantriPasswordInput(d.password || d.id); }} className="text-[9px] px-2.5 py-1 rounded-lg bg-[#072918]/80 border border-[#d4af37]/35 text-[#faebaa] hover:bg-[#d4af37] hover:text-black transition tracking-wider">{d.nama.split(' ')[0]} ({d.id})</button>
+                      {santriList.slice(0, 4).map((d, idx) => (
+                        <button key={`${d.id}-${idx}`} type="button" data-testid={`demo-chip-${d.id}`} onClick={() => { setSantriNamaInput(d.nama); setSantriPasswordInput(d.password || d.id); }} className="text-[9px] px-2.5 py-1 rounded-lg bg-[#072918]/80 border border-[#d4af37]/35 text-[#faebaa] hover:bg-[#d4af37] hover:text-black transition tracking-wider">{d.nama.split(' ')[0]} ({d.id})</button>
                       ))}
                     </div>
                     <div className="relative">
@@ -246,11 +246,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
                       <Users className="w-4 h-4 text-[#d4af37] absolute left-4 top-1/2 -translate-y-1/2" />
                       <input data-testid="login-username-input" type="text" list="pengurus-name-suggestions" value={pengurusNamaInput} required placeholder="Nama Pengurus / Ustadz" className={inputCls}
                         onChange={(e) => { setPengurusNamaInput(e.target.value); const m = pengurusList.find(x => x.nama.toLowerCase() === e.target.value.toLowerCase()); if (m) setPengurusPasswordInput(m.password || 'pengurus123'); }} />
-                      <datalist id="pengurus-name-suggestions">{pengurusList.map(x => <option key={x.id} value={x.nama}>{x.jabatan} ({x.id})</option>)}</datalist>
+                      <datalist id="pengurus-name-suggestions">{pengurusList.map((x, idx) => <option key={`${x.id}-${idx}`} value={x.nama}>{x.jabatan} ({x.id})</option>)}</datalist>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {pengurusList.slice(0, 4).map(d => (
-                        <button key={d.id} type="button" data-testid={`demo-chip-${d.id}`} onClick={() => { setPengurusNamaInput(d.nama); setPengurusPasswordInput(d.password || 'pengurus123'); }} className="text-[9px] px-2.5 py-1 rounded-lg bg-[#072918]/80 border border-[#d4af37]/35 text-[#faebaa] hover:bg-[#d4af37] hover:text-black transition tracking-wider">{d.nama.split(',')[0]}</button>
+                      {pengurusList.slice(0, 4).map((d, idx) => (
+                        <button key={`${d.id}-${idx}`} type="button" data-testid={`demo-chip-${d.id}`} onClick={() => { setPengurusNamaInput(d.nama); setPengurusPasswordInput(d.password || 'pengurus123'); }} className="text-[9px] px-2.5 py-1 rounded-lg bg-[#072918]/80 border border-[#d4af37]/35 text-[#faebaa] hover:bg-[#d4af37] hover:text-black transition tracking-wider">{d.nama.split(',')[0]}</button>
                       ))}
                     </div>
                     <div className="relative">
