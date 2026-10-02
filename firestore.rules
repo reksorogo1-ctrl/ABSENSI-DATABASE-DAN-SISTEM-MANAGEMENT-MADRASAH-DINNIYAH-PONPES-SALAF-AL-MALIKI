@@ -1,0 +1,152 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default Deny Catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Helper Primitives
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Admin authorization check (bootstrapped with runtime owner email + admins collection)
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'reksorogo1@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Validation Blueprint for AppSettings
+    function isValidAppSettings(data) {
+      return data.keys().hasAll(['id']) &&
+        data.id is string && data.id.size() <= 64 &&
+        (!('nama_pondok' in data) || (data.nama_pondok is string && data.nama_pondok.size() <= 200)) &&
+        (!('nama_madrasah' in data) || (data.nama_madrasah is string && data.nama_madrasah.size() <= 200)) &&
+        (!('judul_aplikasi' in data) || (data.judul_aplikasi is string && data.judul_aplikasi.size() <= 200)) &&
+        (!('logo_pondok' in data) || (data.logo_pondok is string && data.logo_pondok.size() <= 1000)) &&
+        (!('logo_madrasah' in data) || (data.logo_madrasah is string && data.logo_madrasah.size() <= 1000)) &&
+        (!('background_url' in data) || (data.background_url is string && data.background_url.size() <= 1000)) &&
+        (!('link_instagram' in data) || (data.link_instagram is string && data.link_instagram.size() <= 500)) &&
+        (!('link_tiktok' in data) || (data.link_tiktok is string && data.link_tiktok.size() <= 500)) &&
+        (!('link_youtube' in data) || (data.link_youtube is string && data.link_youtube.size() <= 500)) &&
+        (!('link_wa' in data) || (data.link_wa is string && data.link_wa.size() <= 500)) &&
+        (!('email_admin' in data) || (data.email_admin is string && data.email_admin.size() <= 200)) &&
+        (!('geofencing_enabled' in data) || data.geofencing_enabled is bool) &&
+        (!('geofencing_locked' in data) || data.geofencing_locked is bool) &&
+        (!('geofencing_zone_name' in data) || (data.geofencing_zone_name is string && data.geofencing_zone_name.size() <= 200)) &&
+        (!('geofencing_latitude' in data) || (data.geofencing_latitude is number && data.geofencing_latitude >= -90.0 && data.geofencing_latitude <= 90.0)) &&
+        (!('geofencing_longitude' in data) || (data.geofencing_longitude is number && data.geofencing_longitude >= -180.0 && data.geofencing_longitude <= 180.0)) &&
+        (!('geofencing_radius_meters' in data) || (data.geofencing_radius_meters is number && data.geofencing_radius_meters >= 10 && data.geofencing_radius_meters <= 5000)) &&
+        (!('geofencing_max_gps_accuracy' in data) || (data.geofencing_max_gps_accuracy is number && data.geofencing_max_gps_accuracy >= 5 && data.geofencing_max_gps_accuracy <= 1000)) &&
+        (!('toleransi_keterlambatan_menit' in data) || (data.toleransi_keterlambatan_menit is number && data.toleransi_keterlambatan_menit >= 0 && data.toleransi_keterlambatan_menit <= 120));
+    }
+
+    // Validation Blueprint for AbsensiGuru
+    function isValidAbsensiGuru(data) {
+      return data.keys().hasAll(['id', 'tanggal', 'nama', 'status']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.tanggal is string && data.tanggal.size() <= 32 &&
+        data.nama is string && data.nama.size() <= 150 &&
+        data.status in ['Hadir', 'Terlambat', 'Izin', 'Alpha'] &&
+        (!('catatan' in data) || (data.catatan is string && data.catatan.size() <= 500)) &&
+        (!('mapel' in data) || (data.mapel is string && data.mapel.size() <= 150)) &&
+        (!('kelas' in data) || (data.kelas is string && data.kelas.size() <= 100)) &&
+        (!('tipeAbsensi' in data) || data.tipeAbsensi in ['Normal', 'Pengganti']) &&
+        (!('latitude' in data) || data.latitude is number) &&
+        (!('longitude' in data) || data.longitude is number) &&
+        (!('jarak' in data) || data.jarak is number);
+    }
+
+    // Validation Blueprint for AbsensiSantri
+    function isValidAbsensiSantri(data) {
+      return data.keys().hasAll(['id', 'tanggal', 'idSantri', 'nama', 'status']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.tanggal is string && data.tanggal.size() <= 32 &&
+        data.idSantri is string && data.idSantri.size() <= 64 &&
+        data.nama is string && data.nama.size() <= 150 &&
+        data.status in ['Hadir', 'Izin', 'Sakit', 'Alpha'] &&
+        (!('keterangan' in data) || (data.keterangan is string && data.keterangan.size() <= 500));
+    }
+
+    // Validation Blueprint for Santri
+    function isValidSantri(data) {
+      return data.keys().hasAll(['id', 'nama', 'kelas']) &&
+        data.id is string && data.id.size() <= 64 &&
+        data.nama is string && data.nama.size() <= 150 &&
+        data.kelas is string && data.kelas.size() <= 100 &&
+        (!('alamat' in data) || (data.alamat is string && data.alamat.size() <= 300)) &&
+        (!('saldoUangSaku' in data) || data.saldoUangSaku is number);
+    }
+
+    // Rules for Test / Connection Health Check
+    match /test/{testId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Master Cloud Data Sync between Devices (Laptop, HP, PWA Web App)
+    match /master_data/{docId} {
+      allow read, write: if true;
+    }
+
+    // Settings Collection
+    match /settings/{settingId} {
+      allow get, list: if true;
+      allow create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // Absensi Guru Collection
+    match /absensi_guru/{absensiId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Absensi Santri Collection
+    match /absensi_santri/{absensiId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Santri Collection
+    match /santri/{santriId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Media Assets & Storage Object Metadata (5 TB Scalable Storage)
+    match /media_assets/{assetId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Storage Metrics & Monitoring
+    match /storage_metrics/{metricId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Admins Collection
+    match /admins/{adminId} {
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+  }
+}

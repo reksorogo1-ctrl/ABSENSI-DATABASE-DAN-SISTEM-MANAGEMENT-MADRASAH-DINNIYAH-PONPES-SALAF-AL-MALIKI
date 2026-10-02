@@ -18,6 +18,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   background_url: '',
   password_admin: 'salaf123',
   password_option_panel: 'admin123',
+  tahun_ajaran: '2026/2027',
+  semester_aktif: 'Semester Ganjil',
   intro_video_url: '/assets/intro_salaf_almaliki.mp4',
   intro_video_name: 'The Journey of Knowledge — Salaf Al-Maliki (Bawaan)',
   intro_video_type: 'default',
@@ -849,64 +851,6 @@ export const INITIAL_PENGURUS_LIST: Pengurus[] = [
   }
 ];
 
-export const sanitizePengurusList = (list: Pengurus[]): Pengurus[] => {
-  if (!Array.isArray(list) || list.length === 0) {
-    return INITIAL_PENGURUS_LIST;
-  }
-  const seenIds = new Set<string>();
-  const seenNames = new Set<string>();
-  const result: Pengurus[] = [];
-
-  let maxNumericId = 0;
-  list.forEach(item => {
-    if (item && item.id) {
-      const match = item.id.match(/^PNG-(\d+)$/i);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (num > maxNumericId) maxNumericId = num;
-      }
-    }
-  });
-
-  let nextCounter = maxNumericId + 1;
-  const getNextUniqueId = (): string => {
-    while (seenIds.has(`PNG-${String(nextCounter).padStart(3, '0')}`)) {
-      nextCounter++;
-    }
-    const generated = `PNG-${String(nextCounter).padStart(3, '0')}`;
-    seenIds.add(generated);
-    nextCounter++;
-    return generated;
-  };
-
-  for (const item of list) {
-    if (!item) continue;
-    const normName = (item.nama || '').trim().toLowerCase();
-    if (normName && seenNames.has(normName)) {
-      continue;
-    }
-    if (normName) {
-      seenNames.add(normName);
-    }
-
-    let finalId = item.id ? item.id.trim() : '';
-    if (!finalId || seenIds.has(finalId)) {
-      finalId = getNextUniqueId();
-    } else {
-      seenIds.add(finalId);
-    }
-
-    result.push({
-      ...item,
-      id: finalId,
-      nama: item.nama ? item.nama.trim() : 'Pengurus',
-      password: item.password || 'pengurus123'
-    });
-  }
-
-  return result.length > 0 ? result : INITIAL_PENGURUS_LIST;
-};
-
 export const INITIAL_KALENDER_AKADEMIK: KalenderAkademikEvent[] = [
   {
     id: 'EVT-003',
@@ -1017,7 +961,7 @@ export const INITIAL_IZIN_MENGAJAR_LIST: IzinMengajarRequest[] = [
   },
   {
     id: 'IZN-002',
-    idPengurus: 'PNG-002',
+    idPengurus: 'PNG-003',
     namaUstadz: 'Ust. Muhammad Ilyas Al-Hafidz',
     tanggal: '2026-09-26',
     mapel: 'Fathul Qorib',
