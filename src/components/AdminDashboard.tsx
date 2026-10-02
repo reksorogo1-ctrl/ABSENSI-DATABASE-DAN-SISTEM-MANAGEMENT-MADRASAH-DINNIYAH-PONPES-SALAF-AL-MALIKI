@@ -8,8 +8,21 @@ import {
   CreditCard, Wallet, AlertTriangle, Phone, MessageCircle, ArrowDownLeft, ArrowUpRight, Trash2, GraduationCap,
   Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload, Play,
   ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine, MapPin, Compass, Crosshair, Shield, Navigation,
-  Instagram, Youtube, Music2, Globe, Unlock, Menu, Camera, Search
+  Instagram, Youtube, Music2, Globe, Unlock, Menu,
+  Folder, FolderPlus, FolderCheck, CheckSquare, Square, Layers, FileUp, Camera,
+  HardDrive, Search, ChevronLeft, History
 } from 'lucide-react';
+import { compressImageFile, parseFileNameForSantri } from '../lib/imageCompression';
+import { Storage5TBManager } from './Storage5TBManager';
+import { KenaikanKelasModal } from './KenaikanKelasModal';
+import { EditSantriModal } from './EditSantriModal';
+import { TabUjianMuhafadzoh } from './TabUjianMuhafadzoh';
+import { TabUjianBacaKitab } from './TabUjianBacaKitab';
+import { TabUjianKoreksianKitab } from './TabUjianKoreksianKitab';
+import { ModalInputNilaiUjian } from './ModalInputNilaiUjian';
+import { getOrCreateSantriHistory } from '../lib/kenaikanKelasService';
+import { queryPaginatedData } from '../lib/scalableDatabase';
+import { formatBytes, TOTAL_CAPACITY_5TB } from '../lib/scalableStorage';
 import { PWAInstallButton } from './PWAInstallButton';
 import { 
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Legend, 
@@ -68,13 +81,12 @@ interface AdminDashboardProps {
   onSaveNewGuru: (newGuru: GuruPengajar) => void;
   onDeleteGuru?: (idOrName: string) => void;
   onSaveNewJadwal: (newJadwal: JadwalPelajaran) => void;
-  onDeleteJadwal?: (idOrItem: string | JadwalPelajaran) => void;
-  onSyncPengurusWithGuru?: () => void;
   onSaveNadzhom: (nadzhom: NadzhomRecord) => void;
   onSaveNilai: (nilai: NilaiUjianRecord) => void;
   onSaveSettings: (settings: AppSettings) => void;
   onSaveDashboardAndReset: () => void;
-  onUpdateSantriProfile?: (updatedSantri: Santri) => void;
+  onUpdateSantriProfile?: (updatedSantri: Santri, oldId?: string) => void;
+  onBatchUpdateSantri?: (updatedList: Santri[], updatedSettings?: Partial<AppSettings>) => void;
   onSaveSyahriyah?: (record: SyahriyahRecord) => void;
   onSaveUangSaku?: (record: UangSakuRecord) => void;
   onSaveKurikulum?: (record: KurikulumKitabRecord) => void;
@@ -131,13 +143,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onSaveNewGuru,
   onDeleteGuru,
   onSaveNewJadwal,
-  onDeleteJadwal,
-  onSyncPengurusWithGuru,
   onSaveNadzhom,
   onSaveNilai,
   onSaveSettings,
   onSaveDashboardAndReset,
   onUpdateSantriProfile,
+  onBatchUpdateSantri,
   onSaveSyahriyah,
   onSaveUangSaku,
   onSaveKurikulum,
@@ -636,7 +647,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [optionPasswordInput, setOptionPasswordInput] = useState<string>('');
   const [optionPasswordError, setOptionPasswordError] = useState<string>('');
   const [activeControlSection, setActiveControlSection] = useState<
-    'input_santri' | 'input_guru' | 'input_jadwal' | 'simpan_absensi' | 'geofencing_absensi' | 'kontrol_tombol' | 
+    'kelola_storage_5tb' | 'kenaikan_kelas' | 'input_santri' | 'input_guru' | 'input_jadwal' | 'simpan_absensi' | 'geofencing_absensi' | 'kontrol_tombol' | 
     'visual_branding' | 'keamanan' | 'profil_santri' | 'kelola_syahriyah' | 'kelola_uang_saku' | 'kelola_kurikulum' |
     'kelola_pengurus' | 'kelola_kalender' | 'kelola_ujian_kitab' | 'kelola_berita' | 'video_intro' | 'sosial_media'
   >(() => {
@@ -647,6 +658,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     return 'simpan_absensi';
   });
+
+  // Modal Kenaikan Kelas Otomatis & Detail Riwayat Santri
+  const [showKenaikanKelasModal, setShowKenaikanKelasModal] = useState<boolean>(false);
+  const [santriDetailHistory, setSantriDetailHistory] = useState<Santri | null>(null);
+
+  // Modal Edit / Setting Data Santri
+  const [editingSantri, setEditingSantri] = useState<Santri | null>(null);
+
+  // Modal Input / Edit Nilai Ujian Santri
+  const [ujianModalTarget, setUjianModalTarget] = useState<{ santri: Santri; type: 'muhafadzoh' | 'baca' | 'koreksian' | 'all' } | null>(null);
 
   // Video Intro Management States in Option Panel
   const [adminVideoInfo, setAdminVideoInfo] = useState<VideoInfo>({
@@ -880,110 +901,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   }, [currentUjianSantri]);
 
-  // Helper kompresi foto santri dari Galeri / Folder lokal agar ringan
-  const compressSantriPhoto = (
-    dataUrl: string,
-    maxWidth = 600,
-    maxHeight = 600,
-    quality = 0.82
-  ): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new window.Image();
-      img.onload = () => {
-        let width = img.width;
-        let height = img.height;
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width);
-          width = maxWidth;
-        }
-        if (height > maxHeight) {
-          width = Math.round((width * maxHeight) / height);
-          height = maxHeight;
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', quality));
-        } else {
-          resolve(dataUrl);
-        }
-      };
-      img.onerror = () => resolve(dataUrl);
-      img.src = dataUrl;
-    });
-  };
-
-  // State untuk Input Santri via Folder / Galeri
-  const santriPhotoInputRef = useRef<HTMLInputElement>(null);
-  const santriFolderInputRef = useRef<HTMLInputElement>(null);
-  const santriGalleryInputRef = useRef<HTMLInputElement>(null);
-  const [santriPhotoInputType, setSantriPhotoInputType] = useState<'upload' | 'url'>('upload');
-  const [santriSelectedFileName, setSantriSelectedFileName] = useState<string>('');
-  const [isProcessingSantriPhoto, setIsProcessingSantriPhoto] = useState<boolean>(false);
-
-  // State Bulk / Masal Input Santri dari Folder atau Galeri
-  const [showBulkSantriMode, setShowBulkSantriMode] = useState<boolean>(false);
-  const [bulkSantriKelas, setBulkSantriKelas] = useState<string>('1 TSANAWIYAH');
-  const [bulkSantriKamar, setBulkSantriKamar] = useState<string>('Kamar Abu Bakar');
-  const [bulkSantriAlamat, setBulkSantriAlamat] = useState<string>('');
-  const [bulkSantriQueue, setBulkSantriQueue] = useState<Array<{
-    id: string;
-    nama: string;
-    kelas: string;
-    kamar: string;
-    alamat: string;
-    foto: string;
-    fileName: string;
-  }>>([]);
-  const [isProcessingBulk, setIsProcessingBulk] = useState<boolean>(false);
-
-  // Search query untuk Login Pengurus
-  const [searchPengurusQuery, setSearchPengurusQuery] = useState<string>('');
-  
-  // Hitung jumlah unik guru pengajar untuk perbandingan real time
-  const uniqueGuruList = useMemo(() => {
-    const list: GuruPengajar[] = [];
-    const seen = new Set<string>();
-    guruList.forEach(g => {
-      const norm = g.nama.trim().toLowerCase();
-      if (!seen.has(norm)) {
-        seen.add(norm);
-        list.push(g);
-      }
-    });
-    return list;
-  }, [guruList]);
-
-  // Handler Revisi Jadwal Pelajaran
-  const handleOpenEditJadwal = (item: JadwalPelajaran) => {
-    setEditingJadwal(item);
-    setJadwalForm({
-      id: item.id || `JAD-${Date.now()}`,
-      hari: item.hari,
-      jamKe: Number(item.jamKe),
-      waktu: item.waktu,
-      kelas: item.kelas,
-      mapel: item.mapel,
-      nama: item.nama,
-      tingkatan: item.tingkatan === 'Aliyah' || item.kelas.includes('ALIYAH') ? 'Aliyah' : 'Tsanawiyah'
-    });
-    setShowAddJadwalModal(true);
-  };
-
-  const handleDeleteJadwalClick = (item: JadwalPelajaran) => {
-    const info = `${item.mapel} (${item.kelas} - ${item.hari} Jam ke-${item.jamKe})`;
-    if (window.confirm(`Konfirmasi Hapus Jadwal:\n\nApakah Anda yakin ingin menghapus jadwal:\n${info}\nPengajar: ${item.nama}?`)) {
-      if (onDeleteJadwal) {
-        onDeleteJadwal(item.id || item);
-      } else {
-        alert('Fitur hapus jadwal telah diterapkan.');
-      }
-    }
-  };
-
   // Form input manual santri di Option Panel
   const [inputSantriForm, setInputSantriForm] = useState({
     id: `S-${Math.floor(1000 + Math.random() * 8999)}`,
@@ -998,6 +915,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     saldoUangSaku: 150000,
     password: ''
   });
+
+  // State Sub-Tab & Input Santri via Galeri / Folder di Option Panel
+  const [inputSantriSubTab, setInputSantriSubTab] = useState<'single' | 'batch_folder'>('single');
+  const [singlePhotoOrigin, setSinglePhotoOrigin] = useState<'default' | 'galeri' | 'folder' | 'url'>('default');
+  const [singlePhotoFileName, setSinglePhotoFileName] = useState<string>('');
+  const [singlePhotoFileSize, setSinglePhotoFileSize] = useState<string>('');
+  const [showUrlPhotoInput, setShowUrlPhotoInput] = useState<boolean>(false);
+  const [isCompressingSinglePhoto, setIsCompressingSinglePhoto] = useState<boolean>(false);
+
+  // Modal Pemilih Foto dari Folder (saat folder lokal berisi banyak foto)
+  const [folderPhotoPickerModal, setFolderPhotoPickerModal] = useState<{
+    isOpen: boolean;
+    folderName: string;
+    photos: Array<{ name: string; dataUrl: string; sizeStr: string; detectedId: string; detectedName: string }>;
+  }>({
+    isOpen: false,
+    folderName: '',
+    photos: []
+  });
+
+  // State Batch / Multi-Import Santri dari Folder atau Galeri
+  const [batchImportList, setBatchImportList] = useState<Array<{
+    id: string;
+    nama: string;
+    kelas: string;
+    kamar: string;
+    alamat: string;
+    foto: string;
+    fileName: string;
+    fileSizeStr: string;
+    selected: boolean;
+  }>>([]);
+  const [batchTargetKelas, setBatchTargetKelas] = useState<string>('1 TSANAWIYAH');
+  const [batchDefaultKamar, setBatchDefaultKamar] = useState<string>('Kamar Abu Bakar 01');
+  const [batchDefaultAlamat, setBatchDefaultAlamat] = useState<string>('Jawa Timur');
+  const [isBatchProcessing, setIsBatchProcessing] = useState<boolean>(false);
+  const [batchProgressText, setBatchProgressText] = useState<string>('');
+  const [isBatchSaving, setIsBatchSaving] = useState<boolean>(false);
+
+  // Refs untuk input file (Galeri & Folder)
+  const singleGalleryInputRef = useRef<HTMLInputElement>(null);
+  const singleFolderInputRef = useRef<HTMLInputElement>(null);
+  const batchFolderInputRef = useRef<HTMLInputElement>(null);
+  const batchGalleryInputRef = useRef<HTMLInputElement>(null);
+
+  // State Paginasi & Pencarian Cepat Tab Santri (Skalabilitas 5 TB & Jutaan Record)
+  const [santriTabSearch, setSantriTabSearch] = useState<string>('');
+  const [santriTabPage, setSantriTabPage] = useState<number>(1);
+  const [santriTabPageSize, setSantriTabPageSize] = useState<number>(15);
+  const [santriHighResPreview, setSantriHighResPreview] = useState<Santri | null>(null);
+
+  // State Paginasi Tabel Boyong Santri di Option Panel
+  const [boyongSearch, setBoyongSearch] = useState<string>('');
+  const [boyongPage, setBoyongPage] = useState<number>(1);
+  const [boyongPageSize, setBoyongPageSize] = useState<number>(10);
+
+  // Memoized Paginated Queries (Arsitektur 5 TB & Jutaan Record Cepat di Browser)
+  const paginatedSantriTabResult = useMemo(() => {
+    return queryPaginatedData(santriList, {
+      filterClass: selectedAngkatanSantri,
+      search: santriTabSearch,
+      page: santriTabPage,
+      pageSize: santriTabPageSize
+    });
+  }, [santriList, selectedAngkatanSantri, santriTabSearch, santriTabPage, santriTabPageSize]);
+
+  const paginatedBoyongResult = useMemo(() => {
+    return queryPaginatedData(santriList, {
+      search: boyongSearch,
+      page: boyongPage,
+      pageSize: boyongPageSize
+    });
+  }, [santriList, boyongSearch, boyongPage, boyongPageSize]);
 
   // State untuk Tab Integrasi Google Sheets
   const [sheetsPreviewTab, setSheetsPreviewTab] = useState<'santri' | 'guru' | 'absensi-guru' | 'absensi-santri' | 'jadwal' | 'nadzhom' | 'nilai' | 'syahriyah'>('absensi-guru');
@@ -1212,104 +1202,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // Handler unggah foto manual santri dari Folder / Galeri
-  const handleSingleSantriFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsProcessingSantriPhoto(true);
-    setSantriSelectedFileName(file.name);
-    try {
-      const reader = new FileReader();
-      reader.onload = async (evt) => {
-        const raw = evt.target?.result as string;
-        const compressed = await compressSantriPhoto(raw, 600, 600, 0.85);
-        setInputSantriForm(prev => {
-          const autoName = prev.nama.trim()
-            ? prev.nama
-            : file.name.replace(/\.[^/.]+$/, '').replace(/^[0-9\-_ ]+/, '').replace(/[_\-+]/g, ' ').trim();
-          return {
-            ...prev,
-            foto: compressed,
-            nama: autoName || prev.nama
-          };
-        });
-        setIsProcessingSantriPhoto(false);
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      console.error(err);
-      setIsProcessingSantriPhoto(false);
-    }
-  };
-
-  // Handler unggah masal banyak santri dari Folder / Galeri
-  const handleBulkUploadFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    setIsProcessingBulk(true);
-    const newItems: typeof bulkSantriQueue = [];
-
-    const fileList = Array.from(files).filter(f => f.type.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(f.name));
-    if (fileList.length === 0) {
-      alert('Tidak ditemukan file foto/gambar yang valid dalam folder atau galeri yang dipilih.');
-      setIsProcessingBulk(false);
-      return;
-    }
-
-    let currentNisNumber = 1000 + Math.floor(Math.random() * 8000);
-    for (const file of fileList) {
-      const rawData = await new Promise<string>((resolve) => {
-        const r = new FileReader();
-        r.onload = () => resolve(r.result as string);
-        r.onerror = () => resolve('');
-        r.readAsDataURL(file);
-      });
-
-      if (rawData) {
-        const compressed = await compressSantriPhoto(rawData, 500, 500, 0.8);
-        const cleanName = file.name
-          .replace(/\.[^/.]+$/, '')
-          .replace(/^[0-9\-_ ]+/, '')
-          .replace(/[_\-+]/g, ' ')
-          .trim();
-
-        newItems.push({
-          id: `S-${currentNisNumber++}`,
-          nama: cleanName || `Santri Baru ${file.name}`,
-          kelas: bulkSantriKelas,
-          kamar: bulkSantriKamar,
-          alamat: bulkSantriAlamat || 'Jawa Timur',
-          foto: compressed,
-          fileName: file.name
-        });
-      }
-    }
-
-    setBulkSantriQueue(prev => [...prev, ...newItems]);
-    setShowBulkSantriMode(true);
-    setIsProcessingBulk(false);
-    alert(`Berhasil memuat ${newItems.length} foto santri dari folder/galeri! Silakan tinjau daftar di bawah dan simpan ke database.`);
-  };
-
-  const handleSaveAllBulkSantri = () => {
-    if (bulkSantriQueue.length === 0) {
-      alert('Antrean santri dari folder masih kosong.');
-      return;
-    }
-    bulkSantriQueue.forEach(item => {
-      onSaveNewSantri({
-        id: item.id.trim(),
-        nama: item.nama.trim(),
-        kelas: item.kelas,
-        kamar: item.kamar.trim(),
-        alamat: item.alamat.trim(),
-        foto: item.foto
-      });
-    });
-    alert(`Alhamdulillah! Berhasil menyimpan ${bulkSantriQueue.length} data santri dari folder/galeri ke basis data!`);
-    setBulkSantriQueue([]);
-  };
-
   // Submit tambah Santri dari Option Panel
   const handleAddSantriSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1339,6 +1231,257 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       saldoUangSaku: 150000,
       password: ''
     });
+    setSinglePhotoOrigin('default');
+    setSinglePhotoFileName('');
+    setSinglePhotoFileSize('');
+    setShowUrlPhotoInput(false);
+  };
+
+  // Handler memilih foto santri dari Galeri (single file)
+  const handleSingleGallerySelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsCompressingSinglePhoto(true);
+      const dataUrl = await compressImageFile(file);
+      const parsed = parseFileNameForSantri(file.name);
+      setInputSantriForm(prev => ({
+        ...prev,
+        foto: dataUrl,
+        id: (!prev.nama || prev.id.startsWith('S-')) && parsed.id ? parsed.id : prev.id,
+        nama: !prev.nama && parsed.nama ? parsed.nama : prev.nama
+      }));
+      setSinglePhotoOrigin('galeri');
+      setSinglePhotoFileName(file.name);
+      setSinglePhotoFileSize(`${Math.round(file.size / 1024)} KB`);
+    } catch (err: any) {
+      alert(err.message || 'Gagal memproses foto dari galeri');
+    } finally {
+      setIsCompressingSinglePhoto(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  // Handler memilih foto santri dari Folder (bisa 1 atau banyak foto dalam folder)
+  const handleSingleFolderSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/') || /\.(jpe?g|png|webp|bmp|gif)$/i.test(f.name));
+    
+    if (imageFiles.length === 0) {
+      alert('Tidak ada file foto (JPG, PNG, WEBP) yang ditemukan di dalam folder tersebut.');
+      if (e.target) e.target.value = '';
+      return;
+    }
+
+    if (imageFiles.length === 1) {
+      const file = imageFiles[0];
+      try {
+        setIsCompressingSinglePhoto(true);
+        const dataUrl = await compressImageFile(file);
+        const parsed = parseFileNameForSantri(file.name);
+        setInputSantriForm(prev => ({
+          ...prev,
+          foto: dataUrl,
+          id: (!prev.nama || prev.id.startsWith('S-')) && parsed.id ? parsed.id : prev.id,
+          nama: !prev.nama && parsed.nama ? parsed.nama : prev.nama
+        }));
+        setSinglePhotoOrigin('folder');
+        setSinglePhotoFileName(file.name);
+        setSinglePhotoFileSize(`${Math.round(file.size / 1024)} KB`);
+      } catch (err: any) {
+        alert(err.message || 'Gagal memproses foto dari folder');
+      } finally {
+        setIsCompressingSinglePhoto(false);
+      }
+    } else {
+      // Ada beberapa/banyak foto di dalam folder -> buka modal pemilih foto
+      try {
+        setIsCompressingSinglePhoto(true);
+        const processedPhotos: Array<{ name: string; dataUrl: string; sizeStr: string; detectedId: string; detectedName: string }> = [];
+        for (const f of imageFiles.slice(0, 60)) {
+          const dUrl = await compressImageFile(f, 300, 350, 0.75);
+          const parsed = parseFileNameForSantri(f.name);
+          processedPhotos.push({
+            name: f.name,
+            dataUrl: dUrl,
+            sizeStr: `${Math.round(f.size / 1024)} KB`,
+            detectedId: parsed.id,
+            detectedName: parsed.nama
+          });
+        }
+        const folderName = (files[0] as any).webkitRelativePath ? (files[0] as any).webkitRelativePath.split('/')[0] : 'Folder Foto Santri';
+        setFolderPhotoPickerModal({
+          isOpen: true,
+          folderName,
+          photos: processedPhotos
+        });
+      } catch (err: any) {
+        alert('Gagal membaca daftar foto dari folder: ' + err.message);
+      } finally {
+        setIsCompressingSinglePhoto(false);
+      }
+    }
+    if (e.target) e.target.value = '';
+  };
+
+  // Pilih foto spesifik dari modal foto folder
+  const handleSelectPhotoFromFolderModal = (photo: { name: string; dataUrl: string; detectedId: string; detectedName: string; sizeStr: string }) => {
+    setInputSantriForm(prev => ({
+      ...prev,
+      foto: photo.dataUrl,
+      id: photo.detectedId ? photo.detectedId : prev.id,
+      nama: (!prev.nama || prev.nama === '') && photo.detectedName ? photo.detectedName : prev.nama
+    }));
+    setSinglePhotoOrigin('folder');
+    setSinglePhotoFileName(photo.name);
+    setSinglePhotoFileSize(photo.sizeStr || '');
+    setFolderPhotoPickerModal(prev => ({ ...prev, isOpen: false }));
+  };
+
+  // Reset foto satuan ke default
+  const handleResetSinglePhoto = () => {
+    setInputSantriForm(prev => ({
+      ...prev,
+      foto: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=400&auto=format&fit=crop&q=80'
+    }));
+    setSinglePhotoOrigin('default');
+    setSinglePhotoFileName('');
+    setSinglePhotoFileSize('');
+    setShowUrlPhotoInput(false);
+  };
+
+  // Handler Batch Folder
+  const handleBatchFolderSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/') || /\.(jpe?g|png|webp|bmp|gif)$/i.test(f.name));
+    
+    if (imageFiles.length === 0) {
+      alert('Tidak ditemukan file gambar/foto di dalam folder yang dipilih.');
+      if (e.target) e.target.value = '';
+      return;
+    }
+
+    setIsBatchProcessing(true);
+    const newItems: typeof batchImportList = [];
+    let processed = 0;
+    
+    for (const f of imageFiles) {
+      processed++;
+      setBatchProgressText(`Memproses foto ${processed} dari ${imageFiles.length} (${f.name})...`);
+      try {
+        const compressed = await compressImageFile(f, 500, 600, 0.82);
+        const parsed = parseFileNameForSantri(f.name);
+        const autoId = parsed.id || `S-${Math.floor(1000 + Math.random() * 8999)}`;
+        const autoName = parsed.nama || f.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ');
+        newItems.push({
+          id: autoId,
+          nama: autoName,
+          kelas: batchTargetKelas,
+          kamar: batchDefaultKamar,
+          alamat: batchDefaultAlamat,
+          foto: compressed,
+          fileName: f.name,
+          fileSizeStr: `${Math.round(f.size / 1024)} KB`,
+          selected: true
+        });
+      } catch (err) {
+        console.error('Error compressing file', f.name, err);
+      }
+    }
+
+    setBatchImportList(prev => [...newItems, ...prev]);
+    setIsBatchProcessing(false);
+    setBatchProgressText('');
+    if (e.target) e.target.value = '';
+  };
+
+  // Handler Batch Gallery (multi files)
+  const handleBatchGallerySelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const imageFiles = Array.from(files);
+
+    setIsBatchProcessing(true);
+    const newItems: typeof batchImportList = [];
+    let processed = 0;
+
+    for (const f of imageFiles) {
+      processed++;
+      setBatchProgressText(`Memproses foto galeri ${processed} dari ${imageFiles.length} (${f.name})...`);
+      try {
+        const compressed = await compressImageFile(f, 500, 600, 0.82);
+        const parsed = parseFileNameForSantri(f.name);
+        const autoId = parsed.id || `S-${Math.floor(1000 + Math.random() * 8999)}`;
+        const autoName = parsed.nama || f.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ');
+        newItems.push({
+          id: autoId,
+          nama: autoName,
+          kelas: batchTargetKelas,
+          kamar: batchDefaultKamar,
+          alamat: batchDefaultAlamat,
+          foto: compressed,
+          fileName: f.name,
+          fileSizeStr: `${Math.round(f.size / 1024)} KB`,
+          selected: true
+        });
+      } catch (err) {
+        console.error('Error compressing gallery photo', f.name, err);
+      }
+    }
+
+    setBatchImportList(prev => [...newItems, ...prev]);
+    setIsBatchProcessing(false);
+    setBatchProgressText('');
+    if (e.target) e.target.value = '';
+  };
+
+  // Simpan santri massal dari batch list
+  const handleBatchSaveAll = () => {
+    const selected = batchImportList.filter(i => i.selected);
+    if (selected.length === 0) {
+      alert('Pilih setidaknya 1 santri untuk disimpan!');
+      return;
+    }
+
+    setIsBatchSaving(true);
+    let count = 0;
+    for (const item of selected) {
+      onSaveNewSantri({
+        id: item.id.trim(),
+        nama: item.nama.trim(),
+        kelas: item.kelas,
+        kamar: item.kamar.trim(),
+        alamat: item.alamat.trim(),
+        foto: item.foto
+      });
+      count++;
+    }
+    setIsBatchSaving(false);
+    alert(`Alhamdulillah! Berhasil menambahkan ${count} santri dari folder/galeri ke database!`);
+    setBatchImportList(prev => prev.filter(i => !i.selected));
+  };
+
+  // Pindahkan santri dari batch list ke form manual single
+  const handleTransferBatchToSingle = (item: typeof batchImportList[0]) => {
+    setInputSantriForm({
+      id: item.id,
+      nama: item.nama,
+      kelas: item.kelas,
+      kamar: item.kamar,
+      alamat: item.alamat,
+      foto: item.foto,
+      namaOrangTua: '',
+      namaWaliKelas: 'Ustazah Fina Nikmatul Kamelia',
+      noWaWaliKelas: '0812-3456-7890',
+      saldoUangSaku: 150000,
+      password: ''
+    });
+    setSinglePhotoOrigin('folder');
+    setSinglePhotoFileName(item.fileName);
+    setSinglePhotoFileSize(item.fileSizeStr);
+    setInputSantriSubTab('single');
   };
 
   // Submit tambah Guru dari Option Panel
@@ -1461,7 +1604,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {[
               { id: 'dashboard', label: 'Dashboard Utama', icon: Users },
               { id: 'kalender', label: 'Kalender Akademik', icon: Calendar, badge: 'Agenda' },
-              { id: 'ujian-kitab', label: 'Ujian Muhafadzoh & Kitab', icon: Award },
+              { id: 'ujian-muhafadzoh', label: '1. Tab Muhafadzoh', icon: Award, badge: 'Ujian' },
+              { id: 'ujian-baca-kitab', label: '2. Tab Baca Kitab', icon: BookOpen, badge: 'Ujian' },
+              { id: 'ujian-koreksian-kitab', label: '3. Tab Koreksian Kitab', icon: CheckSquare, badge: 'Ujian' },
               { id: 'absensi-santri', label: settings.text_absensi_santri_title || 'Absensi Santri', icon: UserCheck },
               { id: 'absensi-guru', label: settings.text_absensi_guru_title || 'Absensi Ustadz / Guru', icon: Clock },
               { id: 'jadwal', label: settings.text_jadwal_title || 'Jadwal Pelajaran', icon: Calendar },
@@ -1473,7 +1618,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               { id: 'pengaturan', label: 'Option Panel (Pusat Kontrol)', icon: Sliders, badge: 'Password' }
             ].map(tab => {
               const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
+              const isActive = activeTab === tab.id || (tab.id === 'ujian-muhafadzoh' && activeTab === 'ujian-kitab');
               return (
                 <button
                   key={tab.id}
@@ -1618,7 +1763,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-12 gap-0">
                 <div className="md:col-span-5 relative h-48 sm:h-56 md:h-auto min-h-[190px] overflow-hidden group">
                   <img
-                    src={settings.berita_image_url || 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=1200&auto=format&fit=crop&q=80'}
+                    src={(settings.berita_image_url && settings.berita_image_url.trim()) || 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=1200&auto=format&fit=crop&q=80'}
                     alt="Berita Terkini Pondok"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                     onError={(e) => {
@@ -2024,10 +2169,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </thead>
                   <tbody className="divide-y divide-amber-500/20">
                     {izinList.length > 0 ? (
-                      izinList.map(item => {
+                      izinList.map((item, idx) => {
                         const currentPengganti = penggantiSelected[item.id] || item.ustadzPengganti || guruList[0]?.nama || 'Ust. M. Rizqi Fadlillah, S.Pd.';
                         return (
-                          <tr key={item.id} className="hover:bg-amber-500/10 transition">
+                          <tr key={`${item.id}-${idx}`} className="hover:bg-amber-500/10 transition">
                             <td className="p-3 font-mono font-bold text-emerald-300 whitespace-nowrap">
                               {item.tanggal}
                               <span className="text-[10px] text-amber-200/70 block">Jam Ke-{item.jamKe || 1}</span>
@@ -2235,7 +2380,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </thead>
                     <tbody className="divide-y divide-[#d4af37]/10 bg-[#02130b]">
                       {rekapBulananSantri.map((s, idx) => (
-                        <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
+                        <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
                           <td className="p-3 text-center text-emerald-300 font-mono">{idx + 1}</td>
                           <td className="p-3 font-mono text-[#d4af37] font-bold">{s.id}</td>
                           <td className="p-3 font-bold text-white">{s.nama}</td>
@@ -2585,7 +2730,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         return true;
                       })
                       .map((s, idx) => (
-                        <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
+                        <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
                           <td className="p-3 text-center">
                             <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full font-bold font-mono text-xs ${
                               idx === 0 ? 'bg-[#d4af37] text-black shadow-lg shadow-[#d4af37]/40 ring-2 ring-[#f5e298]' :
@@ -2599,7 +2744,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <td className="p-3">
                             <div className="flex items-center space-x-2.5">
                               <img
-                                src={s.foto || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=80&auto=format&fit=crop&q=80'}
+                                src={(s.foto && s.foto.trim()) || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=80&auto=format&fit=crop&q=80'}
                                 alt={s.nama}
                                 className="w-8 h-8 rounded-full object-cover border border-[#d4af37]/40"
                               />
@@ -2710,7 +2855,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/80">
                     {santriList.slice(0, 10).map((s, idx) => (
-                      <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
+                      <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
                         <td className="p-3 text-center text-emerald-300 font-mono">{idx + 1}</td>
                         <td className="p-3">
                           <span className="font-bold text-white block">{s.nama}</span>
@@ -3037,184 +3182,92 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB: UJIAN MUHAFADZOH, KOREKSIAN KITAB, & BACA KITAB */}
-        {activeTab === 'ujian-kitab' && (
+        {/* BAGIAN UJIAN: 3 TAB TERPISAH (TAB MUHAFAZHOH, TAB BACA KITAB, TAB KOREKSIAN KITAB) */}
+        {(activeTab === 'ujian-muhafadzoh' || activeTab === 'ujian-baca-kitab' || activeTab === 'ujian-koreksian-kitab' || activeTab === 'ujian-kitab') && (
           <div className="space-y-6">
-            <div className="card-3d rounded-3xl p-6 backdrop-blur flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border border-[#d4af37]/30">
-              <div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#0b3824] border border-[#d4af37]/50 flex items-center justify-center text-[#d4af37] shadow">
-                    <Award className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-white text-gold-3d">
-                      Rekap Ujian Muhafadzoh, Koreksian Kitab, & Baca Kitab
-                    </h2>
-                    <p className="text-xs text-emerald-200/90">
-                      Terkoneksi langsung ke Dashboard Wali Santri di kolom bawah profil anak. Diatur dan dinilai melalui Option Panel.
-                    </p>
-                  </div>
+            {/* SUBTAB SWITCHER BAR DI ATAS KETIGA TAB */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-gradient-to-r from-[#03150c] via-[#020e08] to-[#041d11] border-2 border-[#d4af37]/50 shadow-xl">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black text-[#f5e298] uppercase tracking-wider flex items-center gap-1.5 px-2">
+                  <Award className="w-4 h-4 text-[#d4af37]" />
+                  <span>MENU BAGIAN UJIAN:</span>
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('ujian-muhafadzoh')}
+                    className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow ${
+                      activeTab === 'ujian-muhafadzoh' || activeTab === 'ujian-kitab'
+                        ? 'bg-gradient-to-r from-[#d4af37] via-[#f5e298] to-[#c59e2b] text-black ring-2 ring-[#f5e298]/80 scale-102 font-extrabold'
+                        : 'bg-black/50 text-[#f3e5ab]/80 hover:bg-[#d4af37]/20 hover:text-white border border-[#d4af37]/30'
+                    }`}
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>1. TAB MUHAFAZHOH</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('ujian-baca-kitab')}
+                    className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow ${
+                      activeTab === 'ujian-baca-kitab'
+                        ? 'bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white ring-2 ring-blue-300 scale-102 font-extrabold'
+                        : 'bg-black/50 text-blue-200/80 hover:bg-blue-500/20 hover:text-white border border-blue-500/30'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>2. TAB BACA KITAB</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('ujian-koreksian-kitab')}
+                    className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow ${
+                      activeTab === 'ujian-koreksian-kitab'
+                        ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-black ring-2 ring-amber-300 scale-102 font-extrabold'
+                        : 'bg-black/50 text-amber-200/80 hover:bg-amber-500/20 hover:text-white border border-amber-500/30'
+                    }`}
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>3. TAB KOREKSIAN KITAB</span>
+                  </button>
                 </div>
               </div>
 
               <button
+                type="button"
                 onClick={() => {
                   setActiveTab('pengaturan');
                   setActiveControlSection('kelola_ujian_kitab');
                 }}
-                className="btn-3d-gold px-4 py-2.5 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow"
+                className="px-3.5 py-1.5 rounded-xl bg-[#0b3824] hover:bg-[#0e482e] border border-[#d4af37]/50 text-[#f5e298] text-xs font-bold flex items-center gap-1.5 transition shadow"
               >
-                <Sliders className="w-4 h-4 text-black" />
-                <span>Input / Edit Nilai di Option Panel</span>
+                <Sliders className="w-3.5 h-3.5 text-[#d4af37]" />
+                <span>Pengaturan Nilai (Option Panel)</span>
               </button>
             </div>
 
-            {/* Quick Cards Rata-Rata */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <div className="card-3d-glass rounded-2xl p-5 border border-[#d4af37]/40 space-y-1">
-                <span className="text-xs text-[#d4af37] font-bold block">1. Rata-rata Nilai Koreksian Kitab</span>
-                <div className="text-2xl font-black text-white font-mono">
-                  {(santriList.reduce((acc, s) => acc + Number(s.nilaiKoreksianKitab ?? 88), 0) / (santriList.length || 1)).toFixed(1)} / 100
-                </div>
-                <span className="text-[11px] text-emerald-300">Pemeriksaan Makna Gandul & Catatan Pegon</span>
-              </div>
+            {/* KONTEN MASING-MASING TAB */}
+            {(activeTab === 'ujian-muhafadzoh' || activeTab === 'ujian-kitab') && (
+              <TabUjianMuhafadzoh
+                santriList={santriList}
+                onOpenInputModal={(s) => setUjianModalTarget({ santri: s, type: 'muhafadzoh' })}
+              />
+            )}
 
-              <div className="card-3d-glass rounded-2xl p-5 border border-emerald-500/40 space-y-1">
-                <span className="text-xs text-emerald-300 font-bold block">2. Rata-rata Nilai Muhafadzoh</span>
-                <div className="text-2xl font-black text-emerald-300 font-mono">
-                  {(santriList.reduce((acc, s) => acc + Number(s.nilaiMuhafadzoh ?? 90), 0) / (santriList.length || 1)).toFixed(1)} / 100
-                </div>
-                <span className="text-[11px] text-emerald-200/90">Hafalan Matan Nadzhom Diniyah</span>
-              </div>
+            {activeTab === 'ujian-baca-kitab' && (
+              <TabUjianBacaKitab
+                santriList={santriList}
+                onOpenInputModal={(s) => setUjianModalTarget({ santri: s, type: 'baca' })}
+              />
+            )}
 
-              <div className="card-3d-glass rounded-2xl p-5 border border-blue-500/40 space-y-1">
-                <span className="text-xs text-blue-300 font-bold block">3. Rata-rata Nilai Baca Kitab</span>
-                <div className="text-2xl font-black text-blue-300 font-mono">
-                  {(santriList.reduce((acc, s) => acc + Number(s.nilaiBacaKitab ?? 86), 0) / (santriList.length || 1)).toFixed(1)} / 100
-                </div>
-                <span className="text-[11px] text-slate-300">Qira'atul Kutub & Fahmul Tarkib</span>
-              </div>
-            </div>
-
-            {/* Tabel Santri dengan 3 Nilai Utama */}
-            <div className="card-3d rounded-2xl p-5 border border-[#d4af37]/30 space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <h3 className="text-sm font-bold text-white text-gold-3d">
-                  Daftar Nilai Santri Lengkap (Terkoneksi ke Wali Santri)
-                </h3>
-                <span className="text-xs text-[#d4af37] font-mono">
-                  Total: {santriList.length} Santri Terdaftar
-                </span>
-              </div>
-
-              <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25">
-                <table className="w-full text-xs text-left min-w-[900px]">
-                  <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
-                    <tr>
-                      <th className="p-3">Santri & Angkatan</th>
-                      <th className="p-3">Nilai Koreksian Kitab</th>
-                      <th className="p-3">Nilai Muhafadzoh</th>
-                      <th className="p-3">Nilai Baca Kitab</th>
-                      <th className="p-3">Penguji & Tanggal</th>
-                      <th className="p-3 text-center">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                    {santriList.map(s => (
-                      <tr key={s.id} className="hover:bg-[#d4af37]/5">
-                        <td className="p-3">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-9 h-9 rounded-full overflow-hidden bg-[#0b3824] border border-[#d4af37]/40 shrink-0">
-                              <img
-                                src={s.foto || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=100&auto=format&fit=crop&q=80'}
-                                alt={s.nama}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  (e.target as HTMLElement).setAttribute('src', 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=100&auto=format&fit=crop&q=80');
-                                }}
-                              />
-                            </div>
-                            <div>
-                              <span className="font-bold text-white block">{s.nama}</span>
-                              <span className="text-[10px] text-[#d4af37] font-mono">NIS: {s.id} • {s.kelas}</span>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Nilai Koreksian Kitab */}
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            <span className="px-2 py-0.5 rounded bg-[#d4af37]/20 border border-[#d4af37]/50 text-[#d4af37] font-mono font-black text-sm">
-                              {s.nilaiKoreksianKitab ?? 90}
-                            </span>
-                            <div>
-                              <span className="text-[10px] font-bold text-white block">
-                                {s.predikatKoreksianKitab || 'Mumtaz'}
-                              </span>
-                              <span className="text-[9px] text-slate-400 block truncate max-w-[150px]">
-                                Makna Gandul Sah & Lengkap
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Nilai Muhafadzoh */}
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 font-mono font-black text-sm">
-                              {s.nilaiMuhafadzoh ?? 92}
-                            </span>
-                            <div>
-                              <span className="text-[10px] font-bold text-white block">
-                                {s.predikatMuhafadzoh || 'Mumtaz'}
-                              </span>
-                              <span className="text-[9px] text-slate-400 block truncate max-w-[150px]">
-                                Hafalan Mutqin
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Nilai Baca Kitab */}
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            <span className="px-2 py-0.5 rounded bg-blue-500/20 border border-blue-500/50 text-blue-300 font-mono font-black text-sm">
-                              {s.nilaiBacaKitab ?? 88}
-                            </span>
-                            <div>
-                              <span className="text-[10px] font-bold text-white block">
-                                {s.predikatBacaKitab || 'Jayyid Jiddan'}
-                              </span>
-                              <span className="text-[9px] text-slate-400 block truncate max-w-[150px]">
-                                Tarkib & I'rob Fashih
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td className="p-3">
-                          <span className="text-slate-300 block font-medium">{s.ustadzPengujiKitab || 'Ust. Ilyas'}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">{s.tanggalUjianKitab || '2026-09-22'}</span>
-                        </td>
-
-                        <td className="p-3 text-center">
-                          <button
-                            onClick={() => {
-                              setSelectedUjianSantriId(s.id);
-                              setActiveTab('pengaturan');
-                              setActiveControlSection('kelola_ujian_kitab');
-                            }}
-                            className="px-2.5 py-1 bg-[#d4af37]/20 hover:bg-[#d4af37] text-[#d4af37] hover:text-black font-bold rounded-lg transition"
-                          >
-                            Atur Nilai
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            {activeTab === 'ujian-koreksian-kitab' && (
+              <TabUjianKoreksianKitab
+                santriList={santriList}
+                onOpenInputModal={(s) => setUjianModalTarget({ santri: s, type: 'koreksian' })}
+              />
+            )}
           </div>
         )}
 
@@ -3349,13 +3402,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {santriInClass.map(santri => {
+                      {santriInClass.map((santri, idx) => {
                         const cur = santriAbsensiState[santri.id] || { status: 'Hadir', ket: '' };
                         return (
-                          <div key={santri.id} className="card-3d-deep rounded-xl p-3.5 space-y-3">
+                          <div key={`${santri.id}-${idx}`} className="card-3d-deep rounded-xl p-3.5 space-y-3">
                             <div className="flex items-center space-x-3">
                               <img
-                                src={santri.foto}
+                                src={(santri.foto && santri.foto.trim()) || 'https://via.placeholder.com/70x90'}
                                 alt={santri.nama}
                                 className="w-12 h-14 object-cover rounded-lg border border-[#d4af37]/40 shadow"
                                 onError={(e) => { (e.target as HTMLElement).setAttribute('src', 'https://via.placeholder.com/70x90'); }}
@@ -3459,7 +3512,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10">
                     {rekapBulananSantri.map((s, idx) => (
-                      <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
+                      <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
                         <td className="p-3 text-center text-emerald-300 font-mono">{idx + 1}</td>
                         <td className="p-3 font-mono text-[#d4af37]">{s.id}</td>
                         <td className="p-3 font-bold text-white">{s.nama}</td>
@@ -4183,7 +4236,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3.5 font-bold">MATA PELAJARAN / FAN</th>
                       <th className="p-3.5">USTADZ / USTADZAH PENGAJAR</th>
                       <th className="p-3.5 text-center w-28">STATUS</th>
-                      <th className="p-3.5 text-center w-36">AKSI & SETTING</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-emerald-500/15 bg-[#011008]/80">
@@ -4194,7 +4246,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         (jadwalTsDay === 'SEMUA' || j.hari.toUpperCase() === jadwalTsDay.toUpperCase())
                       )
                       .map((item, idx) => (
-                        <tr key={item.id || idx} className="hover:bg-emerald-500/10 transition">
+                        <tr key={idx} className="hover:bg-emerald-500/10 transition">
                           <td className="p-3.5 font-mono text-center text-emerald-400 font-bold">{idx + 1}</td>
                           <td className="p-3.5 font-bold text-white whitespace-nowrap flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
@@ -4218,27 +4270,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               Aktif (Pagi/Siang)
                             </span>
                           </td>
-                          <td className="p-3.5 text-center whitespace-nowrap">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditJadwal(item)}
-                                className="px-2.5 py-1.5 rounded-xl bg-amber-400/20 hover:bg-amber-400 text-amber-300 hover:text-black border border-amber-400/50 text-[11px] font-extrabold flex items-center gap-1.5 transition shadow"
-                                title="Setting dan Revisi Jadwal jika ada yang keliru"
-                              >
-                                <Settings2 className="w-3.5 h-3.5 text-amber-400 group-hover:text-black" />
-                                <span>Setting / Revisi</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteJadwalClick(item)}
-                                className="p-1.5 rounded-xl bg-red-950/80 hover:bg-red-800 text-red-300 hover:text-white border border-red-500/40 text-[11px] transition shadow"
-                                title="Hapus Jadwal"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
                         </tr>
                       ))}
                     {jadwalList.filter(j => 
@@ -4247,7 +4278,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       (jadwalTsDay === 'SEMUA' || j.hari.toUpperCase() === jadwalTsDay.toUpperCase())
                     ).length === 0 && (
                       <tr>
-                        <td colSpan={9} className="p-8 text-center text-emerald-300">
+                        <td colSpan={8} className="p-8 text-center text-emerald-300">
                           Tidak ada jadwal Tsanawiyah yang cocok dengan kombinasi kelas dan hari yang dipilih.
                         </td>
                       </tr>
@@ -4346,7 +4377,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3.5 font-bold">MATA PELAJARAN / FAN</th>
                       <th className="p-3.5">USTADZ / USTADZAH PENGAJAR</th>
                       <th className="p-3.5 text-center w-28">STATUS</th>
-                      <th className="p-3.5 text-center w-36">AKSI & SETTING</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-amber-500/15 bg-[#0e0701]/80">
@@ -4357,7 +4387,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         (jadwalAlDay === 'SEMUA' || j.hari.toUpperCase() === jadwalAlDay.toUpperCase())
                       )
                       .map((item, idx) => (
-                        <tr key={item.id || idx} className="hover:bg-amber-500/10 transition">
+                        <tr key={idx} className="hover:bg-amber-500/10 transition">
                           <td className="p-3.5 font-mono text-center text-amber-400 font-bold">{idx + 1}</td>
                           <td className="p-3.5 font-bold text-amber-200 whitespace-nowrap flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-[#d4af37]"></span>
@@ -4381,27 +4411,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               Sekolah Malam
                             </span>
                           </td>
-                          <td className="p-3.5 text-center whitespace-nowrap">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditJadwal(item)}
-                                className="px-2.5 py-1.5 rounded-xl bg-amber-400/20 hover:bg-amber-400 text-amber-300 hover:text-black border border-amber-400/50 text-[11px] font-extrabold flex items-center gap-1.5 transition shadow"
-                                title="Setting dan Revisi Jadwal jika ada yang keliru"
-                              >
-                                <Settings2 className="w-3.5 h-3.5 text-amber-400 group-hover:text-black" />
-                                <span>Setting / Revisi</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteJadwalClick(item)}
-                                className="p-1.5 rounded-xl bg-red-950/80 hover:bg-red-800 text-red-300 hover:text-white border border-red-500/40 text-[11px] transition shadow"
-                                title="Hapus Jadwal"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
                         </tr>
                       ))}
                     {jadwalList.filter(j => 
@@ -4410,7 +4419,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       (jadwalAlDay === 'SEMUA' || j.hari.toUpperCase() === jadwalAlDay.toUpperCase())
                     ).length === 0 && (
                       <tr>
-                        <td colSpan={9} className="p-8 text-center text-amber-300">
+                        <td colSpan={8} className="p-8 text-center text-amber-300">
                           Tidak ada jadwal Aliyah yang cocok dengan kombinasi kelas dan hari malam yang dipilih.
                         </td>
                       </tr>
@@ -4657,39 +4666,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="card-3d rounded-3xl p-6 max-w-xl w-full border-2 border-[#d4af37] bg-gradient-to-b from-[#062d1c] to-[#02140c] space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
                   <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/30">
                     <div className="flex items-center space-x-3">
-                      {editingJadwal ? (
-                        <div className="w-10 h-10 rounded-xl bg-amber-400 text-black flex items-center justify-center font-bold shadow-lg">
-                          <Settings2 className="w-6 h-6 text-black" />
-                        </div>
-                      ) : (
-                        <div className="w-10 h-10 rounded-xl bg-[#0b422a] border border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow-lg">
-                          <Calendar className="w-6 h-6 text-[#d4af37]" />
-                        </div>
-                      )}
+                      <Calendar className="w-6 h-6 text-[#d4af37]" />
                       <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-base font-extrabold text-white text-gold-3d">
-                            {editingJadwal ? 'Setting & Revisi Jadwal Pelajaran' : 'Tambah Jadwal Pelajaran Baru'}
-                          </h4>
-                          {editingJadwal && (
-                            <span className="px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/50 text-[10px] font-mono font-bold">
-                              Mode Koreksi
-                            </span>
-                          )}
-                        </div>
+                        <h4 className="text-base font-extrabold text-white text-gold-3d">
+                          {editingJadwal ? 'Edit Jadwal Pelajaran' : 'Tambah Jadwal Pelajaran Baru'}
+                        </h4>
                         <p className="text-[11px] text-emerald-300">
-                          {editingJadwal
-                            ? `Koreksi kekeliruan jadwal mapel ${editingJadwal.mapel} (${editingJadwal.kelas}) - Hari ${editingJadwal.hari} Jam ke-${editingJadwal.jamKe}`
-                            : 'Tingkatan Tsanawiyah (Siang) atau Aliyah (Malam)'}
+                          Tingkatan Tsanawiyah (Siang) atau Aliyah (Malam)
                         </p>
                       </div>
                     </div>
                     <button
-                      onClick={() => {
-                        setShowAddJadwalModal(false);
-                        setEditingJadwal(null);
-                      }}
-                      className="w-8 h-8 rounded-lg bg-stone-900 border border-stone-700 text-stone-300 hover:text-white flex items-center justify-center text-sm font-bold"
+                      onClick={() => setShowAddJadwalModal(false)}
+                      className="text-stone-400 hover:text-white text-lg font-bold"
                     >
                       ✕
                     </button>
@@ -4860,7 +4849,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="btn-3d-gold px-6 py-2 rounded-xl text-black font-extrabold flex items-center gap-1.5 shadow-xl"
                       >
                         <Save className="w-4 h-4 text-black" />
-                        <span>{editingJadwal ? 'Simpan Revisi Jadwal' : 'Simpan Jadwal Baru'}</span>
+                        <span>Simpan Jadwal</span>
                       </button>
                     </div>
                   </form>
@@ -5170,7 +5159,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <td className="p-3 text-center font-bold text-[#d4af37]">{i + 1}</td>
                           <td className="p-3">
                             <div className="flex items-center space-x-2.5">
-                              {g.foto && (
+                              {g.foto && g.foto.trim() !== '' && (
                                 <img
                                   src={g.foto}
                                   alt={g.nama}
@@ -5233,16 +5222,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </p>
               </div>
 
-              <button
-                onClick={() => {
-                  setActiveTab('pengaturan');
-                  setActiveControlSection('input_santri');
-                }}
-                className="btn-3d-gold px-4 py-2 text-black font-extrabold text-xs rounded-xl flex items-center gap-2"
-              >
-                <PlusCircle className="w-3.5 h-3.5 text-black" />
-                <span>Input Santri via Option Panel</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowKenaikanKelasModal(true)}
+                  className="btn-3d-gold px-4 py-2 text-black font-black text-xs rounded-xl flex items-center gap-2 shadow-[0_6px_20px_rgba(212,175,55,0.45)] hover:scale-105 transition"
+                  title="Buka sistem kenaikan kelas otomatis seluruh jenjang santri"
+                >
+                  <GraduationCap className="w-4 h-4 text-black stroke-[2.4]" />
+                  <span>PROSES KENAIKAN KELAS</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab('pengaturan');
+                    setActiveControlSection('input_santri');
+                  }}
+                  className="btn-3d-dark px-3.5 py-2 text-[#f3e5ab] font-bold text-xs rounded-xl flex items-center gap-2 border border-[#d4af37]/40 hover:border-[#d4af37]"
+                >
+                  <PlusCircle className="w-3.5 h-3.5 text-[#d4af37]" />
+                  <span>Input Santri Manual</span>
+                </button>
+              </div>
             </div>
 
             {/* TAB FILTER ANGKATAN SANTRI DENGAN STYLING 3D MEWAH */}
@@ -5272,14 +5273,72 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               })}
             </div>
 
-            {/* Tabel Data Santri Khusus Angkatan Terpilih */}
+            {/* SEARCH & PAGINATION CONTROLS BAR (ARSITEKTUR SKALABEL 5 TB) */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-2xl bg-[#03170d] border border-[#d4af37]/30 shadow-inner">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={santriTabSearch}
+                  onChange={(e) => {
+                    setSantriTabSearch(e.target.value);
+                    setSantriTabPage(1);
+                  }}
+                  placeholder={`Cari nama, NIS, kamar, atau asal di kelas ${selectedAngkatanSantri}...`}
+                  className="w-full bg-[#020e08] border border-[#d4af37]/30 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#d4af37]"
+                />
+                {santriTabSearch && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSantriTabSearch('');
+                      setSantriTabPage(1);
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-1.5 text-xs text-zinc-300">
+                  <span className="text-[11px] text-zinc-400">Tampilkan:</span>
+                  <select
+                    value={santriTabPageSize}
+                    onChange={(e) => {
+                      setSantriTabPageSize(Number(e.target.value));
+                      setSantriTabPage(1);
+                    }}
+                    className="bg-[#020e08] border border-[#d4af37]/30 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                  >
+                    <option value={10}>10 Baris</option>
+                    <option value={15}>15 Baris</option>
+                    <option value={25}>25 Baris</option>
+                    <option value={50}>50 Baris</option>
+                    <option value={100}>100 Baris</option>
+                  </select>
+                </div>
+
+                <span className="text-xs text-emerald-300 font-mono hidden md:inline">
+                  Total Terdaftar: {santriList.filter(s => s.kelas === selectedAngkatanSantri).length} Santri
+                </span>
+              </div>
+            </div>
+
+            {/* Tabel Data Santri Khusus Angkatan Terpilih (PAGINATED & LAZY LOADED) */}
             <div className="space-y-3">
               <div className="flex justify-between items-center p-3 rounded-xl bg-[#052216] border border-[#d4af37]/20">
                 <span className="text-xs font-bold text-white">
                   Daftar Santri: <span className="text-[#d4af37]">{selectedAngkatanSantri}</span>
+                  {santriTabSearch && (
+                    <span className="ml-2 text-[11px] text-amber-300 font-normal">
+                      (Filter: "{santriTabSearch}")
+                    </span>
+                  )}
                 </span>
                 <span className="text-xs text-emerald-300 font-mono">
-                  {santriList.filter(s => s.kelas === selectedAngkatanSantri).length} Santri Terdaftar
+                  {paginatedSantriTabResult.totalCount} Santri Ditemukan
                 </span>
               </div>
 
@@ -5293,42 +5352,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3">NAMA LENGKAP SANTRI</th>
                       <th className="p-3">KAMAR PONDOK</th>
                       <th className="p-3">ALAMAT ASAL</th>
-                      <th className="p-3 w-32 text-center">STATUS SANTRI</th>
-                      <th className="p-3 w-32 text-center">AKSI / HAPUS</th>
+                      <th className="p-3 w-36 text-center">STATUS & RIWAYAT</th>
+                      <th className="p-3 w-48 text-center">AKSI & PENGATURAN</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10">
-                    {santriList
-                      .filter(s => s.kelas === selectedAngkatanSantri)
-                      .map((s, idx) => (
-                        <tr key={s.id} className="hover:bg-[#d4af37]/5 transition">
-                          <td className="p-3 text-center font-bold text-[#d4af37]">{idx + 1}</td>
-                          <td className="p-2 text-center">
-                            <div className="w-10 h-12 mx-auto rounded overflow-hidden border border-[#d4af37]/30 shadow">
-                              <img
-                                src={s.foto}
-                                alt={s.nama}
-                                className="w-full h-full object-cover"
-                                onError={(e) => { (e.target as HTMLElement).setAttribute('src', 'https://via.placeholder.com/70x90'); }}
-                              />
+                    {paginatedSantriTabResult.items.map((s, idx) => (
+                      <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
+                        <td className="p-3 text-center font-bold text-[#d4af37]">
+                          {(paginatedSantriTabResult.page - 1) * paginatedSantriTabResult.pageSize + idx + 1}
+                        </td>
+                        <td className="p-2 text-center">
+                          <div 
+                            onClick={() => setSantriHighResPreview(s)}
+                            className="w-10 h-12 mx-auto rounded overflow-hidden border border-[#d4af37]/30 shadow cursor-pointer group relative"
+                            title="Klik untuk melihat foto resolusi penuh dari Cloud Storage"
+                          >
+                            <img
+                              src={((s.fotoThumbnail && s.fotoThumbnail.trim()) || (s.foto && s.foto.trim())) || 'https://via.placeholder.com/70x90'}
+                              alt={s.nama}
+                              loading="lazy"
+                              className="w-full h-full object-cover transition transform group-hover:scale-110"
+                              onError={(e) => { (e.target as HTMLElement).setAttribute('src', 'https://via.placeholder.com/70x90'); }}
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                              <Eye className="w-3 h-3 text-white" />
                             </div>
-                          </td>
-                          <td className="p-3 font-mono font-bold text-[#d4af37]">{s.id}</td>
-                          <td className="p-3 font-bold text-white text-sm">
-                            <div className="flex items-center space-x-2">
-                              <span>{s.nama}</span>
-                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Santri Aktif Mondok" />
-                            </div>
-                          </td>
-                          <td className="p-3 text-emerald-300 font-medium">{s.kamar || '-'}</td>
-                          <td className="p-3 text-emerald-200/80">{s.alamat || '-'}</td>
-                          <td className="p-3 text-center">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 shadow">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                              <span>Aktif Mondok</span>
+                          </div>
+                        </td>
+                        <td className="p-3 font-mono font-bold text-[#d4af37]">{s.id}</td>
+                        <td className="p-3 font-bold text-white text-sm">
+                          <div className="flex items-center space-x-2">
+                            <span>{s.nama}</span>
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Santri Aktif Mondok" />
+                          </div>
+                        </td>
+                        <td className="p-3 text-emerald-300 font-medium">{s.kamar || '-'}</td>
+                        <td className="p-3 text-emerald-200/80">{s.alamat || '-'}</td>
+                        <td className="p-3 text-center">
+                          <div className="flex flex-col items-center gap-1.5">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow ${
+                              s.statusSantri === 'Lulus'
+                                ? 'bg-amber-950/80 border border-amber-500/40 text-[#f5e298]'
+                                : s.statusSantri === 'Tetap di Kelas'
+                                ? 'bg-orange-950/80 border border-orange-500/40 text-orange-300'
+                                : s.statusSantri === 'Mutasi / Keluar'
+                                ? 'bg-rose-950/80 border border-rose-500/40 text-rose-300'
+                                : 'bg-emerald-950/80 border border-emerald-500/40 text-emerald-300'
+                            }`}>
+                              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                              <span>{s.statusSantri || 'Aktif Mondok'}</span>
                             </span>
-                          </td>
-                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setSantriDetailHistory(s)}
+                              className="text-[10px] text-[#d4af37] hover:text-white flex items-center gap-1 font-semibold underline underline-offset-2 transition"
+                              title="Lihat riwayat perjalanan kelas santri dari tahun ke tahun"
+                            >
+                              <History className="w-3 h-3 text-[#d4af37]" />
+                              <span>Lihat Riwayat</span>
+                            </button>
+                          </div>
+                        </td>
+                        <td className="p-3 text-center">
+                          <div className="flex items-center justify-center gap-1.5 flex-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => setEditingSantri(s)}
+                              className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/30 hover:from-amber-500/40 hover:to-amber-600/50 border border-[#d4af37]/60 text-[#f5e298] hover:text-white text-xs font-bold inline-flex items-center gap-1.5 transition shadow active:scale-95 cursor-pointer"
+                              title="Edit data santri: nama, NIS, foto, alamat, kamar, wali, dsb."
+                            >
+                              <Sliders className="w-3.5 h-3.5 text-[#d4af37]" />
+                              <span>Edit / Setting</span>
+                            </button>
+
                             <button
                               type="button"
                               onClick={() => {
@@ -5338,26 +5435,120 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   }
                                 }
                               }}
-                              className="px-3 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-800 border border-red-500/50 text-red-200 text-xs font-bold inline-flex items-center gap-1.5 transition shadow active:scale-95"
+                              className="px-2.5 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-800 border border-red-500/50 text-red-200 text-xs font-bold inline-flex items-center gap-1.5 transition shadow active:scale-95 cursor-pointer"
                               title="Hapus data santri yang sudah tidak mondok (boyong)"
                             >
                               <Trash2 className="w-3.5 h-3.5 text-red-400" />
                               <span>Hapus</span>
                             </button>
-                          </td>
-                        </tr>
-                      ))}
-                    {santriList.filter(s => s.kelas === selectedAngkatanSantri).length === 0 && (
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {paginatedSantriTabResult.totalCount === 0 && (
                       <tr>
                         <td colSpan={8} className="p-8 text-center text-emerald-300">
-                          Belum ada data santri yang tercatat untuk angkatan {selectedAngkatanSantri}.
+                          {santriTabSearch
+                            ? `Tidak ada santri yang cocok dengan pencarian "${santriTabSearch}" pada kelas ${selectedAngkatanSantri}.`
+                            : `Belum ada data santri yang tercatat untuk angkatan ${selectedAngkatanSantri}.`}
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
+
+              {/* BOTTOM PAGINATION NAV CONTROLLER */}
+              {paginatedSantriTabResult.totalCount > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-[#d4af37]/20 text-xs">
+                  <span className="text-zinc-400 font-mono text-[11px]">
+                    Menampilkan {(paginatedSantriTabResult.page - 1) * paginatedSantriTabResult.pageSize + 1} - {Math.min(paginatedSantriTabResult.page * paginatedSantriTabResult.pageSize, paginatedSantriTabResult.totalCount)} dari {paginatedSantriTabResult.totalCount} santri
+                  </span>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={santriTabPage <= 1}
+                      onClick={() => setSantriTabPage(prev => Math.max(1, prev - 1))}
+                      className="px-3 py-1.5 rounded-xl bg-[#052216] border border-[#d4af37]/30 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#d4af37] flex items-center gap-1"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <span>Sebelumnya</span>
+                    </button>
+
+                    <span className="px-3 py-1 rounded-xl bg-[#03170d] font-mono text-[#d4af37] font-bold border border-[#d4af37]/20">
+                      Hal {paginatedSantriTabResult.page} / {paginatedSantriTabResult.totalPages}
+                    </span>
+
+                    <button
+                      type="button"
+                      disabled={santriTabPage >= paginatedSantriTabResult.totalPages}
+                      onClick={() => setSantriTabPage(prev => Math.min(paginatedSantriTabResult.totalPages, prev + 1))}
+                      className="px-3 py-1.5 rounded-xl bg-[#052216] border border-[#d4af37]/30 text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:border-[#d4af37] flex items-center gap-1"
+                    >
+                      <span>Selanjutnya</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* MODAL PREVIEW FOTO RESOLUSI PENUH (CLOUD OBJECT STORAGE) */}
+            {santriHighResPreview && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+                <div className="bg-[#041a10] border-2 border-[#d4af37] rounded-3xl p-5 sm:p-6 max-w-md w-full flex flex-col items-center space-y-4 shadow-2xl">
+                  <div className="flex items-center justify-between w-full border-b border-[#d4af37]/20 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Image className="w-4 h-4 text-[#d4af37]" />
+                      <h4 className="text-sm font-bold text-white">Foto Cloud Asli: {santriHighResPreview.nama}</h4>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSantriHighResPreview(null)}
+                      className="w-8 h-8 rounded-full bg-black/40 text-zinc-300 hover:text-white flex items-center justify-center"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="w-56 h-72 rounded-2xl overflow-hidden border-2 border-[#d4af37] shadow-xl bg-black">
+                    <img
+                      src={(santriHighResPreview.foto && santriHighResPreview.foto.trim()) || 'https://via.placeholder.com/300x400?text=Foto+Santri'}
+                      alt={santriHighResPreview.nama}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  <div className="w-full p-3 rounded-xl bg-[#020e08] border border-[#d4af37]/25 text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">NIS:</span>
+                      <span className="font-mono text-[#d4af37] font-bold">{santriHighResPreview.id}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">Kelas:</span>
+                      <span className="text-emerald-300 font-bold">{santriHighResPreview.kelas}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">Kamar:</span>
+                      <span className="text-white">{santriHighResPreview.kamar || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-zinc-400">Asal:</span>
+                      <span className="text-white">{santriHighResPreview.alamat || '-'}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setSantriHighResPreview(null)}
+                    className="w-full py-2 rounded-xl bg-zinc-800 text-zinc-200 text-xs font-bold hover:bg-zinc-700"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -6208,8 +6399,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               /* KONTEN UTAMA OPTION PANEL KETIKA TERBUKA */
               <div className="space-y-6">
                 {/* SUB MENU PUSAT KONTROL - 3D BEVELED TILES */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-2 bg-[#052216]/90 p-2.5 rounded-2xl border border-[#d4af37]/35 shadow-inner">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-9 gap-2 bg-[#052216]/90 p-2.5 rounded-2xl border border-[#d4af37]/35 shadow-inner">
                   {[
+                    { id: 'kenaikan_kelas', label: 'Kenaikan Kelas', icon: GraduationCap },
+                    { id: 'kelola_storage_5tb', label: 'Storage 5 TB & Cloud', icon: HardDrive },
                     { id: 'geofencing_absensi', label: 'Geofencing & Pengganti', icon: MapPin },
                     { id: 'simpan_absensi', label: 'Absensi Ustadz', icon: Save },
                     { id: 'kelola_berita', label: 'Berita & Caption', icon: Newspaper },
@@ -6248,6 +6441,115 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     );
                   })}
                 </div>
+
+                {/* SECTION KENAIKAN KELAS OTOMATIS */}
+                {activeControlSection === 'kenaikan_kelas' && (
+                  <div className="card-3d rounded-2xl p-5 space-y-6">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#d4af37]/20">
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#f5e298] via-[#d4af37] to-[#7a5410] flex items-center justify-center text-black shadow-lg">
+                          <GraduationCap className="w-6 h-6 stroke-[2.2]" />
+                        </div>
+                        <div>
+                          <h3 className="text-base font-extrabold text-[#f5e298] text-gold-3d">
+                            Sistem Kenaikan Kelas & Manajemen Tahun Ajaran Santri
+                          </h3>
+                          <p className="text-xs text-emerald-200/90 mt-0.5">
+                            Memindahkan seluruh santri ke jenjang berikutnya secara otomatis tanpa input ulang data.
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowKenaikanKelasModal(true)}
+                        className="btn-3d-gold px-5 py-2.5 rounded-xl text-black font-black text-xs shadow-xl flex items-center gap-2 hover:scale-105 transition"
+                      >
+                        <GraduationCap className="w-4 h-4 text-black stroke-[2.4]" />
+                        <span>BUKA PROSES KENAIKAN KELAS</span>
+                      </button>
+                    </div>
+
+                    {/* Ringkasan Status Saat Ini */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="p-4 rounded-xl bg-[#03150d] border border-[#d4af37]/30">
+                        <span className="text-[11px] font-bold text-zinc-400 block uppercase">Tahun Ajaran Aktif:</span>
+                        <div className="text-lg font-black text-white font-mono mt-1">
+                          {settings.tahun_ajaran || '2026/2027'}
+                        </div>
+                        <span className="text-[11px] text-emerald-300">Semester: {settings.semester_aktif || 'Semester Ganjil'}</span>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-[#03150d] border border-[#d4af37]/30">
+                        <span className="text-[11px] font-bold text-zinc-400 block uppercase">Total Santri Terdaftar:</span>
+                        <div className="text-lg font-black text-[#f5e298] font-mono mt-1">
+                          {santriList.length} Santri
+                        </div>
+                        <span className="text-[11px] text-emerald-300">Tersimpan Permanen di Database</span>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-[#03150d] border border-[#d4af37]/30">
+                        <span className="text-[11px] font-bold text-zinc-400 block uppercase">Prinsip Database:</span>
+                        <div className="text-xs font-bold text-emerald-400 mt-1">
+                          ID / NIS Tetap Sama
+                        </div>
+                        <span className="text-[11px] text-zinc-400">Seluruh riwayat absensi & nilai tetap terhubung</span>
+                      </div>
+                    </div>
+
+                    {/* Diagram Alur Kenaikan Kelas */}
+                    <div className="p-4 rounded-xl bg-[#020e08] border border-[#d4af37]/20 space-y-3">
+                      <span className="text-xs font-black text-[#f5e298] block uppercase tracking-wider">
+                        Jenjang Kenaikan Kelas Otomatis Salaf Al-Maliki:
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs">
+                        {[
+                          { from: '1 TSANAWIYAH', to: '2 TSANAWIYAH' },
+                          { from: '2 TSANAWIYAH', to: '3 TSANAWIYAH' },
+                          { from: '3 TSANAWIYAH', to: '1 ALIYAH' },
+                          { from: '1 ALIYAH', to: '2 ALIYAH' },
+                          { from: '2 ALIYAH', to: '3 ALIYAH' },
+                          { from: '3 ALIYAH', to: 'Lulus / Alumni' }
+                        ].map((j, i) => (
+                          <div key={i} className="p-2.5 rounded-lg bg-[#052216] border border-[#d4af37]/20 flex items-center justify-between">
+                            <span className="font-bold text-white">{j.from}</span>
+                            <ArrowRight className="w-3.5 h-3.5 text-[#d4af37]" />
+                            <span className="font-bold text-[#f5e298]">{j.to}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SECTION 5TB: MONITORING & ARSITEKTUR CLOUD STORAGE 5 TB */}
+                {activeControlSection === 'kelola_storage_5tb' && (
+                  <Storage5TBManager
+                    allDatabaseData={{
+                      santri: santriList,
+                      guru: guruList,
+                      jadwal: jadwalList,
+                      absensiSantri: absensiSantriList,
+                      absensiGuru: absensiGuruList,
+                      syahriyah: syahriyahList,
+                      uangSaku: uangSakuList,
+                      pengurus: pengurusList,
+                      kurikulum: kurikulumList,
+                      silabus: silabusList,
+                      kalender: kalenderList,
+                      ujian: ujianList,
+                      settings: settings
+                    }}
+                    onNotify={(msg) => {
+                      setRealtimeAlert({
+                        type: 'santri',
+                        title: 'Storage 5 TB & Cloud',
+                        detail: msg,
+                        time: new Date().toLocaleTimeString('id-ID')
+                      });
+                    }}
+                  />
+                )}
 
                 {/* SECTION 0: PENGATURAN GEOFENCING, GOOGLE MAPS, DAN USTADZ PENGGANTI */}
                 {activeControlSection === 'geofencing_absensi' && (
@@ -7501,7 +7803,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div className="grid grid-cols-1 md:grid-cols-12 rounded-xl overflow-hidden border border-[#d4af37]/30 bg-[#03150d]">
                         <div className="md:col-span-5 h-36 md:h-auto overflow-hidden">
                           <img
-                            src={visualForm.berita_image_url || 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=1200&auto=format&fit=crop&q=80'}
+                            src={(visualForm.berita_image_url && visualForm.berita_image_url.trim()) || 'https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=1200&auto=format&fit=crop&q=80'}
                             alt="Preview Berita"
                             className="w-full h-full object-cover"
                             onError={(e) => {
@@ -7608,112 +7910,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
-                {/* SECTION: KELOLA NAMA & KATA SANDI LOGIN PENGURUS (TERKONEKSI REAL-TIME DENGAN DATA GURU PENGAJAR) */}
+                {/* SECTION: KELOLA NAMA & KATA SANDI LOGIN PENGURUS */}
                 {activeControlSection === 'kelola_pengurus' && (
                   <div className="bg-[#052216]/90 border border-[#d4af37]/30 rounded-2xl p-5 space-y-6">
-                    {/* Header Fitur Login Pengurus Terkoneksi Real-Time */}
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-[#d4af37]/20 pb-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-xl bg-[#0b422a] border border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow">
-                          <ShieldAlert className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-bold text-white text-gold-3d">
-                              Pusat Akun & Kata Sandi Login Pengurus (Terkoneksi Real-Time)
-                            </h4>
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 text-[10px] font-bold flex items-center gap-1">
-                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                              <span>Live Real-Time</span>
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-emerald-300">
-                            Jumlah akun login pengurus terhubung otomatis dan sama dengan jumlah data guru pengajar madrasah. Seluruh ustadz/ustadzah dapat login menggunakan nama dan kata sandi yang dikelola di sini.
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Tombol Sinkronkan Real-Time */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (onSyncPengurusWithGuru) {
-                            onSyncPengurusWithGuru();
-                            alert('Sinkronisasi Real-Time Berhasil! Seluruh data akun login pengurus telah diperbarui sesuai daftar guru pengajar.');
-                          } else {
-                            alert('Data login pengurus telah tersinkronisasi otomatis secara real-time.');
-                          }
-                        }}
-                        className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-xs flex items-center gap-1.5 shadow transition"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span>Sinkronkan Real-Time Sekarang</span>
-                      </button>
-                    </div>
-
-                    {/* KARTU STATISTIK KONEKSI REAL-TIME: PENGURUS vs GURU */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="p-3.5 rounded-xl bg-[#031c10] border-2 border-emerald-500/50 shadow flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-950 border border-emerald-400/50 text-emerald-300 flex items-center justify-center font-bold">
-                          <KeyRound className="w-5 h-5 text-emerald-400" />
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">
-                            Akun Login Pengurus
-                          </span>
-                          <span className="text-xl font-black text-white font-mono">
-                            {pengurusList.length} <span className="text-xs font-sans text-emerald-400">Akun</span>
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="p-3.5 rounded-xl bg-[#031c10] border-2 border-[#d4af37]/50 shadow flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-[#1c1303] border border-[#d4af37]/50 text-[#d4af37] flex items-center justify-center font-bold">
-                          <Award className="w-5 h-5 text-[#d4af37]" />
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-amber-300 font-bold uppercase tracking-wider block">
-                            Data Guru Pengajar
-                          </span>
-                          <span className="text-xl font-black text-[#d4af37] font-mono">
-                            {uniqueGuruList.length} <span className="text-xs font-sans text-amber-300">Ustadz/Ustadzah</span>
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="p-3.5 rounded-xl bg-[#02180e] border-2 border-emerald-500/40 shadow flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-900/60 border border-emerald-400 text-emerald-300 flex items-center justify-center font-bold">
-                          <CheckCircle2 className="w-5 h-5 text-emerald-300" />
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider block">
-                            Status Sinkronisasi
-                          </span>
-                          <span className="text-xs font-extrabold text-emerald-300 flex items-center gap-1">
-                            <span>🟢 100% Terkoneksi Real-Time</span>
-                          </span>
-                        </div>
+                    <div className="flex items-center space-x-2 border-b border-[#d4af37]/20 pb-3">
+                      <ShieldAlert className="w-5 h-5 text-[#d4af37]" />
+                      <div>
+                        <h4 className="text-sm font-bold text-white text-gold-3d">
+                          Kelola Akun, Nama, & Kata Sandi Login Pengurus Pondok
+                        </h4>
+                        <p className="text-[11px] text-emerald-300">
+                          Sesuai permintaan Anda, sandi login pengurus menggunakan nama pengurus dan password yang dapat diatur/diedit secara mandiri melalui Option Panel ini.
+                        </p>
                       </div>
                     </div>
 
                     {/* Pilih Pengurus yang akan diedit */}
                     <div className="bg-[#03140c] p-4 rounded-xl border border-[#d4af37]/20 space-y-3">
-                      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                        <label className="text-xs font-bold text-[#d4af37] block">
-                          Pilih Pengurus / Guru Pengajar yang Ingin Diedit Sandinya:
-                        </label>
-                        <span className="text-[10px] text-emerald-400 font-mono">
-                          Total: {pengurusList.length} Akun Tersinkron
-                        </span>
-                      </div>
+                      <label className="text-xs font-bold text-[#d4af37] block">
+                        Pilih Pengurus yang Ingin Diedit Sandinya:
+                      </label>
                       <select
                         value={selectedPengurusId}
                         onChange={(e) => setSelectedPengurusId(e.target.value)}
-                        className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-bold"
+                        className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
                       >
                         {pengurusList.map(p => (
                           <option key={p.id} value={p.id}>
-                            {p.nama} — {p.jabatan} ({p.mapel ? `Mapel: ${p.mapel}` : p.id})
+                            {p.nama} — {p.jabatan} ({p.id})
                           </option>
                         ))}
                       </select>
@@ -7726,10 +7950,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         if (onUpdatePengurus && currentSelectedPengurus) {
                           onUpdatePengurus({
                             ...currentSelectedPengurus,
-                            nama: pengurusEditForm.nama.trim(),
-                            password: pengurusEditForm.password.trim(),
-                            jabatan: pengurusEditForm.jabatan.trim(),
-                            noWa: pengurusEditForm.noWa.trim(),
+                            nama: pengurusEditForm.nama,
+                            password: pengurusEditForm.password,
+                            jabatan: pengurusEditForm.jabatan,
+                            noWa: pengurusEditForm.noWa,
                             kelasBimbingan: pengurusEditForm.kelasBimbingan,
                             mapel: pengurusEditForm.mapel,
                             tugasUtama: pengurusEditForm.tugasUtama
@@ -7748,7 +7972,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             type="text"
                             value={pengurusEditForm.nama}
                             onChange={(e) => setPengurusEditForm({ ...pengurusEditForm, nama: e.target.value })}
-                            className="w-full bg-[#02180e] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-bold"
+                            className="w-full bg-[#02180e] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
                             required
                           />
                         </div>
@@ -7846,101 +8070,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </form>
 
-                    {/* Tabel Seluruh Akun Pengurus Terkoneksi Real-Time */}
-                    <div className="space-y-3">
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                        <div>
-                          <span className="text-xs text-[#d4af37] font-bold block">
-                            Daftar Akun Pengurus & Kredensial Login (Terkoneksi Real-Time)
-                          </span>
-                          <p className="text-[11px] text-emerald-300">
-                            Menampilkan seluruh ustadz/ustadzah guru pengajar yang otomatis memiliki akses login.
-                          </p>
-                        </div>
-
-                        {/* Search Bar Pengurus */}
-                        <div className="relative w-full sm:w-64">
-                          <Search className="w-3.5 h-3.5 text-emerald-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="text"
-                            value={searchPengurusQuery}
-                            onChange={(e) => setSearchPengurusQuery(e.target.value)}
-                            placeholder="Cari nama ustadz / mapel..."
-                            className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-[#02140b] border border-[#d4af37]/40 text-xs text-white placeholder-emerald-400/50 focus:outline-none focus:border-[#d4af37]"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25 max-h-96 overflow-y-auto">
-                        <table className="w-full text-xs text-left min-w-[750px]">
-                          <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30 sticky top-0 z-10">
+                    {/* Tabel Seluruh Akun Pengurus */}
+                    <div className="space-y-2">
+                      <span className="text-xs text-[#d4af37] font-bold block">
+                        Daftar Akun Pengurus & Kredensial Login
+                      </span>
+                      <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25">
+                        <table className="w-full text-xs text-left min-w-[700px]">
+                          <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                             <tr>
-                              <th className="p-3 w-10 text-center">No</th>
                               <th className="p-3">Nama Pengurus (Username)</th>
                               <th className="p-3">Kata Sandi</th>
-                              <th className="p-3">Jabatan & Mapel</th>
-                              <th className="p-3">Kelas Bimbingan</th>
+                              <th className="p-3">Jabatan</th>
                               <th className="p-3">No. WhatsApp</th>
-                              <th className="p-3 text-center">Status Real-Time</th>
-                              <th className="p-3 text-center">Aksi</th>
+                              <th className="p-3">Aksi</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                            {pengurusList
-                              .filter(p => {
-                                if (!searchPengurusQuery.trim()) return true;
-                                const q = searchPengurusQuery.toLowerCase();
-                                return (
-                                  p.nama.toLowerCase().includes(q) ||
-                                  (p.jabatan && p.jabatan.toLowerCase().includes(q)) ||
-                                  (p.mapel && p.mapel.toLowerCase().includes(q)) ||
-                                  (p.kelasBimbingan && p.kelasBimbingan.toLowerCase().includes(q))
-                                );
-                              })
-                              .map((p, idx) => (
-                                <tr key={p.id || idx} className="hover:bg-[#d4af37]/5 transition">
-                                  <td className="p-3 font-mono text-center text-emerald-400">{idx + 1}</td>
-                                  <td className="p-3 font-bold text-white whitespace-nowrap">
-                                    {p.nama}
-                                  </td>
-                                  <td className="p-3 font-mono font-bold text-[#d4af37] bg-[#02120a]">
-                                    {p.password || 'pengurus123'}
-                                  </td>
-                                  <td className="p-3 text-emerald-300">
-                                    <span className="font-semibold block">{p.jabatan}</span>
-                                    {p.mapel && (
-                                      <span className="text-[10px] text-amber-300 font-mono">Mapel: {p.mapel}</span>
-                                    )}
-                                  </td>
-                                  <td className="p-3 text-slate-300 font-medium">{p.kelasBimbingan || '-'}</td>
-                                  <td className="p-3 text-emerald-200 font-mono">{p.noWa}</td>
-                                  <td className="p-3 text-center">
-                                    <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold inline-flex items-center gap-1">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                                      <span>Tersinkron</span>
-                                    </span>
-                                  </td>
-                                  <td className="p-3 text-center">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setSelectedPengurusId(p.id);
-                                        window.scrollTo({ top: 300, behavior: 'smooth' });
-                                      }}
-                                      className="px-2.5 py-1 bg-[#d4af37]/20 hover:bg-[#d4af37] text-[#d4af37] hover:text-black font-bold rounded-lg transition shadow"
-                                    >
-                                      Edit Sandi
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            {pengurusList.length === 0 && (
-                              <tr>
-                                <td colSpan={8} className="p-6 text-center text-emerald-300">
-                                  Belum ada akun pengurus. Klik &quot;Sinkronkan Real-Time Sekarang&quot; untuk menghubungkan dengan guru pengajar.
+                            {pengurusList.map(p => (
+                              <tr key={p.id} className="hover:bg-[#d4af37]/5">
+                                <td className="p-3 font-bold text-white">{p.nama}</td>
+                                <td className="p-3 font-mono font-bold text-[#d4af37]">{p.password || 'pengurus123'}</td>
+                                <td className="p-3 text-emerald-300">{p.jabatan}</td>
+                                <td className="p-3 text-slate-300 font-mono">{p.noWa}</td>
+                                <td className="p-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedPengurusId(p.id)}
+                                    className="px-2 py-1 bg-[#d4af37]/20 hover:bg-[#d4af37] text-[#d4af37] hover:text-black font-bold rounded-lg transition"
+                                  >
+                                    Edit Sandi
+                                  </button>
                                 </td>
                               </tr>
-                            )}
+                            ))}
                           </tbody>
                         </table>
                       </div>
@@ -8214,8 +8377,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onChange={(e) => setSelectedUjianSantriId(e.target.value)}
                         className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
                       >
-                        {santriList.map(s => (
-                          <option key={s.id} value={s.id}>
+                        {santriList.map((s, idx) => (
+                          <option key={`${s.id}-${idx}`} value={s.id}>
                             {s.nama} ({s.id} — {s.kelas})
                           </option>
                         ))}
@@ -8465,265 +8628,266 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
-                {/* SECTION 2: INPUT MANUAL DATA SANTRI PER ANGKATAN (MELALUI FOLDER ATAU GALERI) */}
+                {/* SECTION 2: INPUT MANUAL DATA SANTRI PER ANGKATAN (DENGAN GALERI & FOLDER) */}
                 {activeControlSection === 'input_santri' && (
-                  <div className="card-3d rounded-2xl p-5 space-y-6">
-                    {/* Hidden inputs untuk file picker galeri dan folder */}
+                  <div className="space-y-5">
+                    {/* Hidden inputs untuk file Galeri dan Folder */}
                     <input
-                      ref={santriPhotoInputRef}
+                      ref={singleGalleryInputRef}
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={handleSingleSantriFile}
+                      onChange={handleSingleGallerySelect}
                     />
                     <input
-                      ref={santriFolderInputRef}
+                      ref={singleFolderInputRef}
                       type="file"
+                      accept="image/*"
                       multiple
                       {...({ webkitdirectory: '', directory: '' } as any)}
                       className="hidden"
-                      onChange={handleBulkUploadFiles}
+                      onChange={handleSingleFolderSelect}
                     />
                     <input
-                      ref={santriGalleryInputRef}
+                      ref={batchFolderInputRef}
                       type="file"
-                      multiple
                       accept="image/*"
+                      multiple
+                      {...({ webkitdirectory: '', directory: '' } as any)}
                       className="hidden"
-                      onChange={handleBulkUploadFiles}
+                      onChange={handleBatchFolderSelect}
+                    />
+                    <input
+                      ref={batchGalleryInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleBatchGallerySelect}
                     />
 
-                    {/* Header Fitur Input Santri */}
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-[#d4af37]/20 pb-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-xl bg-[#0b422a] border border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow">
-                          <Users className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-bold text-white text-gold-3d">
-                            Input Manual Data Santri Baru (Melalui Folder atau Galeri)
-                          </h4>
-                          <p className="text-[11px] text-emerald-300">
-                            Unggah foto santri langsung dari galeri HP, kamera, atau pilih folder di laptop/komputer.
-                          </p>
-                        </div>
+                    {/* SUB-NAVIGASI TAB PILIHAN INPUT SANTRI */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-2 rounded-2xl bg-[#03170d] border border-[#d4af37]/30 shadow-inner">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setInputSantriSubTab('single')}
+                          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition ${
+                            inputSantriSubTab === 'single'
+                              ? 'btn-3d-gold text-black shadow-md'
+                              : 'bg-[#052216] text-[#f3e5ab] hover:text-white border border-[#d4af37]/25'
+                          }`}
+                        >
+                          <Users className="w-4 h-4" />
+                          <span>Input Manual Satuan (Galeri / Folder / URL)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setInputSantriSubTab('batch_folder')}
+                          className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition relative ${
+                            inputSantriSubTab === 'batch_folder'
+                              ? 'btn-3d-gold text-black shadow-md'
+                              : 'bg-[#052216] text-[#f3e5ab] hover:text-white border border-[#d4af37]/25'
+                          }`}
+                        >
+                          <FolderOpen className="w-4 h-4 text-[#d4af37]" />
+                          <span>Impor Cepat Massal dari Folder / Galeri</span>
+                          <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-red-600 text-white font-extrabold uppercase animate-pulse">
+                            Cepat
+                          </span>
+                        </button>
                       </div>
 
-                      {/* Mode Toggle: Input Satuan vs Input Masal Folder */}
-                      <div className="flex items-center p-1 rounded-xl bg-[#03150d] border border-[#d4af37]/30">
-                        <button
-                          type="button"
-                          onClick={() => setShowBulkSantriMode(false)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                            !showBulkSantriMode
-                              ? 'bg-amber-400 text-black shadow'
-                              : 'text-emerald-300 hover:text-white'
-                          }`}
-                        >
-                          Input Satuan
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowBulkSantriMode(true)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                            showBulkSantriMode
-                              ? 'bg-amber-400 text-black shadow'
-                              : 'text-emerald-300 hover:text-white'
-                          }`}
-                        >
-                          <FolderOpen className="w-3.5 h-3.5" />
-                          <span>Input Masal Folder / Galeri</span>
-                          {bulkSantriQueue.length > 0 && (
-                            <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px] font-mono">
-                              {bulkSantriQueue.length}
-                            </span>
-                          )}
-                        </button>
+                      <div className="text-[11px] text-emerald-300 font-mono hidden sm:block">
+                        Total Terdaftar: <span className="text-[#d4af37] font-bold">{santriList.length}</span> Santri
                       </div>
                     </div>
 
-                    {/* JIKA MODE INPUT MASAL DARI FOLDER / GALERI */}
-                    {showBulkSantriMode ? (
-                      <div className="space-y-5 bg-[#031a10] border-2 border-[#d4af37]/30 rounded-2xl p-5 shadow-xl">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[#d4af37]/20">
-                          <div>
-                            <h5 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                              <FolderOpen className="w-4 h-4 text-amber-400" />
-                              <span>Input Banyak Santri Sekaligus dari Folder atau Galeri Foto</span>
-                            </h5>
-                            <p className="text-[11px] text-emerald-300 mt-0.5">
-                              Pilih folder di komputer atau seleksi banyak foto dari galeri HP. Nama santri otomatis diekstrak dari nama file dan NIS dibuat otomatis.
-                            </p>
+                    {/* SUB-TAB 1: FORM INPUT MANUAL SATUAN DENGAN GALERI & FOLDER */}
+                    {inputSantriSubTab === 'single' && (
+                      <form onSubmit={handleAddSantriSubmit} className="card-3d rounded-2xl p-5 sm:p-6 space-y-6">
+                        <div className="flex items-center justify-between border-b border-[#d4af37]/20 pb-3">
+                          <div className="flex items-center space-x-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-amber-400 text-black flex items-center justify-center font-bold shadow">
+                              <Users className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <h4 className="text-sm sm:text-base font-bold text-white text-gold-3d">
+                                Input Manual Data Santri Baru per Angkatan
+                              </h4>
+                              <p className="text-[11px] text-emerald-300">
+                                Pilih foto santri langsung dari Galeri perangkat, Folder penyimpanan foto, atau tautan URL.
+                              </p>
+                            </div>
                           </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => santriGalleryInputRef.current?.click()}
-                              className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-1.5 shadow transition"
-                            >
-                              <Camera className="w-4 h-4" />
-                              <span>Pilih Foto Galeri HP</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => santriFolderInputRef.current?.click()}
-                              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1.5 shadow transition"
-                            >
-                              <FolderOpen className="w-4 h-4" />
-                              <span>Pilih Folder Komputer</span>
-                            </button>
-                          </div>
+                          <span className="text-[10px] px-2.5 py-1 rounded-full bg-[#03170d] border border-[#d4af37]/40 text-[#f5e298] font-mono">
+                            Mode Satuan
+                          </span>
                         </div>
 
-                        {/* Pengaturan Bawaan Angkatan & Kamar untuk Batch */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-[#02120a] border border-emerald-500/30">
-                          <div>
-                            <label className="block text-[11px] font-bold text-[#d4af37] mb-1">
-                              Target Angkatan / Kelas:
-                            </label>
-                            <select
-                              value={bulkSantriKelas}
-                              onChange={(e) => setBulkSantriKelas(e.target.value)}
-                              className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white"
-                            >
-                              {classList.map(kls => (
-                                <option key={kls} value={kls}>{kls}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-[11px] font-bold text-[#d4af37] mb-1">
-                              Target Kamar Asrama:
-                            </label>
-                            <input
-                              type="text"
-                              value={bulkSantriKamar}
-                              onChange={(e) => setBulkSantriKamar(e.target.value)}
-                              className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white"
-                              placeholder="Contoh: Kamar Abu Bakar"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] font-bold text-[#d4af37] mb-1">
-                              Alamat Asal Default:
-                            </label>
-                            <input
-                              type="text"
-                              value={bulkSantriAlamat}
-                              onChange={(e) => setBulkSantriAlamat(e.target.value)}
-                              className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white"
-                              placeholder="Contoh: Jawa Timur"
-                            />
-                          </div>
-                        </div>
-
-                        {isProcessingBulk && (
-                          <div className="p-4 rounded-xl bg-amber-500/20 border border-amber-400 text-amber-200 text-xs text-center flex items-center justify-center gap-2 animate-pulse">
-                            <RefreshCw className="w-4 h-4 animate-spin text-amber-300" />
-                            <span>Sedang membaca dan mengompresi foto santri dari folder...</span>
-                          </div>
-                        )}
-
-                        {/* Antrean Foto yang Sudah Dipilih */}
-                        {bulkSantriQueue.length > 0 ? (
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs font-bold text-emerald-300">
-                                Ditemukan {bulkSantriQueue.length} Foto Santri Siap Disimpan:
+                        {/* BAGIAN FOTO SANTRI: PILIH DARI GALERI ATAU FOLDER DENGAN PREVIEW */}
+                        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-[#041a10] via-[#052618] to-[#03170d] border-2 border-[#d4af37]/40 shadow-xl space-y-4">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-[#d4af37]/20 pb-2.5">
+                            <div className="flex items-center gap-2">
+                              <Image className="w-4 h-4 text-[#d4af37]" />
+                              <span className="text-xs font-bold text-white uppercase tracking-wider">
+                                Foto Profil Santri (Galeri / Folder)
                               </span>
-                              <button
-                                type="button"
-                                onClick={() => setBulkSantriQueue([])}
-                                className="text-[11px] text-red-300 hover:text-red-100 font-bold"
-                              >
-                                Bersihkan Antrean
-                              </button>
+                            </div>
+                            <span className="text-[11px] text-emerald-300">
+                              Format didukung: JPG, PNG, WEBP (Otomatis dikompresi ringan & tajam)
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col md:flex-row items-center gap-5">
+                            {/* Kotak Avatar Pratinjau Foto */}
+                            <div className="relative group shrink-0">
+                              <div className="w-28 h-36 rounded-2xl overflow-hidden border-2 border-[#d4af37] shadow-[0_8px_25px_rgba(0,0,0,0.6)] bg-[#020e08] flex items-center justify-center relative">
+                                <img
+                                  src={(inputSantriForm.foto && inputSantriForm.foto.trim()) || 'https://via.placeholder.com/150x200?text=Foto+Santri'}
+                                  alt="Foto Santri"
+                                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                  onError={(e) => {
+                                    (e.target as HTMLElement).setAttribute('src', 'https://via.placeholder.com/150x200?text=Foto+Santri');
+                                  }}
+                                />
+                                {isCompressingSinglePhoto && (
+                                  <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-1.5 text-center p-2 z-10">
+                                    <RefreshCw className="w-6 h-6 text-[#d4af37] animate-spin" />
+                                    <span className="text-[10px] text-amber-200 font-bold">Mengompresi...</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Badge Asal Foto */}
+                              <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap">
+                                {singlePhotoOrigin === 'galeri' && (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-600 text-white shadow border border-emerald-400">
+                                    ✓ Dari Galeri
+                                  </span>
+                                )}
+                                {singlePhotoOrigin === 'folder' && (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-500 text-black shadow border border-amber-300">
+                                    ✓ Dari Folder
+                                  </span>
+                                )}
+                                {singlePhotoOrigin === 'url' && (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-blue-600 text-white shadow border border-blue-400">
+                                    🌐 Link URL
+                                  </span>
+                                )}
+                                {singlePhotoOrigin === 'default' && (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-medium bg-zinc-800 text-zinc-300 shadow border border-zinc-600">
+                                    Foto Bawaan
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-96 overflow-y-auto p-1">
-                              {bulkSantriQueue.map((item, idx) => (
-                                <div
-                                  key={idx}
-                                  className="p-3 rounded-xl bg-[#021109] border border-[#d4af37]/30 flex gap-3 items-center relative"
+                            {/* Tombol-Tombol Aksi Pilih Foto */}
+                            <div className="flex-1 space-y-3 w-full">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                                {/* Tombol Pilih dari Galeri */}
+                                <button
+                                  type="button"
+                                  onClick={() => singleGalleryInputRef.current?.click()}
+                                  className="btn-3d-gold p-3 rounded-xl text-black font-extrabold text-xs flex items-center justify-center gap-2 shadow-md hover:scale-102 active:scale-95 transition"
                                 >
-                                  <img
-                                    src={item.foto}
-                                    alt={item.nama}
-                                    className="w-16 h-16 rounded-xl object-cover border border-[#d4af37]/50 shrink-0 shadow"
-                                  />
-                                  <div className="min-w-0 flex-1 space-y-1">
-                                    <div className="flex items-center gap-1.5">
-                                      <input
-                                        type="text"
-                                        value={item.id}
-                                        onChange={(e) => {
-                                          const val = e.target.value;
-                                          setBulkSantriQueue(prev => prev.map((q, i) => i === idx ? { ...q, id: val } : q));
-                                        }}
-                                        className="w-20 px-1.5 py-0.5 rounded bg-[#010905] border border-[#d4af37]/30 text-[10px] text-[#d4af37] font-mono font-bold"
-                                      />
-                                      <span className="text-[10px] text-emerald-400 font-semibold truncate">
-                                        {item.kelas}
-                                      </span>
-                                    </div>
-                                    <input
-                                      type="text"
-                                      value={item.nama}
-                                      onChange={(e) => {
-                                        const val = e.target.value;
-                                        setBulkSantriQueue(prev => prev.map((q, i) => i === idx ? { ...q, nama: val } : q));
-                                      }}
-                                      className="w-full px-2 py-1 rounded bg-[#052417] border border-emerald-500/40 text-xs text-white font-bold"
-                                      placeholder="Nama santri..."
-                                    />
-                                    <p className="text-[9px] text-stone-400 truncate">
-                                      File: {item.fileName}
-                                    </p>
+                                  <Image className="w-4 h-4 text-black shrink-0" />
+                                  <div className="text-left">
+                                    <div className="font-extrabold leading-tight">Pilih dari Galeri</div>
+                                    <div className="text-[9px] font-normal opacity-80">Foto satuan / album HP</div>
+                                  </div>
+                                </button>
+
+                                {/* Tombol Pilih dari Folder */}
+                                <button
+                                  type="button"
+                                  onClick={() => singleFolderInputRef.current?.click()}
+                                  className="p-3 rounded-xl bg-gradient-to-r from-emerald-800 to-teal-800 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs flex items-center justify-center gap-2 border border-emerald-400/50 shadow-md hover:scale-102 active:scale-95 transition"
+                                >
+                                  <FolderOpen className="w-4 h-4 text-emerald-200 shrink-0" />
+                                  <div className="text-left">
+                                    <div className="font-extrabold leading-tight">Pilih dari Folder</div>
+                                    <div className="text-[9px] font-normal text-emerald-200">Folder foto PC/Laptop</div>
+                                  </div>
+                                </button>
+
+                                {/* Tombol Input URL Web */}
+                                <button
+                                  type="button"
+                                  onClick={() => setShowUrlPhotoInput(!showUrlPhotoInput)}
+                                  className="p-3 rounded-xl bg-[#03170d] hover:bg-[#072d1b] text-[#f3e5ab] font-bold text-xs flex items-center justify-center gap-2 border border-[#d4af37]/35 shadow hover:scale-102 active:scale-95 transition"
+                                >
+                                  <ExternalLink className="w-4 h-4 text-[#d4af37] shrink-0" />
+                                  <div className="text-left">
+                                    <div className="font-bold leading-tight">{showUrlPhotoInput ? 'Tutup URL Link' : 'Input via URL'}</div>
+                                    <div className="text-[9px] font-normal text-emerald-300">Tautan web online</div>
+                                  </div>
+                                </button>
+                              </div>
+
+                              {/* Informasi File Terpilih */}
+                              {singlePhotoFileName && (
+                                <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#020e08] border border-[#d4af37]/25 text-xs">
+                                  <div className="flex items-center gap-2 truncate">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                    <span className="text-emerald-200 font-mono truncate">{singlePhotoFileName}</span>
+                                    {singlePhotoFileSize && (
+                                      <span className="text-[10px] text-zinc-400 shrink-0">({singlePhotoFileSize})</span>
+                                    )}
                                   </div>
                                   <button
                                     type="button"
-                                    onClick={() => setBulkSantriQueue(prev => prev.filter((_, i) => i !== idx))}
-                                    className="text-red-400 hover:text-red-200 p-1 rounded"
-                                    title="Hapus dari antrean"
+                                    onClick={handleResetSinglePhoto}
+                                    className="text-red-400 hover:text-red-300 text-[11px] underline shrink-0 ml-2"
                                   >
-                                    ✕
+                                    Reset Foto
                                   </button>
                                 </div>
-                              ))}
-                            </div>
+                              )}
 
-                            <div className="pt-3 border-t border-[#d4af37]/20 flex justify-end">
-                              <button
-                                type="button"
-                                onClick={handleSaveAllBulkSantri}
-                                className="btn-3d-gold px-6 py-2.5 text-black font-extrabold text-xs rounded-xl flex items-center gap-2 shadow-xl"
-                              >
-                                <Save className="w-4 h-4 text-black" />
-                                <span>Simpan Semua ({bulkSantriQueue.length}) Santri dari Folder ke Database</span>
-                              </button>
+                              {/* Input URL Foto (jika dibuka) */}
+                              {showUrlPhotoInput && (
+                                <div className="space-y-1.5 p-3 rounded-xl bg-[#020e08] border border-blue-500/40">
+                                  <label className="block text-[11px] font-semibold text-blue-300">
+                                    Masukkan Link URL Foto Santri (Online)
+                                  </label>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      value={inputSantriForm.foto}
+                                      onChange={(e) => {
+                                        setInputSantriForm({ ...inputSantriForm, foto: e.target.value });
+                                        setSinglePhotoOrigin('url');
+                                        setSinglePhotoFileName('');
+                                      }}
+                                      className="flex-1 bg-[#0a301f] border border-blue-400/40 rounded-lg p-2 text-xs text-white"
+                                      placeholder="https://images.unsplash.com/... atau tautan foto langsung"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={handleResetSinglePhoto}
+                                      className="px-3 py-1.5 rounded-lg bg-red-950 border border-red-500/40 text-red-200 text-xs font-bold hover:bg-red-900"
+                                    >
+                                      Reset
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
-                        ) : (
-                          <div className="p-8 text-center border-2 border-dashed border-[#d4af37]/30 rounded-2xl space-y-2 bg-[#02120a]/60">
-                            <FolderOpen className="w-10 h-10 text-[#d4af37] mx-auto opacity-70" />
-                            <p className="text-xs font-bold text-white">Belum Ada Foto Santri yang Dipilih dari Folder</p>
-                            <p className="text-[11px] text-emerald-300">
-                              Klik tombol &quot;Pilih Foto Galeri HP&quot; atau &quot;Pilih Folder Komputer&quot; di atas untuk memilih foto secara masal.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      /* FORM INPUT MANUAL SATUAN DENGAN UNGGAH FOTO GALERI / FOLDER */
-                      <form onSubmit={handleAddSantriSubmit} className="space-y-5">
+                        </div>
+
+                        {/* FORM FIELD DATA SANTRI */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-xs font-semibold text-[#d4af37] mb-1">Angkatan / Kelas</label>
                             <select
                               value={inputSantriForm.kelas}
                               onChange={(e) => setInputSantriForm({ ...inputSantriForm, kelas: e.target.value })}
-                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white focus:ring-1 focus:ring-[#d4af37]"
                             >
                               {classList.map(kls => (
                                 <option key={kls} value={kls}>{kls}</option>
@@ -8732,13 +8896,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
 
                           <div>
-                            <label className="block text-xs font-semibold text-[#d4af37] mb-1">Nomor Induk Santri (NIS)</label>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-xs font-semibold text-[#d4af37]">Nomor Induk Santri (NIS)</label>
+                              <button
+                                type="button"
+                                onClick={() => setInputSantriForm(prev => ({ ...prev, id: `S-${Math.floor(1000 + Math.random() * 8999)}` }))}
+                                className="text-[10px] text-emerald-300 hover:text-white flex items-center gap-1"
+                              >
+                                <RefreshCw className="w-2.5 h-2.5" />
+                                <span>Acak NIS</span>
+                              </button>
+                            </div>
                             <input
                               type="text"
                               value={inputSantriForm.id}
                               onChange={(e) => setInputSantriForm({ ...inputSantriForm, id: e.target.value })}
                               required
-                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-mono"
+                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-mono focus:ring-1 focus:ring-[#d4af37]"
                               placeholder="Contoh: S-1008"
                             />
                           </div>
@@ -8750,7 +8924,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               value={inputSantriForm.nama}
                               onChange={(e) => setInputSantriForm({ ...inputSantriForm, nama: e.target.value })}
                               required
-                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-bold"
+                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white focus:ring-1 focus:ring-[#d4af37]"
                               placeholder="Contoh: Muhammad Ilham Rosyadi"
                             />
                           </div>
@@ -8761,106 +8935,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               type="text"
                               value={inputSantriForm.kamar}
                               onChange={(e) => setInputSantriForm({ ...inputSantriForm, kamar: e.target.value })}
-                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white focus:ring-1 focus:ring-[#d4af37]"
                               placeholder="Contoh: Kamar Abu Bakar 05"
                             />
                           </div>
 
-                          <div>
+                          <div className="md:col-span-2">
                             <label className="block text-xs font-semibold text-[#d4af37] mb-1">Alamat Asal Santri</label>
                             <input
                               type="text"
                               value={inputSantriForm.alamat}
                               onChange={(e) => setInputSantriForm({ ...inputSantriForm, alamat: e.target.value })}
-                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
+                              className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white focus:ring-1 focus:ring-[#d4af37]"
                               placeholder="Contoh: Nganjuk, Jawa Timur"
                             />
                           </div>
-
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <label className="block text-xs font-semibold text-[#d4af37]">
-                                Foto Santri (Galeri / Folder):
-                              </label>
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => setSantriPhotoInputType('upload')}
-                                  className={`text-[10px] px-2 py-0.5 rounded font-bold transition ${
-                                    santriPhotoInputType === 'upload'
-                                      ? 'bg-amber-400 text-black'
-                                      : 'text-emerald-300 hover:text-white'
-                                  }`}
-                                >
-                                  📁 Galeri / Folder
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setSantriPhotoInputType('url')}
-                                  className={`text-[10px] px-2 py-0.5 rounded font-bold transition ${
-                                    santriPhotoInputType === 'url'
-                                      ? 'bg-amber-400 text-black'
-                                      : 'text-emerald-300 hover:text-white'
-                                  }`}
-                                >
-                                  🔗 Link URL
-                                </button>
-                              </div>
-                            </div>
-
-                            {santriPhotoInputType === 'upload' ? (
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-3 p-2.5 rounded-xl bg-[#0a301f] border border-[#d4af37]/40">
-                                  {inputSantriForm.foto ? (
-                                    <img
-                                      src={inputSantriForm.foto}
-                                      alt="Preview Foto Santri"
-                                      className="w-14 h-14 rounded-lg object-cover border border-[#d4af37] shadow shrink-0"
-                                    />
-                                  ) : (
-                                    <div className="w-14 h-14 rounded-lg bg-[#041d13] border border-[#d4af37]/30 flex items-center justify-center text-emerald-400 shrink-0">
-                                      <Image className="w-6 h-6" />
-                                    </div>
-                                  )}
-
-                                  <div className="flex-1 min-w-0">
-                                    <button
-                                      type="button"
-                                      onClick={() => santriPhotoInputRef.current?.click()}
-                                      className="w-full py-2 px-3 rounded-lg bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-xs flex items-center justify-center gap-1.5 shadow transition"
-                                    >
-                                      <FolderOpen className="w-4 h-4" />
-                                      <span>
-                                        {isProcessingSantriPhoto ? 'Memproses Foto...' : 'Pilih Foto dari Galeri / Folder'}
-                                      </span>
-                                    </button>
-                                    <p className="text-[10px] text-emerald-300 mt-1 truncate">
-                                      {santriSelectedFileName
-                                        ? `Terpilih: ${santriSelectedFileName}`
-                                        : 'Mendukung foto HP (kamera/galeri) & folder file'}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : (
-                              <input
-                                type="text"
-                                value={inputSantriForm.foto}
-                                onChange={(e) => setInputSantriForm({ ...inputSantriForm, foto: e.target.value })}
-                                className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
-                                placeholder="URL foto santri (Unsplash/Imgur/Drive)..."
-                              />
-                            )}
-                          </div>
                         </div>
 
-                        <div className="text-right pt-2 border-t border-[#d4af37]/20 flex items-center justify-between">
-                          <p className="text-[11px] text-emerald-300">
-                            * NIS dan Nama Lengkap wajib diisi. Foto otomatis dioptimasi agar ringan.
-                          </p>
+                        {/* TOMBOL SIMPAN DATA SANTRI */}
+                        <div className="text-right pt-3 border-t border-[#d4af37]/20 flex flex-col sm:flex-row items-center justify-between gap-3">
+                          <span className="text-[11px] text-emerald-300">
+                            Santri yang disimpan langsung aktif di presensi diniyah & portal wali santri.
+                          </span>
                           <button
                             type="submit"
-                            className="btn-3d-gold px-6 py-2.5 text-black font-extrabold text-xs rounded-xl flex items-center gap-2 shadow"
+                            className="btn-3d-gold px-7 py-3 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg hover:scale-102 transition w-full sm:w-auto"
                           >
                             <PlusCircle className="w-4 h-4 text-black" />
                             <span>Simpan Data Santri Baru</span>
@@ -8869,8 +8968,397 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </form>
                     )}
 
-                    {/* DAFTAR & PENGHAPUSAN MANUAL SANTRI TIDAK MONDOK (BOYONG) */}
-                    <div className="pt-6 border-t border-[#d4af37]/30 space-y-3">
+                    {/* SUB-TAB 2: IMPOR CEPAT MASSAL DARI FOLDER / MULTI-GALERI */}
+                    {inputSantriSubTab === 'batch_folder' && (
+                      <div className="card-3d rounded-2xl p-5 sm:p-6 space-y-6">
+                        {/* HERO HEADER */}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#d4af37]/20 pb-3">
+                          <div className="flex items-center space-x-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold shadow">
+                              <FolderOpen className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <h4 className="text-sm sm:text-base font-bold text-white text-gold-3d">
+                                Unggah Cepat Santri Massal dari Folder atau Galeri
+                              </h4>
+                              <p className="text-[11px] text-emerald-300">
+                                Pilih 1 folder penuh berisi foto-foto santri atau pilih banyak foto dari galeri. Nama file otomatis menjadi NIS & Nama Santri.
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] px-2.5 py-1 rounded-full bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-mono">
+                            Mode Impor Massal
+                          </span>
+                        </div>
+
+                        {/* TOMBOL AKSI UTAMA MEMILIH FOLDER ATAU BANYAK FOTO GALERI */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div
+                            onClick={() => batchFolderInputRef.current?.click()}
+                            className="p-5 rounded-2xl bg-gradient-to-br from-[#05281a] to-[#02150d] border-2 border-dashed border-[#d4af37]/60 hover:border-[#d4af37] cursor-pointer text-center group transition transform hover:-translate-y-0.5 shadow-lg"
+                          >
+                            <div className="w-12 h-12 mx-auto rounded-2xl bg-[#d4af37]/20 flex items-center justify-center text-[#d4af37] group-hover:scale-110 transition mb-3">
+                              <FolderOpen className="w-6 h-6" />
+                            </div>
+                            <h5 className="text-sm font-bold text-white group-hover:text-[#d4af37]">
+                              Pilih Folder Foto Santri (Folder Picker)
+                            </h5>
+                            <p className="text-[11px] text-emerald-300 mt-1">
+                              Memilih satu folder di komputer/laptop yang berisi banyak foto santri sekaligus.
+                            </p>
+                            <span className="inline-block mt-3 px-3 py-1 rounded-lg text-xs font-bold bg-[#d4af37] text-black">
+                              📂 Buka Folder Foto
+                            </span>
+                          </div>
+
+                          <div
+                            onClick={() => batchGalleryInputRef.current?.click()}
+                            className="p-5 rounded-2xl bg-gradient-to-br from-[#05281a] to-[#02150d] border-2 border-dashed border-emerald-400/60 hover:border-emerald-300 cursor-pointer text-center group transition transform hover:-translate-y-0.5 shadow-lg"
+                          >
+                            <div className="w-12 h-12 mx-auto rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-300 group-hover:scale-110 transition mb-3">
+                              <Image className="w-6 h-6" />
+                            </div>
+                            <h5 className="text-sm font-bold text-white group-hover:text-emerald-300">
+                              Pilih Banyak Foto dari Galeri (Multi-Select)
+                            </h5>
+                            <p className="text-[11px] text-emerald-300 mt-1">
+                              Memilih beberapa atau puluhan file gambar santri dari album/galeri perangkat Anda.
+                            </p>
+                            <span className="inline-block mt-3 px-3 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white">
+                              🖼️ Pilih dari Galeri
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* BAR PENGATURAN DEFAULT ANGKATAN & KAMAR UNTUK BATCH */}
+                        <div className="p-4 rounded-xl bg-[#03170d] border border-[#d4af37]/25 space-y-3">
+                          <span className="text-xs font-bold text-[#d4af37] uppercase tracking-wide">
+                            Pengaturan Default untuk Santri yang Diimpor:
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-[11px] text-emerald-300 mb-1">Target Angkatan / Kelas</label>
+                              <select
+                                value={batchTargetKelas}
+                                onChange={(e) => {
+                                  const newKls = e.target.value;
+                                  setBatchTargetKelas(newKls);
+                                  setBatchImportList(prev => prev.map(item => ({ ...item, kelas: newKls })));
+                                }}
+                                className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white"
+                              >
+                                {classList.map(kls => (
+                                  <option key={kls} value={kls}>{kls}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] text-emerald-300 mb-1">Kamar Default</label>
+                              <input
+                                type="text"
+                                value={batchDefaultKamar}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setBatchDefaultKamar(val);
+                                  setBatchImportList(prev => prev.map(item => ({ ...item, kamar: val })));
+                                }}
+                                className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white"
+                                placeholder="Contoh: Kamar Abu Bakar 01"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] text-emerald-300 mb-1">Alamat Asal Default</label>
+                              <input
+                                type="text"
+                                value={batchDefaultAlamat}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setBatchDefaultAlamat(val);
+                                  setBatchImportList(prev => prev.map(item => ({ ...item, alamat: val })));
+                                }}
+                                className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white"
+                                placeholder="Contoh: Jawa Timur"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* STATUS LOADING PROSES BATCH */}
+                        {isBatchProcessing && (
+                          <div className="p-4 rounded-xl bg-amber-950/80 border border-amber-500/50 flex items-center gap-3">
+                            <RefreshCw className="w-5 h-5 text-amber-300 animate-spin shrink-0" />
+                            <div className="text-xs text-amber-200">
+                              <span className="font-bold">Sedang memproses foto dari folder/galeri: </span>
+                              <span>{batchProgressText}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* DAFTAR FOTO SANTRI YANG TERDETEKSI */}
+                        {batchImportList.length > 0 ? (
+                          <div className="space-y-3">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-xl bg-[#020e08] border border-[#d4af37]/30">
+                              <div className="flex items-center gap-3">
+                                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-white">
+                                  <input
+                                    type="checkbox"
+                                    checked={batchImportList.length > 0 && batchImportList.every(i => i.selected)}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setBatchImportList(prev => prev.map(i => ({ ...i, selected: checked })));
+                                    }}
+                                    className="rounded border-[#d4af37] text-amber-500 focus:ring-0 w-4 h-4"
+                                  />
+                                  <span>Pilih Semua Foto</span>
+                                </label>
+                                <span className="text-xs text-emerald-300 font-mono">
+                                  ({batchImportList.filter(i => i.selected).length} dari {batchImportList.length} terpilih)
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2 w-full sm:w-auto">
+                                <button
+                                  type="button"
+                                  onClick={() => setBatchImportList([])}
+                                  className="px-3 py-1.5 rounded-lg bg-red-950/80 hover:bg-red-800 text-red-200 text-xs font-bold border border-red-500/40"
+                                >
+                                  Bersihkan
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isBatchSaving || batchImportList.filter(i => i.selected).length === 0}
+                                  onClick={handleBatchSaveAll}
+                                  className="btn-3d-gold px-5 py-2 text-black font-extrabold text-xs rounded-xl flex items-center gap-2 shadow disabled:opacity-50"
+                                >
+                                  {isBatchSaving ? (
+                                    <>
+                                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                      <span>Menyimpan...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                      <span>
+                                        Simpan {batchImportList.filter(i => i.selected).length} Santri Terpilih
+                                      </span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* TABEL SANTRI TERDETEKSI */}
+                            <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25 max-h-96 overflow-y-auto">
+                              <table className="w-full text-xs text-left">
+                                <thead className="bg-[#03170d] text-[#d4af37] sticky top-0 z-10 border-b border-[#d4af37]/30">
+                                  <tr>
+                                    <th className="p-2.5 w-10 text-center">PILIH</th>
+                                    <th className="p-2.5 w-16 text-center">FOTO</th>
+                                    <th className="p-2.5 w-32">NIS</th>
+                                    <th className="p-2.5">NAMA LENGKAP SANTRI</th>
+                                    <th className="p-2.5 w-36">ANGKATAN</th>
+                                    <th className="p-2.5">FILE ASLI</th>
+                                    <th className="p-2.5 text-center w-28">AKSI</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/90">
+                                  {batchImportList.map((item, idx) => (
+                                    <tr key={`${item.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
+                                      <td className="p-2.5 text-center">
+                                        <input
+                                          type="checkbox"
+                                          checked={item.selected}
+                                          onChange={(e) => {
+                                            const checked = e.target.checked;
+                                            setBatchImportList(prev => prev.map((it, i) => i === idx ? { ...it, selected: checked } : it));
+                                          }}
+                                          className="rounded border-[#d4af37] text-amber-500 focus:ring-0 w-4 h-4"
+                                        />
+                                      </td>
+                                      <td className="p-2 text-center">
+                                        <div className="w-10 h-12 mx-auto rounded overflow-hidden border border-[#d4af37]/40 shadow bg-black">
+                                          <img src={(item.foto && item.foto.trim()) || 'https://via.placeholder.com/70x90'} alt={item.nama} className="w-full h-full object-cover" />
+                                        </div>
+                                      </td>
+                                      <td className="p-2.5">
+                                        <input
+                                          type="text"
+                                          value={item.id}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setBatchImportList(prev => prev.map((it, i) => i === idx ? { ...it, id: val } : it));
+                                          }}
+                                          className="w-full bg-[#0a301f] border border-[#d4af37]/30 rounded-lg p-1.5 text-xs text-white font-mono"
+                                        />
+                                      </td>
+                                      <td className="p-2.5">
+                                        <input
+                                          type="text"
+                                          value={item.nama}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setBatchImportList(prev => prev.map((it, i) => i === idx ? { ...it, nama: val } : it));
+                                          }}
+                                          className="w-full bg-[#0a301f] border border-[#d4af37]/30 rounded-lg p-1.5 text-xs text-white font-bold"
+                                        />
+                                      </td>
+                                      <td className="p-2.5 text-emerald-300 font-medium">
+                                        <span className="px-2 py-1 rounded bg-[#03170d] border border-[#d4af37]/30 text-[11px]">
+                                          {item.kelas}
+                                        </span>
+                                      </td>
+                                      <td className="p-2.5 text-zinc-400 font-mono text-[10px] truncate max-w-[120px]">
+                                        <div>{item.fileName}</div>
+                                        <div className="text-zinc-500">{item.fileSizeStr}</div>
+                                      </td>
+                                      <td className="p-2.5 text-center">
+                                        <div className="flex items-center justify-center gap-1.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleTransferBatchToSingle(item)}
+                                            className="px-2 py-1 rounded bg-amber-950 text-amber-200 border border-amber-500/40 text-[10px] font-bold hover:bg-amber-900"
+                                            title="Buka & edit detail di Form Manual Satuan"
+                                          >
+                                            Form
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setBatchImportList(prev => prev.filter((_, i) => i !== idx))}
+                                            className="p-1 rounded bg-red-950/80 text-red-300 border border-red-500/40 hover:bg-red-800"
+                                            title="Hapus dari daftar ini"
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-8 rounded-2xl bg-[#020e08] border border-[#d4af37]/20 text-center space-y-3">
+                            <FolderOpen className="w-10 h-10 text-[#d4af37]/60 mx-auto" />
+                            <h5 className="text-sm font-bold text-white">Belum Ada Foto Santri yang Dipilih</h5>
+                            <p className="text-xs text-emerald-300 max-w-md mx-auto">
+                              Klik salah satu tombol di atas untuk memilih satu folder foto santri atau memilih banyak file foto dari galeri.
+                            </p>
+                            <div className="p-3 rounded-xl bg-[#03170d] border border-[#d4af37]/20 max-w-lg mx-auto text-left text-[11px] text-zinc-300 space-y-1 font-mono">
+                              <div className="text-[#d4af37] font-bold">💡 Tips Penamaan File Foto Santri:</div>
+                              <div>• <span className="text-emerald-300">S-1008 Muhammad Wildan.jpg</span> (NIS & Nama terisi otomatis)</div>
+                              <div>• <span className="text-emerald-300">1025_Ahmad_Fauzi.png</span> (Otomatis menjadi NIS S-1025)</div>
+                              <div>• <span className="text-emerald-300">Zaidan Nawawi.jpeg</span> (Nama terisi, NIS dibuatkan acak)</div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* MODAL PEMILIH FOTO DARI FOLDER (Jika folder berisi banyak foto pada saat input satuan) */}
+                    {folderPhotoPickerModal.isOpen && (
+                      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+                        <div className="bg-[#052216] border-2 border-[#d4af37] rounded-3xl p-5 sm:p-6 max-w-3xl w-full max-h-[90vh] flex flex-col space-y-4 shadow-2xl">
+                          <div className="flex items-center justify-between border-b border-[#d4af37]/25 pb-3">
+                            <div className="flex items-center gap-2">
+                              <FolderOpen className="w-5 h-5 text-[#d4af37]" />
+                              <div>
+                                <h4 className="text-sm sm:text-base font-bold text-white text-gold-3d">
+                                  Pilih Foto Santri dari Folder: <span className="text-[#d4af37] font-mono">{folderPhotoPickerModal.folderName}</span>
+                                </h4>
+                                <p className="text-[11px] text-emerald-300">
+                                  Ditemukan {folderPhotoPickerModal.photos.length} foto santri. Klik salah satu foto untuk mengisi form manual santri ini.
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setFolderPhotoPickerModal(prev => ({ ...prev, isOpen: false }))}
+                              className="w-8 h-8 rounded-full bg-black/40 hover:bg-black/80 text-zinc-300 hover:text-white flex items-center justify-center border border-white/10"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#020e08] border border-[#d4af37]/30 text-xs">
+                            <span className="text-emerald-300">
+                              Ingin memasukkan semua foto sekaligus?
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // Pindahkan semua foto ke batch list
+                                const newBatch = folderPhotoPickerModal.photos.map(p => ({
+                                  id: p.detectedId || `S-${Math.floor(1000 + Math.random() * 8999)}`,
+                                  nama: p.detectedName || p.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' '),
+                                  kelas: inputSantriForm.kelas,
+                                  kamar: 'Kamar Abu Bakar 01',
+                                  alamat: 'Jawa Timur',
+                                  foto: p.dataUrl,
+                                  fileName: p.name,
+                                  fileSizeStr: p.sizeStr,
+                                  selected: true
+                                }));
+                                setBatchImportList(prev => [...newBatch, ...prev]);
+                                setFolderPhotoPickerModal(prev => ({ ...prev, isOpen: false }));
+                                setInputSantriSubTab('batch_folder');
+                              }}
+                              className="px-3 py-1.5 rounded-lg btn-3d-gold text-black font-extrabold text-[11px]"
+                            >
+                              Impor Semua Foto di Folder Ini Sekaligus
+                            </button>
+                          </div>
+
+                          {/* Grid Foto di dalam Folder */}
+                          <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                            {folderPhotoPickerModal.photos.map((photo, pIdx) => (
+                              <div
+                                key={pIdx}
+                                onClick={() => handleSelectPhotoFromFolderModal(photo)}
+                                className="group relative rounded-xl overflow-hidden border-2 border-[#d4af37]/30 hover:border-[#d4af37] bg-[#020e08] cursor-pointer transition transform hover:-translate-y-1 hover:shadow-xl p-2 flex flex-col items-center text-center"
+                              >
+                                <div className="w-full h-28 rounded-lg overflow-hidden bg-black mb-2 relative">
+                                  <img
+                                    src={(photo.dataUrl && photo.dataUrl.trim()) || 'https://via.placeholder.com/150x200'}
+                                    alt={photo.name}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition"
+                                  />
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-xs font-bold text-white bg-gradient-to-t from-black/80 via-transparent">
+                                    Pilih Foto
+                                  </div>
+                                </div>
+                                <span className="text-[11px] font-bold text-white line-clamp-1 w-full">
+                                  {photo.detectedName || photo.name}
+                                </span>
+                                {photo.detectedId && (
+                                  <span className="text-[10px] text-[#d4af37] font-mono font-bold">
+                                    {photo.detectedId}
+                                  </span>
+                                )}
+                                <span className="text-[9px] text-zinc-400 mt-0.5 truncate max-w-full">
+                                  {photo.name}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="pt-2 border-t border-[#d4af37]/20 text-right">
+                            <button
+                              type="button"
+                              onClick={() => setFolderPhotoPickerModal(prev => ({ ...prev, isOpen: false }))}
+                              className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-200 text-xs font-bold hover:bg-zinc-700"
+                            >
+                              Tutup
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* DAFTAR & PENGHAPUSAN MANUAL SANTRI TIDAK MONDOK (BOYONG) - PAGINATED */}
+                    <div className="card-3d rounded-2xl p-5 space-y-3.5">
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                         <div>
                           <h5 className="text-xs sm:text-sm font-bold text-white text-gold-3d flex items-center gap-1.5">
@@ -8882,16 +9370,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </p>
                         </div>
                         <span className="text-[11px] text-[#d4af37] font-mono px-3 py-1 rounded-lg bg-[#03170d] border border-[#d4af37]/30">
-                          Total: {santriList.length} Santri
+                          Total: {santriList.length} Santri Terdaftar
                         </span>
+                      </div>
+
+                      {/* Search Bar Boyong */}
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-1">
+                        <div className="relative flex-1 w-full">
+                          <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={boyongSearch}
+                            onChange={(e) => {
+                              setBoyongSearch(e.target.value);
+                              setBoyongPage(1);
+                            }}
+                            placeholder="Cari nama atau NIS santri yang ingin dihapus/boyong..."
+                            className="w-full bg-[#020e08] border border-[#d4af37]/30 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#d4af37]"
+                          />
+                        </div>
+
+                        <div className="text-xs text-zinc-400 flex items-center gap-1.5 shrink-0">
+                          <span>Per Halaman:</span>
+                          <select
+                            value={boyongPageSize}
+                            onChange={(e) => {
+                              setBoyongPageSize(Number(e.target.value));
+                              setBoyongPage(1);
+                            }}
+                            className="bg-[#020e08] border border-[#d4af37]/30 rounded-lg px-2 py-1 text-xs text-white"
+                          >
+                            <option value={10}>10</option>
+                            <option value={25}>25</option>
+                            <option value={50}>50</option>
+                          </select>
+                        </div>
                       </div>
 
                       <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25 max-h-80 overflow-y-auto">
                         <table className="w-full text-xs text-left">
                           <thead className="bg-[#03170d] text-[#d4af37] sticky top-0 z-10 border-b border-[#d4af37]/30">
                             <tr>
+                              <th className="p-2.5 w-12 text-center">NO</th>
                               <th className="p-2.5">NIS</th>
-                              <th className="p-2.5">FOTO</th>
                               <th className="p-2.5">NAMA SANTRI</th>
                               <th className="p-2.5">ANGKATAN</th>
                               <th className="p-2.5">KAMAR</th>
@@ -8900,16 +9421,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/80">
-                            {santriList.map((s) => (
-                              <tr key={s.id} className="hover:bg-[#d4af37]/5">
-                                <td className="p-2.5 font-mono text-[#d4af37] font-bold">{s.id}</td>
-                                <td className="p-2.5">
-                                  <img
-                                    src={s.foto || 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=100'}
-                                    alt={s.nama}
-                                    className="w-8 h-8 rounded-lg object-cover border border-[#d4af37]/30"
-                                  />
+                            {paginatedBoyongResult.items.map((s, idx) => (
+                              <tr key={`${s.id}-${idx}`} className="hover:bg-[#d4af37]/5">
+                                <td className="p-2.5 text-center font-bold text-[#d4af37]">
+                                  {(paginatedBoyongResult.page - 1) * paginatedBoyongResult.pageSize + idx + 1}
                                 </td>
+                                <td className="p-2.5 font-mono text-[#d4af37] font-bold">{s.id}</td>
                                 <td className="p-2.5 font-bold text-white">{s.nama}</td>
                                 <td className="p-2.5 text-emerald-300">{s.kelas}</td>
                                 <td className="p-2.5 text-emerald-200/80">{s.kamar || '-'}</td>
@@ -8937,9 +9454,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 </td>
                               </tr>
                             ))}
+                            {paginatedBoyongResult.totalCount === 0 && (
+                              <tr>
+                                <td colSpan={7} className="p-6 text-center text-zinc-400">
+                                  {boyongSearch ? `Tidak ada santri yang cocok dengan "${boyongSearch}".` : 'Belum ada data santri.'}
+                                </td>
+                              </tr>
+                            )}
                           </tbody>
                         </table>
                       </div>
+
+                      {/* Pagination Controller Boyong */}
+                      {paginatedBoyongResult.totalCount > 0 && (
+                        <div className="flex items-center justify-between text-xs pt-2 border-t border-[#d4af37]/20">
+                          <span className="text-zinc-400 font-mono text-[11px]">
+                            Menampilkan {(paginatedBoyongResult.page - 1) * paginatedBoyongResult.pageSize + 1} - {Math.min(paginatedBoyongResult.page * paginatedBoyongResult.pageSize, paginatedBoyongResult.totalCount)} dari {paginatedBoyongResult.totalCount} santri
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={boyongPage <= 1}
+                              onClick={() => setBoyongPage(prev => Math.max(1, prev - 1))}
+                              className="px-2.5 py-1 rounded-lg bg-[#020e08] border border-[#d4af37]/30 text-white font-bold disabled:opacity-40"
+                            >
+                              Prev
+                            </button>
+                            <span className="px-2.5 py-1 rounded-lg bg-[#03170d] font-mono text-[#d4af37] font-bold border border-[#d4af37]/20">
+                              {paginatedBoyongResult.page} / {paginatedBoyongResult.totalPages}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={boyongPage >= paginatedBoyongResult.totalPages}
+                              onClick={() => setBoyongPage(prev => Math.min(paginatedBoyongResult.totalPages, prev + 1))}
+                              className="px-2.5 py-1 rounded-lg bg-[#020e08] border border-[#d4af37]/30 text-white font-bold disabled:opacity-40"
+                            >
+                              Next
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -9110,73 +9664,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <span>Tambahkan Jadwal Pelajaran</span>
                       </button>
                     </div>
-
-                    {/* DAFTAR & REVISI CEPAT JADWAL PELAJARAN */}
-                    <div className="pt-6 border-t border-[#d4af37]/30 space-y-3">
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                        <div>
-                          <h5 className="text-xs sm:text-sm font-bold text-white text-gold-3d flex items-center gap-1.5">
-                            <Settings2 className="w-4 h-4 text-amber-400" />
-                            <span>Daftar & Tombol Setting Revisi Jadwal (Koreksi Jadwal Keliru)</span>
-                          </h5>
-                          <p className="text-[11px] text-emerald-300">
-                            Semisal terdapat kekeliruan mata pelajaran, jam, atau ustadz pengajar, klik tombol &quot;Setting / Revisi&quot; pada baris jadwal.
-                          </p>
-                        </div>
-                        <span className="text-[11px] text-[#d4af37] font-mono px-3 py-1 rounded-lg bg-[#03170d] border border-[#d4af37]/30">
-                          Total: {jadwalList.length} Jadwal
-                        </span>
-                      </div>
-
-                      <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25 max-h-80 overflow-y-auto">
-                        <table className="w-full text-xs text-left">
-                          <thead className="bg-[#03170d] text-[#d4af37] sticky top-0 z-10 border-b border-[#d4af37]/30">
-                            <tr>
-                              <th className="p-2.5">KELAS</th>
-                              <th className="p-2.5">HARI</th>
-                              <th className="p-2.5 text-center">JAM</th>
-                              <th className="p-2.5">WAKTU</th>
-                              <th className="p-2.5">MAPEL / KITAB</th>
-                              <th className="p-2.5">USTADZ PENGAJAR</th>
-                              <th className="p-2.5 text-center">AKSI & SETTING</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/80">
-                            {jadwalList.map((j, idx) => (
-                              <tr key={j.id || idx} className="hover:bg-[#d4af37]/5">
-                                <td className="p-2.5 font-bold text-emerald-300 whitespace-nowrap">{j.kelas}</td>
-                                <td className="p-2.5 text-white whitespace-nowrap">{j.hari}</td>
-                                <td className="p-2.5 text-center font-mono font-bold text-[#d4af37]">{j.jamKe}</td>
-                                <td className="p-2.5 font-mono text-emerald-200/90 whitespace-nowrap">{j.waktu}</td>
-                                <td className="p-2.5 font-bold text-white">{j.mapel}</td>
-                                <td className="p-2.5 text-emerald-100">{j.nama}</td>
-                                <td className="p-2.5 text-center whitespace-nowrap">
-                                  <div className="flex items-center justify-center gap-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenEditJadwal(j)}
-                                      className="px-2.5 py-1 rounded-lg bg-amber-400/20 hover:bg-amber-400 text-amber-300 hover:text-black border border-amber-400/50 text-[10px] font-extrabold flex items-center gap-1 transition shadow"
-                                      title="Revisi Jadwal"
-                                    >
-                                      <Settings2 className="w-3 h-3 text-amber-400 group-hover:text-black" />
-                                      <span>Setting / Revisi</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteJadwalClick(j)}
-                                      className="p-1 rounded-lg bg-red-950/80 hover:bg-red-800 text-red-300 hover:text-white border border-red-500/40 text-[10px] transition shadow"
-                                      title="Hapus"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
                   </form>
                 )}
 
@@ -9327,7 +9814,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             className="w-full bg-[#03140c] border border-[#d4af37]/40 rounded-xl p-2 text-xs text-white"
                             placeholder="https://images.unsplash.com/..."
                           />
-                          {visualForm.berita_image_url && (
+                          {visualForm.berita_image_url && visualForm.berita_image_url.trim() !== '' && (
                             <div className="mt-2 h-24 rounded-lg overflow-hidden border border-[#d4af37]/30">
                               <img src={visualForm.berita_image_url} alt="Preview Berita" className="w-full h-full object-cover" />
                             </div>
@@ -9776,17 +10263,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span className="text-xs font-bold text-[#d4af37] block uppercase tracking-wider">
                         Pratinjau Video (Live Video Preview):
                       </span>
-                      <div className="relative aspect-video max-h-72 w-full rounded-xl overflow-hidden bg-black border border-[#d4af37]/40 shadow-inner">
-                        <video
-                          key={adminVideoInfo.src}
-                          src={adminVideoInfo.src}
-                          controls
-                          playsInline
-                          className="w-full h-full object-cover"
-                        >
-                          <source src={adminVideoInfo.src} type="video/mp4" />
-                        </video>
-                      </div>
+                      {adminVideoInfo.src && adminVideoInfo.src.trim() !== '' ? (
+                        <div className="relative aspect-video max-h-72 w-full rounded-xl overflow-hidden bg-black border border-[#d4af37]/40 shadow-inner">
+                          <video
+                            key={adminVideoInfo.src}
+                            src={adminVideoInfo.src}
+                            controls
+                            playsInline
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="p-6 text-center text-xs text-zinc-400 bg-black/40 rounded-xl border border-[#d4af37]/20">
+                          Belum ada video dipilih
+                        </div>
+                      )}
                     </div>
 
                     {/* Two Input Methods Grid */}
@@ -10456,8 +10947,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onChange={(e) => setSelectedProfileSantriId(e.target.value)}
                         className="w-full bg-[#0a301f] border border-[#d4af37]/50 rounded-xl p-3 text-sm text-white font-semibold"
                       >
-                        {santriList.map(s => (
-                          <option key={s.id} value={s.id}>
+                        {santriList.map((s, idx) => (
+                          <option key={`${s.id}-${idx}`} value={s.id}>
                             {s.nama} — NIS: {s.id} ({s.kelas})
                           </option>
                         ))}
@@ -10685,8 +11176,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             onChange={(e) => setInputSyahriyahForm({ ...inputSyahriyahForm, idSantri: e.target.value })}
                             className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
                           >
-                            {santriList.map(s => (
-                              <option key={s.id} value={s.id}>{s.nama} ({s.id})</option>
+                            {santriList.map((s, idx) => (
+                              <option key={`${s.id}-${idx}`} value={s.id}>{s.nama} ({s.id})</option>
                             ))}
                           </select>
                         </div>
@@ -10779,10 +11270,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                            {syahriyahList.slice(0, 10).map((sy) => {
+                            {syahriyahList.slice(0, 10).map((sy, idx) => {
                               const sObj = santriList.find(s => s.id === sy.idSantri);
                               return (
-                                <tr key={sy.id} className="hover:bg-[#d4af37]/5">
+                                <tr key={`${sy.id}-${idx}`} className="hover:bg-[#d4af37]/5">
                                   <td className="p-3 font-bold text-white">
                                     {sObj?.nama || sy.idSantri} <span className="text-[10px] text-emerald-400 font-mono">({sy.idSantri})</span>
                                   </td>
@@ -10868,8 +11359,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             onChange={(e) => setInputUangSakuForm({ ...inputUangSakuForm, idSantri: e.target.value })}
                             className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
                           >
-                            {santriList.map(s => (
-                              <option key={s.id} value={s.id}>
+                            {santriList.map((s, idx) => (
+                              <option key={`${s.id}-${idx}`} value={s.id}>
                                 {s.nama} (Saldo: Rp {(s.saldoUangSaku ?? 0).toLocaleString('id-ID')})
                               </option>
                             ))}
@@ -10949,10 +11440,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                            {uangSakuList.slice(0, 10).map((us) => {
+                            {uangSakuList.slice(0, 10).map((us, idx) => {
                               const sObj = santriList.find(s => s.id === us.idSantri);
                               return (
-                                <tr key={us.id} className="hover:bg-[#d4af37]/5">
+                                <tr key={`${us.id}-${idx}`} className="hover:bg-[#d4af37]/5">
                                   <td className="p-3 font-mono text-emerald-300">{us.tanggal}</td>
                                   <td className="p-3 font-bold text-white">{sObj?.nama || us.idSantri}</td>
                                   <td className="p-3">
@@ -11091,8 +11582,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             onChange={(e) => setInputKurikulumForm({ ...inputKurikulumForm, ustadzPengampu: e.target.value })}
                             className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
                           >
-                            {guruList.map(g => (
-                              <option key={g.id} value={g.nama}>{g.nama} ({g.mapel})</option>
+                            {guruList.map((g, idx) => (
+                              <option key={`${g.id}-${idx}`} value={g.nama}>{g.nama} ({g.mapel})</option>
                             ))}
                           </select>
                         </div>
@@ -11126,8 +11617,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                            {kurikulumList.map((k) => (
-                              <tr key={k.id} className="hover:bg-[#d4af37]/5">
+                            {kurikulumList.map((k, idx) => (
+                              <tr key={`${k.id}-${idx}`} className="hover:bg-[#d4af37]/5">
                                 <td className="p-3 font-semibold text-[#d4af37]">{k.kelas}</td>
                                 <td className="p-3 text-white font-bold">{k.mapel}</td>
                                 <td className="p-3 font-extrabold text-white text-sm">{k.kitab}</td>
@@ -11354,6 +11845,207 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </form>
           </div>
         </div>
+      )}
+      {/* MODAL SISTEM KENAIKAN KELAS OTOMATIS */}
+      {showKenaikanKelasModal && (
+        <KenaikanKelasModal
+          isOpen={showKenaikanKelasModal}
+          onClose={() => setShowKenaikanKelasModal(false)}
+          santriList={santriList}
+          settings={settings}
+          onSavePromotion={(updatedList, updatedSettings) => {
+            if (onBatchUpdateSantri) {
+              onBatchUpdateSantri(updatedList, updatedSettings);
+            } else {
+              localStorage.setItem('sim_santri', JSON.stringify(updatedList));
+              if (updatedSettings) {
+                onSaveSettings({ ...settings, ...updatedSettings });
+              }
+            }
+          }}
+          onNotify={(msg) => {
+            setRealtimeAlert({
+              type: 'santri',
+              title: 'Kenaikan Kelas Otomatis',
+              detail: msg,
+              time: new Date().toLocaleTimeString('id-ID')
+            });
+          }}
+        />
+      )}
+
+      {/* MODAL RIWAYAT PERJALANAN KELAS SANTRI (TAHUN AJARAN → KELAS → STATUS SANTRI) */}
+      {santriDetailHistory && (
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+          <div className="relative w-full max-w-xl rounded-3xl bg-[#041d13] border-2 border-[#d4af37] p-6 text-white shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/30">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-14 rounded-xl overflow-hidden bg-black border border-[#d4af37] shrink-0">
+                  <img
+                    src={(santriDetailHistory.fotoThumbnail && santriDetailHistory.fotoThumbnail.trim()) || (santriDetailHistory.foto && santriDetailHistory.foto.trim()) || 'https://via.placeholder.com/60x80?text=Foto'}
+                    alt={santriDetailHistory.nama}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div>
+                  <h4 className="text-base font-extrabold text-[#f5e298]">
+                    {santriDetailHistory.nama}
+                  </h4>
+                  <span className="text-xs font-mono text-emerald-300 block">
+                    NIS: {santriDetailHistory.id} • Kelas Saat Ini: {santriDetailHistory.kelas}
+                  </span>
+                  <span className="text-[11px] text-zinc-400 block">
+                    Kamar: {santriDetailHistory.kamar || '-'} • Asal: {santriDetailHistory.alamat || '-'}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSantriDetailHistory(null)}
+                className="w-8 h-8 rounded-lg bg-black/40 border border-white/20 text-zinc-400 hover:text-white flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[#f5e298] uppercase tracking-wider flex items-center gap-1.5">
+                  <History className="w-4 h-4 text-[#d4af37]" />
+                  <span>Riwayat Perjalanan Santri dari Tahun ke Tahun:</span>
+                </span>
+                <span className="text-[10px] text-zinc-400 font-mono">
+                  TAHUN AJARAN → KELAS → STATUS
+                </span>
+              </div>
+
+              {/* TIMELINE RIWAYAT: TAHUN AJARAN → KELAS → STATUS SANTRI */}
+              <div className="relative pl-6 space-y-3 max-h-72 overflow-y-auto before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#d4af37]/40">
+                {getOrCreateSantriHistory(santriDetailHistory, settings.tahun_ajaran || '2026/2027').map((item, idx) => (
+                  <div key={idx} className="relative group">
+                    <div className="absolute -left-6 top-1.5 w-3.5 h-3.5 rounded-full bg-[#d4af37] border-2 border-black shadow" />
+                    
+                    <div className="p-3 rounded-xl bg-[#020e08] border border-[#d4af37]/25 space-y-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-mono font-bold text-xs text-[#f5e298]">
+                          Tahun Ajaran: {item.tahunAjaran}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          item.status === 'Naik Kelas'
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
+                            : item.status === 'Lulus'
+                            ? 'bg-amber-950 text-[#f5e298] border border-amber-500/40'
+                            : item.status === 'Tetap di Kelas'
+                            ? 'bg-orange-950 text-orange-300 border border-orange-500/40'
+                            : 'bg-blue-950 text-blue-300 border border-blue-500/40'
+                        }`}>
+                          {item.status}
+                        </span>
+                      </div>
+
+                      <div className="text-xs font-semibold text-white">
+                        Jenjang / Kelas: <span className="text-emerald-300">{item.kelas}</span>
+                      </div>
+
+                      {item.keterangan && (
+                        <p className="text-[11px] text-zinc-400">
+                          {item.keterangan}
+                        </p>
+                      )}
+
+                      <div className="text-[10px] text-zinc-500 font-mono pt-0.5">
+                        Tercatat: {item.tanggalProses}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="text-right pt-2 border-t border-[#d4af37]/20">
+              <button
+                type="button"
+                onClick={() => setSantriDetailHistory(null)}
+                className="px-4 py-2 rounded-xl bg-[#0a301f] border border-[#d4af37]/40 text-xs font-bold text-white hover:bg-[#d4af37] hover:text-black transition"
+              >
+                Tutup Riwayat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDIT / SETTING DATA SANTRI */}
+      {editingSantri && (
+        <EditSantriModal
+          isOpen={Boolean(editingSantri)}
+          onClose={() => setEditingSantri(null)}
+          santri={editingSantri}
+          allSantriList={santriList}
+          onSave={(updatedSantri, originalId) => {
+            if (onUpdateSantriProfile) {
+              onUpdateSantriProfile(updatedSantri, originalId);
+            } else {
+              const updated = santriList.map(s => s.id === originalId ? updatedSantri : s);
+              localStorage.setItem('sim_santri', JSON.stringify(updated));
+            }
+          }}
+          onNotify={(msg) => {
+            setRealtimeAlert({
+              type: 'santri',
+              title: 'Edit Data Santri',
+              detail: msg,
+              time: new Date().toLocaleTimeString('id-ID')
+            });
+          }}
+        />
+      )}
+
+      {/* MODAL INPUT / EDIT NILAI UJIAN */}
+      {ujianModalTarget && (
+        <ModalInputNilaiUjian
+          isOpen={Boolean(ujianModalTarget)}
+          onClose={() => setUjianModalTarget(null)}
+          santri={ujianModalTarget.santri}
+          type={ujianModalTarget.type}
+          onSave={(updatedSantri) => {
+            if (onUpdateSantriProfile) {
+              onUpdateSantriProfile(updatedSantri);
+            } else {
+              const updated = santriList.map(s => s.id === updatedSantri.id ? updatedSantri : s);
+              localStorage.setItem('sim_santri', JSON.stringify(updated));
+            }
+            if (onSaveUjianSantri) {
+              onSaveUjianSantri({
+                id: `UJN-${updatedSantri.id}-${Date.now()}`,
+                idSantri: updatedSantri.id,
+                namaSantri: updatedSantri.nama,
+                kelas: updatedSantri.kelas,
+                semester: settings.semester_aktif || 'Semester Ganjil 2026/2027',
+                tanggal: updatedSantri.tanggalUjianKitab || new Date().toISOString().split('T')[0],
+                nilaiKoreksianKitab: Number(updatedSantri.nilaiKoreksianKitab ?? 90),
+                predikatKoreksianKitab: updatedSantri.predikatKoreksianKitab || 'Mumtaz',
+                kitabKoreksian: updatedSantri.kitabKoreksian,
+                nilaiMuhafadzoh: Number(updatedSantri.nilaiMuhafadzoh ?? 92),
+                predikatMuhafadzoh: updatedSantri.predikatMuhafadzoh || 'Mumtaz',
+                kitabMuhafadzoh: updatedSantri.kitabMuhafadzoh,
+                nilaiBacaKitab: Number(updatedSantri.nilaiBacaKitab ?? 88),
+                predikatBacaKitab: updatedSantri.predikatBacaKitab || 'Jayyid Jiddan',
+                kitabBaca: updatedSantri.kitabBaca,
+                ustadzPenguji: updatedSantri.ustadzPengujiKitab || 'Ust. Muhammad Ilyas'
+              });
+            }
+          }}
+          onNotify={(msg) => {
+            setRealtimeAlert({
+              type: 'santri',
+              title: 'Nilai Ujian Santri',
+              detail: msg,
+              time: new Date().toLocaleTimeString('id-ID')
+            });
+          }}
+        />
       )}
     </div>
   );
