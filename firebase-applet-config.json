@@ -1,0 +1,12 @@
+{
+  "projectId": "absensi-data-santri",
+  "appId": "1:220606876180:web:e6287820b325ed51e6b501",
+  "apiKey": "AIzaSyAsM1VRXNPExGNW75N9yl76z4qfY-cB748",
+  "authDomain": "absensi-data-santri.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-absensidatabased-62fd9012-6580-4225-a96d-30d9ad0cca06",
+  "storageBucket": "absensi-data-santri.firebasestorage.app",
+  "messagingSenderId": "220606876180",
+  "measurementId": "",
+  "oAuthClientId": "220606876180-12jot08ss6v9v5evpl6i8722g2mkshca.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
+}

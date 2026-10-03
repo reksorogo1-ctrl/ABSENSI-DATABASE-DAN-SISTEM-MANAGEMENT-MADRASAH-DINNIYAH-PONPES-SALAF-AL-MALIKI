@@ -1,0 +1,35 @@
+{
+  "entities": {
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "App settings configuration for Madrasah Salaf Al-Maliki",
+      "type": "object",
+      "properties": {
+        "nama_pondok": { "type": "string" },
+        "nama_madrasah": { "type": "string" },
+        "alamat": { "type": "string" },
+        "kepala_madrasah": { "type": "string" }
+      }
+    },
+    "MasterData": {
+      "title": "MasterData",
+      "description": "Master data collection for students, teachers, schedules, attendance, grades, and records",
+      "type": "object",
+      "properties": {
+        "collectionKey": { "type": "string" },
+        "payload": { "type": "object" },
+        "updatedAt": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/sim_app_settings/main_config": {
+      "schema": { "$ref": "#/entities/AppSettings" },
+      "description": "Global application configuration document"
+    },
+    "/sim_master_data/{collectionKey}": {
+      "schema": { "$ref": "#/entities/MasterData" },
+      "description": "Real-time master data collection items (santri, guru, jadwal, absensi, nadzhom, nilai, syahriyah)"
+    }
+  }
+}

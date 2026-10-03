@@ -158,3 +158,10 @@ export const logoutGoogle = async () => {
     localStorage.removeItem('sim_google_user');
   } catch {}
 };
+
+export const checkGoogleAuthRedirectResult = async (): Promise<{ user: User; accessToken: string } | null> => {
+  if (currentGoogleUser && cachedAccessToken) {
+    return { user: currentGoogleUser, accessToken: cachedAccessToken };
+  }
+  return null;
+};
