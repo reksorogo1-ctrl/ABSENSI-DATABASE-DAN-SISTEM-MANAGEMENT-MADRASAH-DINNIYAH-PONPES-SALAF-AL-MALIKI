@@ -30,7 +30,7 @@ interface LoginScreenProps {
   showForgotPasswordModal: boolean; setShowForgotPasswordModal: (b: boolean) => void;
   onSubmit: (e: React.FormEvent) => void;
   onGoogleSignIn: () => void;
-  onSyncSheets: () => void;
+  onSyncSheets?: () => void;
   onReplayIntro: () => void;
 }
 
@@ -288,24 +288,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
                   <ArrowRight className="w-5 h-5 stroke-[3]" />
                 </button>
 
-                <button 
-                  type="button" 
-                  data-testid="google-login-btn" 
-                  onClick={onGoogleSignIn} 
-                  className="gsi-material-button w-full"
-                >
-                  <div className="gsi-material-button-content-wrapper">
-                    <div className="gsi-material-button-icon">
-                      <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" style={{ display: 'block', width: '20px', height: '20px' }}>
-                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
-                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
-                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
-                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
-                        <path fill="none" d="M0 0h48v48H0z"></path>
-                      </svg>
-                    </div>
-                    <span className="gsi-material-button-contents">Sign in with Google</span>
-                  </div>
+                <button type="button" data-testid="google-login-btn" onClick={onGoogleSignIn} className="w-full py-3.5 rounded-xl bg-[#03140c]/80 hover:bg-[#052216] border border-[#d4af37]/55 text-white font-bold text-xs sm:text-sm tracking-[0.1em] flex items-center justify-center gap-3 shadow-md transition hover:scale-[1.01] active:scale-95">
+                  <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z" />
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24Z" />
+                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15Z" />
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98Z" />
+                  </svg>
+                  <span>Masuk dengan Google</span>
                 </button>
               </form>
 
@@ -330,7 +320,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
                 {socialLinks.map(({ href, Icon, t, id }) => (
                   <a key={t} href={href} target="_blank" rel="noreferrer" title={t} data-testid={id} className="w-10 h-10 rounded-full border-2 border-[#d4af37]/70 bg-[#031d12]/60 text-[#faebaa] hover:bg-[#d4af37] hover:text-black flex items-center justify-center transition shadow"><Icon className="w-4 h-4" /></a>
                 ))}
-                <button type="button" title="Sinkronisasi Google Sheets" data-testid="sync-sheets-btn" onClick={onSyncSheets} className="w-10 h-10 rounded-full border-2 border-[#d4af37]/70 bg-[#031d12]/60 text-[#faebaa] hover:bg-[#d4af37] hover:text-black flex items-center justify-center transition shadow"><Globe className="w-4 h-4" /></button>
+                <div title="Sistem Terintegrasi Real-Time Cloud Firestore" className="px-3 h-10 rounded-full border-2 border-emerald-500/60 bg-[#031d12]/80 text-emerald-300 flex items-center gap-2 text-[10px] font-bold shadow">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                  <span>Cloud Real-Time</span>
+                </div>
               </div>
             </div>
             <p className="font-serif italic normal-case text-right text-sm sm:text-base text-[#faebaa] leading-snug drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]" style={{ fontFamily: "'Amiri', serif" }}>

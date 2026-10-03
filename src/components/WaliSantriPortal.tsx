@@ -76,10 +76,12 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
   const catatanKoreksian = myUjian?.catatanKoreksianKitab ?? santri.catatanUjianKitab ?? 'Makna gandul pegon sangat rapi dan mutaba\'ah pengajian lengkap.';
   const kitabKoreksian = myUjian?.kitabKoreksian ?? 'Kitab Fathul Qorib Al-Mujib';
 
-  const nilaiMuhafadzoh = myUjian?.nilaiMuhafadzoh ?? santri.nilaiMuhafadzoh ?? 96;
-  const predikatMuhafadzoh = myUjian?.predikatMuhafadzoh ?? santri.predikatMuhafadzoh ?? 'Mumtaz (Hafal Lancar 254 Bait)';
-  const catatanMuhafadzoh = myUjian?.catatanMuhafadzoh ?? 'Hafalan sangat mutqin, makharijul huruf dan tajwid terjaga.';
-  const kitabMuhafadzoh = myUjian?.kitabMuhafadzoh ?? 'Nadzhom Al-Imrithi';
+  // Muhafadzoh Nadzhom terkoneksi real-time ke data setoran nadzhom
+  const latestNadzhom = myNadzhom[0];
+  const kitabMuhafadzoh = latestNadzhom?.kitab || santri.kitabMuhafadzoh || myUjian?.kitabMuhafadzoh || 'Nadzhom Al-Imrithi';
+  const nilaiMuhafadzoh = latestNadzhom ? latestNadzhom.bait : (santri.nilaiMuhafadzoh ?? myUjian?.nilaiMuhafadzoh ?? 0);
+  const predikatMuhafadzoh = latestNadzhom?.nilai || santri.predikatMuhafadzoh || myUjian?.predikatMuhafadzoh || 'Mumtaz (Hafal Lancar)';
+  const catatanMuhafadzoh = latestNadzhom?.catatan || santri.catatanMuhafadzoh || myUjian?.catatanMuhafadzoh || 'Hafalan mutqin, makharijul huruf dan tajwid terjaga.';
 
   const nilaiBacaKitab = myUjian?.nilaiBacaKitab ?? santri.nilaiBacaKitab ?? 90;
   const predikatBacaKitab = myUjian?.predikatBacaKitab ?? santri.predikatBacaKitab ?? 'Mumtaz (Fashih & Paham Tarkib I\'rob)';
@@ -603,12 +605,25 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
 
         {/* Section: Setoran Nadzhom */}
         <section className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/20">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-[#d4af37]/20 gap-2">
             <div className="flex items-center space-x-2.5">
               <BookOpen className="w-5 h-5 text-[#d4af37]" />
-              <h3 className="font-bold text-base text-white text-gold-3d">Riwayat Setoran Nadzhom & Hafalan</h3>
+              <div>
+                <h3 className="font-bold text-base text-white text-gold-3d flex items-center gap-2">
+                  Riwayat Setoran Nadzhom & Hafalan
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-sans font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Live Sync Madrasah
+                  </span>
+                </h3>
+                <p className="text-[11px] text-emerald-300/80">
+                  Data setoran langsung terhubung dari buku mutaba'ah ustadz pengampu di pondok.
+                </p>
+              </div>
             </div>
-            <span className="text-xs text-[#d4af37] font-mono">{myNadzhom.length} Catatan</span>
+            <span className="text-xs text-[#d4af37] font-mono self-start sm:self-auto px-2.5 py-1 rounded-lg bg-[#02140b] border border-[#d4af37]/30">
+              {myNadzhom.length} Catatan Setoran
+            </span>
           </div>
 
           {myNadzhom.length === 0 ? (
@@ -624,6 +639,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
                     <th className="p-3">KITAB</th>
                     <th className="p-3 text-center">JUMLAH BAIT</th>
                     <th className="p-3">STATUS / NILAI</th>
+                    <th className="p-3">CATATAN PENGUJI</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/60">
@@ -631,11 +647,14 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
                     <tr key={idx} className="hover:bg-[#d4af37]/5 transition">
                       <td className="p-3 font-mono text-emerald-300 whitespace-nowrap">{item.tanggal || '-'}</td>
                       <td className="p-3 font-bold text-white">{item.kitab}</td>
-                      <td className="p-3 text-center font-bold text-[#d4af37]">{item.bait} bait</td>
+                      <td className="p-3 text-center font-bold text-[#d4af37] font-mono">{item.bait} bait</td>
                       <td className="p-3">
                         <span className="px-2.5 py-1 rounded-md bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 font-medium">
                           {item.nilai || 'Terselesaikan'}
                         </span>
+                      </td>
+                      <td className="p-3 text-stone-300 italic text-[11px]">
+                        {item.catatan || 'Setoran hafalan lancar & tartil'}
                       </td>
                     </tr>
                   ))}

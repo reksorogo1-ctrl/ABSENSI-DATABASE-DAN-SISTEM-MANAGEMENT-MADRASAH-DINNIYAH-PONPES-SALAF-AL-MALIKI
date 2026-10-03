@@ -47,6 +47,7 @@ import {
   checkPresensiSchedule, getServerTime, subscribeAttendanceUpdates, 
   RealtimeAttendancePayload, OFFICIAL_SCHEDULES 
 } from '../serverTime';
+import { INITIAL_KURIKULUM_LIST } from '../data';
 
 interface AdminDashboardProps {
   settings: AppSettings;
@@ -77,12 +78,18 @@ interface AdminDashboardProps {
   // Mutations
   onSaveAbsensiSantri: (records: AbsensiSantriRecord[]) => void;
   onSaveAbsensiGuru: (records: AbsensiGuruRecord[]) => void;
+  onDeleteAbsensiSantri?: (record: AbsensiSantriRecord) => void;
+  onDeleteAbsensiGuru?: (record: AbsensiGuruRecord) => void;
   onSaveNewSantri: (newSantri: Santri) => void;
   onSaveNewGuru: (newGuru: GuruPengajar) => void;
   onDeleteGuru?: (idOrName: string) => void;
-  onSaveNewJadwal: (newJadwal: JadwalPelajaran) => void;
+  onSaveNewJadwal: (newJadwal: JadwalPelajaran, oldJadwal?: JadwalPelajaran) => void;
+  onDeleteJadwal?: (targetJadwal: JadwalPelajaran) => void;
   onSaveNadzhom: (nadzhom: NadzhomRecord) => void;
+  onSaveBatchNadzhom?: (records: NadzhomRecord[]) => void;
+  onDeleteNadzhom?: (rec: NadzhomRecord) => void;
   onSaveNilai: (nilai: NilaiUjianRecord) => void;
+  onSaveBatchNilai?: (records: NilaiUjianRecord[]) => void;
   onSaveSettings: (settings: AppSettings) => void;
   onSaveDashboardAndReset: () => void;
   onUpdateSantriProfile?: (updatedSantri: Santri, oldId?: string) => void;
@@ -139,12 +146,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDataImported,
   onSaveAbsensiSantri,
   onSaveAbsensiGuru,
+  onDeleteAbsensiSantri,
+  onDeleteAbsensiGuru,
   onSaveNewSantri,
   onSaveNewGuru,
   onDeleteGuru,
   onSaveNewJadwal,
+  onDeleteJadwal,
   onSaveNadzhom,
+  onSaveBatchNadzhom,
+  onDeleteNadzhom,
   onSaveNilai,
+  onSaveBatchNilai,
   onSaveSettings,
   onSaveDashboardAndReset,
   onUpdateSantriProfile,
@@ -262,7 +275,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  // Gabungkan absensiGuruList (live real-time dari props/pengurus) dengan rekapGuruLog
+  // Gabungkan absensiGuruList (live real-time dari props/pengurus) dengan rekapGuruLog (arsip)
   const combinedGuruLog = useMemo(() => {
     const map = new Map<string, AbsensiGuruRecord>();
     // Tambahkan absensiGuruList live real-time
@@ -282,9 +295,141 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   }, [absensiGuruList, rekapGuruLog]);
 
-  // State Pilihan Bulan untuk Rekapitulasi Bulanan (Tanggal 1 - 30)
+  // Gabungkan absensiSantriList (live real-time dari props/pengurus) dengan rekapSantriLog (arsip riwayat)
+  const combinedSantriLog = useMemo(() => {
+    const map = new Map<string, AbsensiSantriRecord>();
+    // Tambahkan absensiSantriList live real-time
+    (absensiSantriList || []).forEach(item => {
+      const key = `${item.tanggal}_${item.idSantri || item.nama}`;
+      map.set(key, item);
+    });
+    // Tambahkan rekapSantriLog
+    rekapSantriLog.forEach(item => {
+      const key = `${item.tanggal}_${item.idSantri || item.nama}`;
+      if (!map.has(key)) {
+        map.set(key, item);
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => {
+      return (b.tanggal || '').localeCompare(a.tanggal || '');
+    });
+  }, [absensiSantriList, rekapSantriLog]);
+
+  // Daftar 12 Bulan Kalender Resmi
+  const DAFTAR_BULAN_REKAP = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+
+  // Daftar Pilihan Tahun
+  const DAFTAR_TAHUN_REKAP = ['2024', '2025', '2026', '2027', '2028'];
+
+  // State Pilihan Bulan untuk Rekapitulasi Bulanan
   const [selectedBulanSantri, setSelectedBulanSantri] = useState<string>('September 2026');
   const [selectedBulanGuru, setSelectedBulanGuru] = useState<string>('September 2026');
+
+  // Modal untuk Kelola & Edit Log Presensi Bulan Terpilih Secara Real-Time
+  const [showManageMonthLogsModal, setShowManageMonthLogsModal] = useState<boolean>(false);
+  const [manageMonthLogsTab, setManageMonthLogsTab] = useState<'santri' | 'guru'>('santri');
+
+  // Helper fungsi untuk mencocokkan tanggal dengan bulan & tahun yang dipilih
+  const isDateInSelectedMonth = (tanggalStr: string | undefined, selectedMonthYearStr: string): boolean => {
+    if (!tanggalStr) return false;
+    const str = String(tanggalStr).trim();
+    const parts = selectedMonthYearStr.trim().split(/\s+/);
+    if (parts.length < 2) return false;
+    const targetMonthName = parts[0].toLowerCase();
+    const targetYear = parseInt(parts[1], 10);
+
+    const monthNames = [
+      'januari', 'februari', 'maret', 'april', 'mei', 'juni',
+      'juli', 'agustus', 'september', 'oktober', 'november', 'desember'
+    ];
+    const targetMonthIdx = monthNames.findIndex(m => targetMonthName.startsWith(m.slice(0, 3)));
+    if (targetMonthIdx === -1 || isNaN(targetYear)) return false;
+    const targetMonth = targetMonthIdx + 1; // 1-12
+
+    // Check ISO format: YYYY-MM-DD
+    const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoMatch) {
+      const y = parseInt(isoMatch[1], 10);
+      const m = parseInt(isoMatch[2], 10);
+      return y === targetYear && m === targetMonth;
+    }
+    // Check DMY format: DD-MM-YYYY or DD/MM/YYYY
+    const dmyMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (dmyMatch) {
+      const y = parseInt(dmyMatch[3], 10);
+      const m = parseInt(dmyMatch[2], 10);
+      return y === targetYear && m === targetMonth;
+    }
+    // Check text month presence
+    if (str.toLowerCase().includes(targetMonthName) && str.includes(String(targetYear))) {
+      return true;
+    }
+    // Fallback standard Date parsing
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      return d.getFullYear() === targetYear && (d.getMonth() + 1) === targetMonth;
+    }
+    return false;
+  };
+
+  // Handler Perubahan Status & Hapus Absensi Santri secara Real-Time
+  const handleUpdateSantriStatus = (record: AbsensiSantriRecord, newStatus: 'Hadir' | 'Izin' | 'Sakit' | 'Alpha') => {
+    const updatedRecord: AbsensiSantriRecord = { ...record, status: newStatus };
+    onSaveAbsensiSantri([updatedRecord]);
+    setRekapSantriLog(prev => {
+      const filtered = prev.filter(p => !(p.tanggal === record.tanggal && (p.idSantri === record.idSantri || p.nama === record.nama)));
+      const updated = [updatedRecord, ...filtered];
+      try {
+        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  const handleDeleteSantriAttendance = (record: AbsensiSantriRecord) => {
+    if (!window.confirm(`Hapus catatan absensi santri ${record.nama} tanggal ${record.tanggal}?`)) return;
+    if (onDeleteAbsensiSantri) {
+      onDeleteAbsensiSantri(record);
+    }
+    setRekapSantriLog(prev => {
+      const updated = prev.filter(p => !(p.tanggal === record.tanggal && (p.idSantri === record.idSantri || p.nama === record.nama)));
+      try {
+        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  // Handler Perubahan Status & Hapus Absensi Guru secara Real-Time
+  const handleUpdateGuruStatus = (record: AbsensiGuruRecord, newStatus: 'Hadir' | 'Terlambat' | 'Izin' | 'Alpha') => {
+    const updatedRecord: AbsensiGuruRecord = { ...record, status: newStatus };
+    onSaveAbsensiGuru([updatedRecord]);
+    setRekapGuruLog(prev => {
+      const filtered = prev.filter(p => !(p.tanggal === record.tanggal && p.nama === record.nama && p.kelas === record.kelas && String(p.jamKe) === String(record.jamKe)));
+      const updated = [updatedRecord, ...filtered];
+      try {
+        localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  const handleDeleteGuruAttendance = (record: AbsensiGuruRecord) => {
+    if (!window.confirm(`Hapus catatan absensi ustadz/ustadzah ${record.nama} tanggal ${record.tanggal}?`)) return;
+    if (onDeleteAbsensiGuru) {
+      onDeleteAbsensiGuru(record);
+    }
+    setRekapGuruLog(prev => {
+      const updated = prev.filter(p => !(p.tanggal === record.tanggal && p.nama === record.nama && p.kelas === record.kelas && String(p.jamKe) === String(record.jamKe)));
+      try {
+        localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
 
   // Filter Tipe Kehadiran Ustadz: SEMUA | NORMAL | PENGGANTI | TERLAMBAT | BELUM HADIR | BERHALANGAN
   const [filterGuruAbsensiTipe, setFilterGuruAbsensiTipe] = useState<'SEMUA' | 'NORMAL' | 'PENGGANTI' | 'TERLAMBAT' | 'BELUM HADIR' | 'BERHALANGAN'>('SEMUA');
@@ -425,73 +570,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     alert('Absensi seluruh santri berhasil disimpan dan direkap!');
   };
 
-  // Kalkulasi Rekapan Bulanan Santri (Tanggal 1 sampai 30)
+  // Kalkulasi Rekapan Bulanan Santri berdasarkan Bulan + Tahun terpilih (Otomatis dari 0 untuk bulan baru)
   const rekapBulananSantri = useMemo(() => {
-    return santriList.map((santri, index) => {
-      // Hitung dari rekaman absensi santri yang cocok
-      const records = absensiSantriList.filter(a => a.idSantri === santri.id || a.nama === santri.nama);
+    // Saring data absensi santri yang hanya sesuai dengan Bulan + Tahun yang dipilih
+    const monthFilteredRecords = combinedSantriLog.filter(a => isDateInSelectedMonth(a.tanggal, selectedBulanSantri));
+
+    return santriList.map((santri) => {
+      // Hitung dari rekaman absensi santri yang cocok HANYA pada bulan terpilih
+      const records = monthFilteredRecords.filter(a => a.idSantri === santri.id || a.nama.trim().toLowerCase() === santri.nama.trim().toLowerCase());
       const actualHadir = records.filter(r => r.status === 'Hadir').length;
       const actualIzin = records.filter(r => r.status === 'Izin').length;
       const actualSakit = records.filter(r => r.status === 'Sakit').length;
       const actualAlpha = records.filter(r => r.status === 'Alpha').length;
 
-      // Buat baseline kumulatif 30 hari yang konsisten dan realistis berbasis data santri
-      const pseudoHash = (santri.id.charCodeAt(santri.id.length - 1) + index * 7) % 5;
-      const baseHadir = Math.min(30, 26 + (pseudoHash % 4) + actualHadir);
-      const baseIzin = (pseudoHash === 1 ? 1 : 0) + actualIzin;
-      const baseSakit = (pseudoHash === 3 ? 1 : 0) + actualSakit;
-      const baseAlpha = (pseudoHash === 4 ? 1 : 0) + actualAlpha;
-      const totalDays = 30; // Rentang tgl 1 s/d 30
-      const totalKehadiran = Math.min(30, baseHadir);
-      const persentase = Math.min(100, Math.round((totalKehadiran / totalDays) * 100));
+      const totalSesi = actualHadir + actualIzin + actualSakit + actualAlpha;
+      // Perhitungan otomatis dimulai dari 0 untuk bulan baru tanpa membawa data bulan sebelumnya!
+      const persentase = totalSesi > 0 ? Math.min(100, Math.round((actualHadir / totalSesi) * 100)) : 0;
+
+      let keterangan = 'Belum Ada Absensi';
+      if (totalSesi > 0) {
+        keterangan = persentase >= 95 ? 'Sangat Rajin' : persentase >= 85 ? 'Disiplin' : 'Perlu Pembinaan';
+      }
 
       return {
         id: santri.id,
         nama: santri.nama,
         kelas: santri.kelas,
-        hadir: totalKehadiran,
-        izin: baseIzin,
-        sakit: baseSakit,
-        alpha: baseAlpha,
+        hadir: actualHadir,
+        izin: actualIzin,
+        sakit: actualSakit,
+        alpha: actualAlpha,
+        totalSesi,
         persentase,
-        keterangan: persentase >= 95 ? 'Sangat Rajin' : persentase >= 85 ? 'Disiplin' : 'Perlu Pembinaan'
+        keterangan
       };
     });
-  }, [santriList, absensiSantriList]);
+  }, [santriList, combinedSantriLog, selectedBulanSantri]);
 
-  // Kalkulasi Rekapan Bulanan Guru (Tanggal 1 sampai 30)
+  // Kalkulasi Rekapan Bulanan Guru berdasarkan Bulan + Tahun terpilih (Otomatis dari 0 untuk bulan baru)
   const rekapBulananGuru = useMemo(() => {
-    return guruList.map((guru, index) => {
-      // Cari rekap guru dari log dan jadwal (menggunakan combinedGuruLog yang terhubung live real-time)
-      const logs = combinedGuruLog.filter(l => l.nama.toLowerCase() === guru.nama.toLowerCase());
+    // Saring log absensi guru yang hanya sesuai dengan Bulan + Tahun yang dipilih
+    const monthFilteredLogs = combinedGuruLog.filter(l => isDateInSelectedMonth(l.tanggal, selectedBulanGuru));
+
+    return guruList.map((guru) => {
+      // Cari rekap guru dari log yang cocok HANYA pada bulan terpilih
+      const logs = monthFilteredLogs.filter(l => l.nama.trim().toLowerCase() === guru.nama.trim().toLowerCase());
       const actualHadir = logs.filter(l => l.status === 'Hadir').length;
       const actualTerlambat = logs.filter(l => l.status === 'Terlambat').length;
       const actualIzin = logs.filter(l => l.status === 'Izin').length;
       const actualAlpha = logs.filter(l => l.status === 'Alpha').length;
 
-      // Basis kalkulasi mengajar tanggal 1 sampai 30 (rata-rata 24 s/d 28 sesi mengajar per bulan)
-      const guruHash = (guru.nama.charCodeAt(2) + index * 5) % 6;
-      const totalSesiBulan = 26; // Rata-rata sesi mengajar per bulan tgl 1-30
-      const totalHadir = Math.min(totalSesiBulan, 23 + (guruHash % 3) + actualHadir);
-      const totalIzin = (guruHash === 2 ? 1 : 0) + actualIzin;
-      const totalSakitTelat = (guruHash === 4 ? 1 : 0) + actualTerlambat;
-      const totalAlpha = actualAlpha;
-      const persentase = Math.min(100, Math.round((totalHadir / totalSesiBulan) * 100));
+      const totalSesi = actualHadir + actualTerlambat + actualIzin + actualAlpha;
+      // Perhitungan otomatis dimulai dari 0 untuk bulan baru tanpa membawa data bulan sebelumnya!
+      const persentase = totalSesi > 0 ? Math.min(100, Math.round(((actualHadir + actualTerlambat) / totalSesi) * 100)) : 0;
+
+      let predikat = 'Belum Ada Sesi';
+      if (totalSesi > 0) {
+        predikat = persentase >= 95 ? 'Sangat Teladan' : persentase >= 85 ? 'Tertib' : 'Evaluasi Disiplin';
+      }
 
       return {
         nama: guru.nama,
         mapel: guru.mapel,
         kelas: guru.kelas,
-        totalSesi: totalSesiBulan,
-        hadir: totalHadir,
-        izin: totalIzin,
-        sakitTelat: totalSakitTelat,
-        alpha: totalAlpha,
+        totalSesi,
+        hadir: actualHadir,
+        izin: actualIzin,
+        sakitTelat: actualTerlambat,
+        alpha: actualAlpha,
         persentase,
-        predikat: persentase >= 95 ? 'Sangat Teladan' : persentase >= 85 ? 'Tertib' : 'Evaluasi Disiplin'
+        predikat
       };
     });
-  }, [guruList, combinedGuruLog]);
+  }, [guruList, combinedGuruLog, selectedBulanGuru]);
 
   // Helper Ekspor Data (Google Sheets / CSV, Microsoft Word, dan Print / PDF)
   const downloadCSV = (filename: string, headers: string[], rows: (string | number)[][]) => {
@@ -592,6 +743,738 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [simulasiScanMsg, setSimulasiScanMsg] = useState<string | null>(null);
   const [dashboardRekapTab, setDashboardRekapTab] = useState<'santri' | 'guru'>('santri');
   const [muhafadzohYear, setMuhafadzohYear] = useState<string>('2026/2027');
+
+  // =========================================================================
+  // TAB NILAI UJIAN: REAL-TIME SANTRI, KURIKULUM 9-10 MAPEL & EDITABLE MATRIX
+  // =========================================================================
+  const [selectedNilaiKelas, setSelectedNilaiKelas] = useState<string>('1 TSANAWIYAH');
+  const [selectedNilaiSemester, setSelectedNilaiSemester] = useState<string>('Semester 1');
+  const [nilaiSearchQuery, setNilaiSearchQuery] = useState<string>('');
+  const [isKurikulumSettingOpen, setIsKurikulumSettingOpen] = useState<boolean>(false);
+  const [editedScores, setEditedScores] = useState<{ [key: string]: number }>({});
+  const [isSavingNilai, setIsSavingNilai] = useState<boolean>(false);
+  const [nilaiSaveSuccess, setNilaiSaveSuccess] = useState<boolean>(false);
+  const [newMapelForm, setNewMapelForm] = useState({
+    mapel: '',
+    kitab: '',
+    muallif: '',
+    targetSemester: 'Semester 1 s/d Semester 2',
+    ustadzPengampu: ''
+  });
+  const [editingMapelId, setEditingMapelId] = useState<string | null>(null);
+  const [editingMapelData, setEditingMapelData] = useState<{ mapel: string; kitab: string; muallif: string; ustadzPengampu?: string }>({
+    mapel: '',
+    kitab: '',
+    muallif: '',
+    ustadzPengampu: ''
+  });
+
+  // Mata Pelajaran dari Kurikulum / Silabus Per Angkatan (Koneksi Real-time)
+  const kurikulumForSelectedKelas = useMemo(() => {
+    return kurikulumList.filter(k => k.kelas === selectedNilaiKelas);
+  }, [kurikulumList, selectedNilaiKelas]);
+
+  // Data Santri untuk Kelas Terpilih (Koneksi Real-time dari Props santriList)
+  const santriForSelectedKelas = useMemo(() => {
+    const list = santriList.filter(s => s.kelas === selectedNilaiKelas);
+    if (!nilaiSearchQuery.trim()) return list;
+    const q = nilaiSearchQuery.toLowerCase();
+    return list.filter(s => 
+      s.nama.toLowerCase().includes(q) || 
+      s.id.toLowerCase().includes(q)
+    );
+  }, [santriList, selectedNilaiKelas, nilaiSearchQuery]);
+
+  // Helper untuk membaca nilai santri terkini (dari edited state atau nilaiList asli)
+  const getStudentScore = (santriId: string, mapelName: string) => {
+    const key = `${santriId}__${mapelName.trim().toLowerCase()}__${selectedNilaiSemester}`;
+    if (editedScores[key] !== undefined) {
+      return editedScores[key];
+    }
+    const cleanMapel = mapelName.trim().toLowerCase();
+    const match = nilaiList.find(n => 
+      n.idSantri === santriId && 
+      n.semester === selectedNilaiSemester &&
+      (n.pelajaran.trim().toLowerCase() === cleanMapel || 
+       cleanMapel.includes(n.pelajaran.trim().toLowerCase()) ||
+       n.pelajaran.trim().toLowerCase().includes(cleanMapel))
+    );
+    if (match) return match.nilai;
+    // Default nilai awal
+    return 85;
+  };
+
+  // Helper saat user mengedit angka nilai pada tabel
+  const handleScoreChange = (santriId: string, mapelName: string, val: number) => {
+    const key = `${santriId}__${mapelName.trim().toLowerCase()}__${selectedNilaiSemester}`;
+    const clamped = Math.max(0, Math.min(100, isNaN(val) ? 0 : val));
+    setEditedScores(prev => ({
+      ...prev,
+      [key]: clamped
+    }));
+    setNilaiSaveSuccess(false);
+  };
+
+  // Hitung total nilai, rata-rata, predikat, dan peringkat kelas secara real-time
+  const studentMetrics = useMemo(() => {
+    const allStudentsInClass = santriList.filter(s => s.kelas === selectedNilaiKelas);
+    const metricsMap = new Map<string, { total: number; avg: number; predikat: string; count: number }>();
+
+    allStudentsInClass.forEach(s => {
+      let sum = 0;
+      let count = 0;
+      kurikulumForSelectedKelas.forEach(m => {
+        const val = getStudentScore(s.id, m.mapel);
+        sum += val;
+        count++;
+      });
+      const avg = count > 0 ? Number((sum / count).toFixed(1)) : 0;
+      let predikat = 'Mumtaz (A+)';
+      if (avg < 60) predikat = 'Rasib (D)';
+      else if (avg < 70) predikat = 'Maqbul (C)';
+      else if (avg < 80) predikat = 'Jayyid (B)';
+      else if (avg < 90) predikat = 'Jayyid Jiddan (A)';
+
+      metricsMap.set(s.id, { total: sum, avg, predikat, count });
+    });
+
+    const sorted = [...allStudentsInClass].sort((a, b) => {
+      const avgA = metricsMap.get(a.id)?.avg ?? 0;
+      const avgB = metricsMap.get(b.id)?.avg ?? 0;
+      return avgB - avgA;
+    });
+
+    const rankMap = new Map<string, number>();
+    sorted.forEach((s, idx) => {
+      rankMap.set(s.id, idx + 1);
+    });
+
+    return { metricsMap, rankMap };
+  }, [santriList, selectedNilaiKelas, kurikulumForSelectedKelas, editedScores, nilaiList, selectedNilaiSemester]);
+
+  // Handler Simpan Semua Nilai Ujian ke database & localStorage secara real-time
+  const handleSaveAllNilai = () => {
+    setIsSavingNilai(true);
+    const allClassStudents = santriList.filter(s => s.kelas === selectedNilaiKelas);
+    const recordsToSave: NilaiUjianRecord[] = [];
+
+    allClassStudents.forEach(santri => {
+      kurikulumForSelectedKelas.forEach(mapel => {
+        const score = getStudentScore(santri.id, mapel.mapel);
+        recordsToSave.push({
+          idSantri: santri.id,
+          nama: santri.nama,
+          kelas: santri.kelas,
+          pelajaran: mapel.mapel,
+          nilai: score,
+          semester: selectedNilaiSemester
+        });
+      });
+    });
+
+    if (onSaveBatchNilai) {
+      onSaveBatchNilai(recordsToSave);
+    } else {
+      recordsToSave.forEach(r => onSaveNilai(r));
+    }
+
+    setTimeout(() => {
+      setIsSavingNilai(false);
+      setNilaiSaveSuccess(true);
+      setTimeout(() => setNilaiSaveSuccess(false), 3000);
+    }, 350);
+  };
+
+  // Tambah Mata Pelajaran baru ke Kurikulum kelas ini (Real-Time update kolom tabel)
+  const handleAddMapelToKelas = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMapelForm.mapel.trim()) return;
+    const newRecord: KurikulumKitabRecord = {
+      id: `KUR-${Date.now().toString().slice(-6)}`,
+      kelas: selectedNilaiKelas,
+      mapel: newMapelForm.mapel.trim(),
+      kitab: newMapelForm.kitab.trim() || 'Kitab Salaf Pilihan',
+      muallif: newMapelForm.muallif.trim() || 'Ulama Salaf',
+      targetSemester: newMapelForm.targetSemester || `${selectedNilaiSemester}`,
+      ustadzPengampu: newMapelForm.ustadzPengampu.trim() || 'Dewan Asatidz'
+    };
+    if (onSaveKurikulum) {
+      onSaveKurikulum(newRecord);
+    }
+    setNewMapelForm({
+      mapel: '',
+      kitab: '',
+      muallif: '',
+      targetSemester: 'Semester 1 s/d Semester 2',
+      ustadzPengampu: ''
+    });
+  };
+
+  // Update Mata Pelajaran Kurikulum (Real-time update kolom tabel)
+  const handleUpdateMapelInKelas = (id: string) => {
+    const existing = kurikulumList.find(k => k.id === id);
+    if (!existing) return;
+    const updated: KurikulumKitabRecord = {
+      ...existing,
+      mapel: editingMapelData.mapel.trim() || existing.mapel,
+      kitab: editingMapelData.kitab.trim() || existing.kitab,
+      muallif: editingMapelData.muallif.trim() || existing.muallif,
+      ustadzPengampu: editingMapelData.ustadzPengampu || existing.ustadzPengampu
+    };
+    if (onSaveKurikulum) {
+      onSaveKurikulum(updated);
+    }
+    setEditingMapelId(null);
+  };
+
+  // Hapus Mata Pelajaran dari Kurikulum kelas ini
+  const handleDeleteMapelFromKelas = (id: string, mapelName: string) => {
+    if (!window.confirm(`Hapus mata pelajaran "${mapelName}" dari kurikulum ${selectedNilaiKelas}? Kolom nilai pada tabel nilai akan disesuaikan secara real-time.`)) return;
+    if (onDeleteKurikulum) {
+      onDeleteKurikulum(id);
+    }
+  };
+
+  // Muat ulang atau lengkapi 10 Mapel Standar Pesantren untuk kelas terpilih
+  const handleResetDefault10Mapel = () => {
+    if (!window.confirm(`Lengkapi / Sinkronkan kurikulum kelas ${selectedNilaiKelas} dengan standar 10 mata pelajaran pesantren salaf?`)) return;
+    const defaults = INITIAL_KURIKULUM_LIST.filter(k => k.kelas === selectedNilaiKelas);
+    const existingMapels = new Set(kurikulumForSelectedKelas.map(k => k.mapel.trim().toLowerCase()));
+    const missing = defaults.filter(d => !existingMapels.has(d.mapel.trim().toLowerCase()));
+    
+    if (missing.length === 0) {
+      alert(`Semua 10 mata pelajaran standar untuk ${selectedNilaiKelas} sudah lengkap!`);
+      return;
+    }
+
+    missing.forEach(m => {
+      if (onSaveKurikulum) onSaveKurikulum(m);
+    });
+    alert(`Berhasil menambahkan ${missing.length} mata pelajaran standar ke kurikulum ${selectedNilaiKelas}.`);
+  };
+
+  // Set nilai cepat (misal 85 untuk semua santri di kelas ini)
+  const handleQuickFillNilai = (defaultScore: number = 85) => {
+    if (!window.confirm(`Isi nilai standar ${defaultScore} untuk semua nilai mata pelajaran santri kelas ${selectedNilaiKelas} yang belum terisi?`)) return;
+    const newEdited: { [key: string]: number } = { ...editedScores };
+    santriForSelectedKelas.forEach(s => {
+      kurikulumForSelectedKelas.forEach(m => {
+        const key = `${s.id}__${m.mapel.trim().toLowerCase()}__${selectedNilaiSemester}`;
+        if (newEdited[key] === undefined) {
+          newEdited[key] = defaultScore;
+        }
+      });
+    });
+    setEditedScores(newEdited);
+  };
+
+  // Ekspor Leger Nilai ke CSV
+  const handleExportNilaiCSV = () => {
+    const headers = ['NO', 'NIS', 'NAMA SANTRI', 'KELAS', 'SEMESTER', ...kurikulumForSelectedKelas.map(m => `"${m.mapel} (${m.kitab})"`), 'TOTAL', 'RATA-RATA', 'PREDIKAT', 'PERINGKAT'];
+    const rows = santriForSelectedKelas.map((s, idx) => {
+      const metric = studentMetrics.metricsMap.get(s.id);
+      const rank = studentMetrics.rankMap.get(s.id) ?? idx + 1;
+      const scores = kurikulumForSelectedKelas.map(m => getStudentScore(s.id, m.mapel));
+      return [
+        idx + 1,
+        `"${s.id}"`,
+        `"${s.nama}"`,
+        `"${s.kelas}"`,
+        `"${selectedNilaiSemester}"`,
+        ...scores,
+        metric?.total ?? 0,
+        metric?.avg ?? 0,
+        `"${metric?.predikat ?? '-'}"`,
+        rank
+      ].join(',');
+    });
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Leger_Nilai_${selectedNilaiKelas.replace(/\s+/g, '_')}_${selectedNilaiSemester.replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // =========================================================================
+  // TAB SETORAN NADZHOM: REAL-TIME SANTRI, EDITABLE BAIT & REAL-TIME WALI SYNC
+  // =========================================================================
+  interface NadzhomBookConfig {
+    nama: string;
+    targetBait: number;
+    kelasDefault: string;
+    fan: string;
+    isCustom?: boolean;
+  }
+
+  const DEFAULT_NADZHOM_BOOKS: NadzhomBookConfig[] = [
+    { nama: 'Nadzhom Alala', targetBait: 37, kelasDefault: '1 TSANAWIYAH', fan: 'Akhlaq & Adab' },
+    { nama: 'Aqidatul Awam', targetBait: 57, kelasDefault: '1 TSANAWIYAH', fan: 'Tauhid & Aqidah' },
+    { nama: 'Nadzhom Al-Jurumiyyah', targetBait: 60, kelasDefault: '1 TSANAWIYAH', fan: 'Nahwu' },
+    { nama: 'Tuhfatul Athfal', targetBait: 61, kelasDefault: '1 TSANAWIYAH', fan: 'Tajwid' },
+    { nama: 'Nadzhom Al-Maqsud', targetBait: 113, kelasDefault: '2 TSANAWIYAH', fan: 'Shorof' },
+    { nama: 'Manzhumatul Jazariyyah', targetBait: 107, kelasDefault: '2 TSANAWIYAH', fan: 'Tajwid' },
+    { nama: 'Qawaidul I\'lal', targetBait: 40, kelasDefault: '2 TSANAWIYAH', fan: 'Shorof' },
+    { nama: 'Nadzhom Al-Imrithi', targetBait: 254, kelasDefault: '3 TSANAWIYAH', fan: 'Nahwu' },
+    { nama: 'Al-Faraidul Bahiyyah', targetBait: 114, kelasDefault: '1 ALIYAH', fan: 'Qawaid Fiqhiyyah' },
+    { nama: 'Mandhumah Al-Baiquniyyah', targetBait: 34, kelasDefault: '1 ALIYAH', fan: 'Mustholah Hadits' },
+    { nama: 'As-Sullamul Munauraq', targetBait: 144, kelasDefault: '2 ALIYAH', fan: 'Mantiq' },
+    { nama: 'Al-Jauharul Maknun', targetBait: 291, kelasDefault: '2 ALIYAH', fan: 'Balaghah' },
+    { nama: 'Alfiyah Ibnu Malik', targetBait: 1002, kelasDefault: '3 ALIYAH', fan: 'Nahwu & Shorof' }
+  ];
+
+  // Daftar Kitab Nadzhom yang dapat ditambah & disetting admin
+  const [nadzhomBooksList, setNadzhomBooksList] = useState<NadzhomBookConfig[]>(() => {
+    try {
+      const saved = localStorage.getItem('sim_nadzhom_books_config');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_NADZHOM_BOOKS;
+  });
+
+  const [selectedNadzhomKelas, setSelectedNadzhomKelas] = useState<string>('SEMUA');
+  const [nadzhomSearchQuery, setNadzhomSearchQuery] = useState<string>('');
+  const [nadzhomFilterStatus, setNadzhomFilterStatus] = useState<'SEMUA' | 'KHATAM' | 'BERJALAN' | 'BELUM'>('SEMUA');
+  const [activeNadzhomView, setActiveNadzhomView] = useState<'ringkasan' | 'riwayat'>('ringkasan');
+  const [isNadzhomSettingOpen, setIsNadzhomSettingOpen] = useState<boolean>(false);
+  const [isAddNadzhomModalOpen, setIsAddNadzhomModalOpen] = useState<boolean>(false);
+  const [isSavingNadzhom, setIsSavingNadzhom] = useState<boolean>(false);
+  const [nadzhomSaveSuccess, setNadzhomSaveSuccess] = useState<boolean>(false);
+  const [savedRowIndicator, setSavedRowIndicator] = useState<{ [idSantri: string]: boolean }>({});
+
+  // Target Bait Dictionary per Kitab (dapat disetting admin)
+  const [nadzhomTargetBaitSettings, setNadzhomTargetBaitSettings] = useState<{ [kitab: string]: number }>(() => {
+    try {
+      const saved = localStorage.getItem('sim_nadzhom_targets');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    const defaults: { [kitab: string]: number } = {};
+    DEFAULT_NADZHOM_BOOKS.forEach(b => {
+      defaults[b.nama] = b.targetBait;
+    });
+    return defaults;
+  });
+
+  // State nilai & bait yang diedit langsung pada tabel per santri (termasuk catatan)
+  const [editedNadzhomState, setEditedNadzhomState] = useState<{
+    [idSantri: string]: {
+      kitab: string;
+      bait: number;
+      targetBait: number;
+      nilai: string;
+      tanggal: string;
+      catatan?: string;
+    };
+  }>({});
+
+  // Form untuk input setoran baru
+  const [newNadzhomEntry, setNewNadzhomEntry] = useState<{
+    idSantri: string;
+    kitab: string;
+    bait: number;
+    targetBait: number;
+    nilai: string;
+    tanggal: string;
+    catatan: string;
+  }>({
+    idSantri: '',
+    kitab: 'Nadzhom Al-Imrithi',
+    bait: 30,
+    targetBait: 254,
+    nilai: 'Mumtaz (A)',
+    tanggal: new Date().toISOString().split('T')[0],
+    catatan: 'Lancar makhorijul huruf & tartil'
+  });
+
+  // Form tambah kitab baru di modal setting
+  const [newBookForm, setNewBookForm] = useState<{
+    nama: string;
+    targetBait: number;
+    kelasDefault: string;
+    fan: string;
+  }>({
+    nama: '',
+    targetBait: 100,
+    kelasDefault: '1 TSANAWIYAH',
+    fan: 'Nahwu'
+  });
+
+  // Helper mendapatkan target bait kitab
+  const getTargetBaitForKitab = (kitabName: string): number => {
+    if (nadzhomTargetBaitSettings[kitabName]) return nadzhomTargetBaitSettings[kitabName];
+    const found = nadzhomBooksList.find(b => b.nama.toLowerCase() === kitabName.toLowerCase());
+    return found ? found.targetBait : 100;
+  };
+
+  // Helper default kitab berdasarkan kelas
+  const getDefaultKitabForKelas = (kelasName: string): string => {
+    const found = nadzhomBooksList.find(b => b.kelasDefault === kelasName);
+    if (found) return found.nama;
+    if (kelasName.includes('1 TSAN')) return 'Nadzhom Alala';
+    if (kelasName.includes('2 TSAN')) return 'Nadzhom Al-Maqsud';
+    if (kelasName.includes('3 TSAN')) return 'Nadzhom Al-Imrithi';
+    if (kelasName.includes('1 ALIY')) return 'Al-Faraidul Bahiyyah';
+    if (kelasName.includes('2 ALIY')) return 'Al-Jauharul Maknun';
+    if (kelasName.includes('3 ALIY')) return 'Alfiyah Ibnu Malik';
+    return 'Nadzhom Al-Imrithi';
+  };
+
+  // Helper mengambil data hafalan santri terkini secara real-time
+  const getSantriNadzhomData = (santri: Santri) => {
+    if (editedNadzhomState[santri.id]) {
+      return editedNadzhomState[santri.id];
+    }
+    const myRecords = nadzhomList.filter(n => n.idSantri === santri.id);
+    const latest = myRecords[0];
+
+    const kitab = latest?.kitab || santri.kitabMuhafadzoh || getDefaultKitabForKelas(santri.kelas);
+    const bait = latest ? Number(latest.bait) : Number(santri.nilaiMuhafadzoh ?? 0);
+    const targetBait = latest?.targetBait || getTargetBaitForKitab(kitab);
+    const nilai = latest?.nilai || santri.predikatMuhafadzoh || (bait >= targetBait && targetBait > 0 ? 'Mumtaz (A+)' : 'Jayyid Jiddan (B+)');
+    const tanggal = latest?.tanggal || new Date().toISOString().split('T')[0];
+    const catatan = latest?.catatan || santri.catatanMuhafadzoh || 'Lancar makhorijul huruf & tartil';
+
+    return { kitab, bait, targetBait, nilai, tanggal, catatan };
+  };
+
+  // Handler saat kolom pada tabel diubah (Kitab, Bait, Target, Nilai, Tanggal, Catatan)
+  const handleNadzhomFieldChange = (
+    idSantri: string,
+    santriObj: Santri,
+    field: 'kitab' | 'bait' | 'targetBait' | 'nilai' | 'tanggal' | 'catatan',
+    val: any
+  ) => {
+    const current = getSantriNadzhomData(santriObj);
+    let updated = { ...current, [field]: val };
+
+    // Jika kitab diubah, sesuaikan target bait otomatis
+    if (field === 'kitab') {
+      updated.targetBait = getTargetBaitForKitab(val);
+      if (updated.bait >= updated.targetBait && updated.targetBait > 0) {
+        updated.nilai = 'Mumtaz (A+)';
+      }
+    }
+    if (field === 'bait') {
+      const num = Math.max(0, parseInt(val) || 0);
+      updated.bait = num;
+      if (num >= updated.targetBait && updated.targetBait > 0) {
+        updated.nilai = 'Mumtaz (A+)';
+      }
+    }
+    if (field === 'targetBait') {
+      const num = Math.max(1, parseInt(val) || 1);
+      updated.targetBait = num;
+      if (updated.bait >= num) {
+        updated.nilai = 'Mumtaz (A+)';
+      }
+    }
+
+    setEditedNadzhomState(prev => ({
+      ...prev,
+      [idSantri]: updated
+    }));
+    setNadzhomSaveSuccess(false);
+  };
+
+  // Handler Simpan Single Baris Santri (Tersinkronisasi Real-Time ke Dashboard Wali Santri)
+  const handleSaveSingleSantriNadzhom = (santri: Santri) => {
+    const data = getSantriNadzhomData(santri);
+    const myRecords = nadzhomList.filter(n => n.idSantri === santri.id);
+    const existingRec = myRecords[0];
+
+    const rec: NadzhomRecord = {
+      idRow: existingRec ? existingRec.idRow : Date.now(),
+      idSantri: santri.id,
+      nama: santri.nama,
+      kelas: santri.kelas,
+      kitab: data.kitab,
+      bait: data.bait,
+      targetBait: data.targetBait,
+      nilai: data.nilai,
+      tanggal: data.tanggal,
+      catatan: data.catatan || 'Lancar makhorijul huruf & tartil'
+    };
+
+    onSaveNadzhom(rec);
+
+    // Langsung perbarui profil santri agar wali santri melihat di portalnya secara real-time
+    if (onUpdateSantriProfile) {
+      onUpdateSantriProfile({
+        ...santri,
+        kitabMuhafadzoh: data.kitab,
+        nilaiMuhafadzoh: data.bait,
+        predikatMuhafadzoh: data.nilai,
+        catatanMuhafadzoh: data.catatan || 'Lancar makhorijul huruf & tartil'
+      });
+    }
+
+    setSavedRowIndicator(prev => ({ ...prev, [santri.id]: true }));
+    setTimeout(() => {
+      setSavedRowIndicator(prev => ({ ...prev, [santri.id]: false }));
+    }, 2500);
+  };
+
+  // Handler Simpan Semua Baris (Batch Real-Time ke Dashboard Wali Santri)
+  const handleSaveAllNadzhom = () => {
+    setIsSavingNadzhom(true);
+    const targetSantri = santriList.filter(s => selectedNadzhomKelas === 'SEMUA' || s.kelas === selectedNadzhomKelas);
+    const recordsToSave: NadzhomRecord[] = [];
+
+    targetSantri.forEach(santri => {
+      const data = getSantriNadzhomData(santri);
+      const myRecords = nadzhomList.filter(n => n.idSantri === santri.id);
+      const existingRec = myRecords[0];
+
+      const rec: NadzhomRecord = {
+        idRow: existingRec ? existingRec.idRow : (Date.now() + Math.floor(Math.random() * 10000)),
+        idSantri: santri.id,
+        nama: santri.nama,
+        kelas: santri.kelas,
+        kitab: data.kitab,
+        bait: data.bait,
+        targetBait: data.targetBait,
+        nilai: data.nilai,
+        tanggal: data.tanggal,
+        catatan: data.catatan || 'Lancar makhorijul huruf & tartil'
+      };
+      recordsToSave.push(rec);
+
+      // Update santri profile real-time
+      if (onUpdateSantriProfile) {
+        onUpdateSantriProfile({
+          ...santri,
+          kitabMuhafadzoh: data.kitab,
+          nilaiMuhafadzoh: data.bait,
+          predikatMuhafadzoh: data.nilai,
+          catatanMuhafadzoh: data.catatan || 'Lancar makhorijul huruf & tartil'
+        });
+      }
+    });
+
+    if (onSaveBatchNadzhom) {
+      onSaveBatchNadzhom(recordsToSave);
+    } else {
+      recordsToSave.forEach(r => onSaveNadzhom(r));
+    }
+
+    setTimeout(() => {
+      setIsSavingNadzhom(false);
+      setNadzhomSaveSuccess(true);
+      setTimeout(() => setNadzhomSaveSuccess(false), 3000);
+    }, 400);
+  };
+
+  // Quick increment/decrement bait (-10, -5, +5, +10, +25, Khatam, Reset)
+  const handleQuickIncrementBait = (santri: Santri, delta: number | 'khatam' | 'reset') => {
+    const current = getSantriNadzhomData(santri);
+    let newBait = current.bait;
+    if (delta === 'khatam') {
+      newBait = current.targetBait;
+    } else if (delta === 'reset') {
+      newBait = 0;
+    } else {
+      newBait = Math.max(0, Math.min(current.targetBait > 0 ? current.targetBait : 2000, current.bait + delta));
+    }
+    handleNadzhomFieldChange(santri.id, santri, 'bait', newBait);
+  };
+
+  // Handler simpan target bait setting dari modal
+  const handleSaveTargetBaitSetting = (kitabName: string, newTarget: number) => {
+    const updated = {
+      ...nadzhomTargetBaitSettings,
+      [kitabName]: Math.max(1, newTarget)
+    };
+    setNadzhomTargetBaitSettings(updated);
+    try {
+      localStorage.setItem('sim_nadzhom_targets', JSON.stringify(updated));
+    } catch {}
+  };
+
+  // Handler tambah kitab baru di modal setting
+  const handleAddNewNadzhomBook = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBookForm.nama.trim()) return;
+    const exists = nadzhomBooksList.some(b => b.nama.trim().toLowerCase() === newBookForm.nama.trim().toLowerCase());
+    if (exists) {
+      alert('Kitab dengan nama tersebut sudah ada.');
+      return;
+    }
+    const newBook: NadzhomBookConfig = {
+      nama: newBookForm.nama.trim(),
+      targetBait: Number(newBookForm.targetBait) || 100,
+      kelasDefault: newBookForm.kelasDefault,
+      fan: newBookForm.fan.trim() || 'Umum',
+      isCustom: true
+    };
+    const updated = [...nadzhomBooksList, newBook];
+    setNadzhomBooksList(updated);
+    try {
+      localStorage.setItem('sim_nadzhom_books_config', JSON.stringify(updated));
+    } catch {}
+
+    handleSaveTargetBaitSetting(newBook.nama, newBook.targetBait);
+    setNewBookForm({ nama: '', targetBait: 100, kelasDefault: '1 TSANAWIYAH', fan: 'Nahwu' });
+    alert(`Kitab "${newBook.nama}" berhasil ditambahkan ke daftar nadzhom.`);
+  };
+
+  // Handler hapus kitab custom
+  const handleDeleteNadzhomBook = (bookName: string) => {
+    if (!window.confirm(`Hapus kitab "${bookName}" dari daftar setting?`)) return;
+    const updated = nadzhomBooksList.filter(b => b.nama !== bookName);
+    setNadzhomBooksList(updated);
+    try {
+      localStorage.setItem('sim_nadzhom_books_config', JSON.stringify(updated));
+    } catch {}
+  };
+
+  // Handler Terapkan Kitab & Target Bait Masal ke Seluruh Santri di Kelas Terpilih
+  const handleBatchApplyKitabToKelas = (kelasName: string, kitabName: string, targetBaitNum: number) => {
+    const targets = santriList.filter(s => s.kelas === kelasName);
+    if (!targets.length) {
+      alert(`Tidak ada santri yang terdaftar di kelas ${kelasName}`);
+      return;
+    }
+
+    setEditedNadzhomState(prev => {
+      const copy = { ...prev };
+      targets.forEach(s => {
+        const cur = copy[s.id] || getSantriNadzhomData(s);
+        copy[s.id] = {
+          ...cur,
+          kitab: kitabName,
+          targetBait: targetBaitNum
+        };
+      });
+      return copy;
+    });
+
+    alert(`Kitab "${kitabName}" (${targetBaitNum} bait) berhasil disetting untuk ${targets.length} santri kelas ${kelasName}. Silakan klik "Simpan Semua (Sync Wali)" untuk menyinkronkan data secara real-time.`);
+  };
+
+  // Handler Tambah Bait Cepat untuk Seluruh Santri di Kelas Terpilih
+  const handleClassBatchIncrement = (delta: number | 'khatam') => {
+    const targets = santriList.filter(s => selectedNadzhomKelas === 'SEMUA' || s.kelas === selectedNadzhomKelas);
+    if (!targets.length) return;
+
+    setEditedNadzhomState(prev => {
+      const copy = { ...prev };
+      targets.forEach(s => {
+        const cur = copy[s.id] || getSantriNadzhomData(s);
+        let newBait = cur.bait;
+        if (delta === 'khatam') {
+          newBait = cur.targetBait;
+        } else {
+          newBait = Math.max(0, Math.min(cur.targetBait > 0 ? cur.targetBait : 2000, cur.bait + delta));
+        }
+        let newNilai = cur.nilai;
+        if (newBait >= cur.targetBait && cur.targetBait > 0) {
+          newNilai = 'Mumtaz (A+)';
+        }
+        copy[s.id] = {
+          ...cur,
+          bait: newBait,
+          nilai: newNilai
+        };
+      });
+      return copy;
+    });
+    setNadzhomSaveSuccess(false);
+  };
+
+  // Handler Submit Input Setoran Baru
+  const handleAddSetoranSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNadzhomEntry.idSantri) {
+      alert('Pilih santri terlebih dahulu.');
+      return;
+    }
+    const foundSantri = santriList.find(s => s.id === newNadzhomEntry.idSantri);
+    if (!foundSantri) return;
+
+    const rec: NadzhomRecord = {
+      idRow: Date.now(),
+      idSantri: foundSantri.id,
+      nama: foundSantri.nama,
+      kelas: foundSantri.kelas,
+      kitab: newNadzhomEntry.kitab,
+      bait: Number(newNadzhomEntry.bait),
+      targetBait: newNadzhomEntry.targetBait || getTargetBaitForKitab(newNadzhomEntry.kitab),
+      nilai: newNadzhomEntry.nilai,
+      tanggal: newNadzhomEntry.tanggal,
+      catatan: newNadzhomEntry.catatan || 'Lancar makhorijul huruf & tartil'
+    };
+
+    onSaveNadzhom(rec);
+
+    // Sinkronisasi langsung ke profil santri agar wali santri melihat di portal secara real-time
+    if (onUpdateSantriProfile) {
+      onUpdateSantriProfile({
+        ...foundSantri,
+        kitabMuhafadzoh: rec.kitab,
+        nilaiMuhafadzoh: rec.bait,
+        predikatMuhafadzoh: rec.nilai,
+        catatanMuhafadzoh: rec.catatan
+      });
+    }
+
+    // Update local edited state
+    setEditedNadzhomState(prev => ({
+      ...prev,
+      [foundSantri.id]: {
+        kitab: rec.kitab,
+        bait: rec.bait,
+        targetBait: rec.targetBait || 100,
+        nilai: rec.nilai,
+        tanggal: rec.tanggal,
+        catatan: rec.catatan
+      }
+    }));
+
+    setIsAddNadzhomModalOpen(false);
+    alert(`Setoran ${foundSantri.nama} (${rec.bait} bait ${rec.kitab}) berhasil disimpan & disinkronkan ke Wali Santri.`);
+  };
+
+  // Ekspor Rekap Nadzhom ke CSV
+  const handleExportNadzhomCSV = () => {
+    const headers = ['NO', 'NIS', 'NAMA SANTRI', 'KELAS', 'KITAB NADZHOM', 'BAIT DIHAFAL', 'TARGET BAIT', 'PERSENTASE', 'STATUS / NILAI', 'TANGGAL SETORAN', 'CATATAN USTADZ'];
+    const filtered = santriList.filter(s => {
+      const matchKelas = selectedNadzhomKelas === 'SEMUA' || s.kelas === selectedNadzhomKelas;
+      const matchSearch = !nadzhomSearchQuery.trim() || 
+        s.nama.toLowerCase().includes(nadzhomSearchQuery.toLowerCase()) || 
+        s.id.toLowerCase().includes(nadzhomSearchQuery.toLowerCase());
+      return matchKelas && matchSearch;
+    });
+
+    const rows = filtered.map((s, idx) => {
+      const data = getSantriNadzhomData(s);
+      const pct = data.targetBait > 0 ? Math.round((data.bait / data.targetBait) * 100) : 0;
+      return [
+        idx + 1,
+        `"${s.id}"`,
+        `"${s.nama}"`,
+        `"${s.kelas}"`,
+        `"${data.kitab}"`,
+        data.bait,
+        data.targetBait,
+        `"${pct}%"`,
+        `"${data.nilai}"`,
+        `"${data.tanggal}"`,
+        `"${data.catatan || ''}"`
+      ].join(',');
+    });
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Rekap_Setoran_Nadzhom_${selectedNadzhomKelas.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Simpan Absensi Guru per Hari & Kelas yang sedang dipilih (Dapat dipanggil dari Option Panel maupun tombol internal)
   const handleSaveGuruAbsensiSubmit = () => {
@@ -812,6 +1695,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedPengurusId, setSelectedPengurusId] = useState<string>(
     pengurusList[0]?.id || 'PGR-01'
   );
+
+  useEffect(() => {
+    if (pengurusList && pengurusList.length > 0 && !pengurusList.some(p => p.id === selectedPengurusId)) {
+      setSelectedPengurusId(pengurusList[0].id);
+    }
+  }, [pengurusList, selectedPengurusId]);
+
   const currentSelectedPengurus = useMemo(() => {
     return pengurusList.find(p => p.id === selectedPengurusId) || pengurusList[0];
   }, [pengurusList, selectedPengurusId]);
@@ -2274,21 +3164,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {/* 2. REKAPAN BULANAN TABEL KEHADIRAN SANTRI & GURU + CETAK PDF, WORD, SHEETS */}
             {/* ========================================================================= */}
             <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/40 space-y-5 bg-[#03190f]">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-[#d4af37]/25">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 pb-4 border-b border-[#d4af37]/25">
                 <div>
                   <div className="flex items-center space-x-2">
                     <Calendar className="w-5 h-5 text-[#d4af37]" />
                     <h3 className="text-base sm:text-lg font-black text-white text-gold-3d">
-                      Rekapan Bulanan Kehadiran Santri & Guru (Tanggal 1 s/d 30)
+                      Rekapan Bulanan Kehadiran Santri & Guru
                     </h3>
                   </div>
                   <p className="text-xs text-emerald-200 mt-1">
-                    Tabel akumulasi kehadiran santri dan ustadz pengajar satu bulan penuh dengan fitur ekspor multi-format resmi.
+                    Sistem otomatis berbasis Bulan + Tahun terpilih. Perhitungan otomatis dimulai dari 0 saat berganti bulan tanpa mencampur data bulan sebelumnya.
                   </p>
                 </div>
 
-                {/* Tab Switcher & Action Buttons */}
+                {/* Filter Bulan & Tahun Terpadu */}
                 <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-2 bg-[#042013] border border-[#d4af37]/60 rounded-xl px-3 py-1.5 shadow-inner">
+                    <span className="text-xs font-bold text-[#d4af37] whitespace-nowrap">Filter Bulan & Tahun:</span>
+                    <select
+                      value={dashboardRekapTab === 'santri' ? selectedBulanSantri : selectedBulanGuru}
+                      onChange={(e) => {
+                        setSelectedBulanSantri(e.target.value);
+                        setSelectedBulanGuru(e.target.value);
+                      }}
+                      className="bg-[#02130b] border border-[#d4af37]/60 rounded-lg px-2.5 py-1 text-xs text-[#f3e5ab] font-bold focus:outline-none cursor-pointer"
+                    >
+                      {DAFTAR_TAHUN_REKAP.flatMap(th => DAFTAR_BULAN_REKAP.map(bln => `${bln} ${th}`)).map(opt => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Tab Switcher */}
                   <div className="flex bg-[#042013] border border-[#d4af37]/40 rounded-xl p-1">
                     <button
                       onClick={() => setDashboardRekapTab('santri')}
@@ -2322,11 +3229,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <button
                       onClick={() => {
                         if (dashboardRekapTab === 'santri') {
-                          const headers = ['NO', 'NIS', 'NAMA SANTRI', 'KELAS', 'HADIR (1-30)', 'IZIN', 'SAKIT', 'ALPHA', 'PERSENTASE (%)', 'KETERANGAN'];
+                          const headers = ['NO', 'NIS', 'NAMA SANTRI', 'KELAS', `HADIR (${selectedBulanSantri})`, 'IZIN', 'SAKIT', 'ALPHA', 'PERSENTASE (%)', 'KETERANGAN'];
                           const rows = rekapBulananSantri.map((s, idx) => [idx + 1, s.id, s.nama, s.kelas, s.hadir, s.izin, s.sakit, s.alpha, `${s.persentase}%`, s.keterangan]);
                           downloadCSV(`Rekap_Bulanan_Santri_${selectedBulanSantri.replace(' ', '_')}`, headers, rows);
                         } else {
-                          const headers = ['NO', 'NAMA USTADZ', 'MAPEL', 'KELAS', 'TOTAL SESI', 'HADIR', 'IZIN', 'SAKIT/TELAT', 'ALPHA', 'PERSENTASE (%)', 'PREDIKAT'];
+                          const headers = ['NO', 'NAMA USTADZ', 'MAPEL', 'KELAS', 'TOTAL SESI', `HADIR (${selectedBulanGuru})`, 'IZIN', 'SAKIT/TELAT', 'ALPHA', 'PERSENTASE (%)', 'PREDIKAT'];
                           const rows = rekapBulananGuru.map((g, idx) => [idx + 1, g.nama, g.mapel, g.kelas, g.totalSesi, g.hadir, g.izin, g.sakitTelat, g.alpha, `${g.persentase}%`, g.predikat]);
                           downloadCSV(`Rekap_Bulanan_Guru_${selectedBulanGuru.replace(' ', '_')}`, headers, rows);
                         }
@@ -2335,17 +3242,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       title="Unduh format Google Spreadsheet / CSV"
                     >
                       <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Google Spreadsheet</span>
+                      <span>Spreadsheet</span>
                     </button>
 
                     <button
                       onClick={() => {
                         if (dashboardRekapTab === 'santri') {
-                          const headers = ['NO', 'NIS', 'NAMA SANTRI', 'KELAS', 'HADIR (TGL 1-30)', 'IZIN', 'SAKIT', 'ALPHA', 'PERSENTASE', 'KETERANGAN'];
+                          const headers = ['NO', 'NIS', 'NAMA SANTRI', 'KELAS', `HADIR (${selectedBulanSantri})`, 'IZIN', 'SAKIT', 'ALPHA', 'PERSENTASE', 'KETERANGAN'];
                           const rows = rekapBulananSantri.map((s, idx) => [idx + 1, s.id, s.nama, s.kelas, `${s.hadir} kali`, `${s.izin} kali`, `${s.sakit} kali`, `${s.alpha} kali`, `${s.persentase}%`, s.keterangan]);
                           downloadWord(`Rekap_Bulanan_Santri_${selectedBulanSantri.replace(' ', '_')}`, `REKAPITULASI KEHADIRAN SANTRI BULANAN (${selectedBulanSantri.toUpperCase()})`, headers, rows);
                         } else {
-                          const headers = ['NO', 'NAMA USTADZ', 'MAPEL', 'KELAS', 'TOTAL SESI', 'HADIR', 'IZIN', 'SAKIT/TELAT', 'ALPHA', 'PERSENTASE', 'PREDIKAT'];
+                          const headers = ['NO', 'NAMA USTADZ', 'MAPEL', 'KELAS', 'TOTAL SESI', `HADIR (${selectedBulanGuru})`, 'IZIN', 'SAKIT/TELAT', 'ALPHA', 'PERSENTASE', 'PREDIKAT'];
                           const rows = rekapBulananGuru.map((g, idx) => [idx + 1, g.nama, g.mapel, g.kelas, `${g.totalSesi} sesi`, `${g.hadir} kali`, `${g.izin} kali`, `${g.sakitTelat} kali`, `${g.alpha} kali`, `${g.persentase}%`, g.predikat]);
                           downloadWord(`Rekap_Bulanan_Guru_${selectedBulanGuru.replace(' ', '_')}`, `REKAPITULASI KEHADIRAN USTADZ/GURU BULANAN (${selectedBulanGuru.toUpperCase()})`, headers, rows);
                         }
@@ -2360,6 +3267,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
+              {/* Status Banner Bulan & Koneksi Real-Time */}
+              {(() => {
+                const curBulan = dashboardRekapTab === 'santri' ? selectedBulanSantri : selectedBulanGuru;
+                const totalMonthEntries = dashboardRekapTab === 'santri'
+                  ? combinedSantriLog.filter(a => isDateInSelectedMonth(a.tanggal, selectedBulanSantri)).length
+                  : combinedGuruLog.filter(l => isDateInSelectedMonth(l.tanggal, selectedBulanGuru)).length;
+
+                if (totalMonthEntries === 0) {
+                  return (
+                    <div className="p-3.5 rounded-2xl bg-emerald-950/70 border border-emerald-500/40 text-emerald-200 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                        <div>
+                          <span className="font-bold text-white text-xs block">
+                            Bulan Baru: {curBulan} (Perhitungan Dimulai dari 0)
+                          </span>
+                          <span className="text-[11px] text-emerald-300">
+                            Belum ada catatan absensi {dashboardRekapTab === 'santri' ? 'santri' : 'guru'} untuk bulan ini. Seluruh data bulan sebelumnya tetap aman tersimpan sebagai arsip.
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setManageMonthLogsTab(dashboardRekapTab);
+                          setShowManageMonthLogsModal(true);
+                        }}
+                        className="btn-3d-gold px-3.5 py-1.5 text-black font-extrabold text-xs rounded-xl shrink-0 flex items-center gap-1.5"
+                      >
+                        <Save className="w-3.5 h-3.5 text-black" />
+                        <span>+ Kelola / Tambah Log {curBulan}</span>
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="p-3 rounded-2xl bg-[#042013] border border-[#d4af37]/35 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold font-mono">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                        <span>Live Sync Terhubung</span>
+                      </span>
+                      <span className="text-white text-xs">
+                        Bulan Rekap: <b className="text-[#f3e5ab] font-bold">{curBulan}</b> • Terhitung Real-Time: <b className="text-emerald-300 font-bold">{totalMonthEntries}</b> data presensi
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setManageMonthLogsTab(dashboardRekapTab);
+                        setShowManageMonthLogsModal(true);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-amber-400/20 border border-amber-400/50 text-[#f3e5ab] hover:bg-amber-400/30 text-xs font-bold transition flex items-center gap-1.5 self-end sm:self-center"
+                    >
+                      <Clock className="w-3.5 h-3.5 text-[#d4af37]" />
+                      <span>Kelola & Edit Log Presensi ({totalMonthEntries})</span>
+                    </button>
+                  </div>
+                );
+              })()}
+
               {/* Tampilan Tabel Rekap Santri */}
               {dashboardRekapTab === 'santri' && (
                 <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
@@ -2370,7 +3337,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <th className="p-3 w-28">NIS</th>
                         <th className="p-3">NAMA SANTRI</th>
                         <th className="p-3 w-32">ANGKATAN / KELAS</th>
-                        <th className="p-3 w-28 text-center text-emerald-300 bg-emerald-950/40">HADIR (1-30)</th>
+                        <th className="p-3 w-28 text-center text-emerald-300 bg-emerald-950/40">HADIR ({selectedBulanSantri})</th>
                         <th className="p-3 w-20 text-center text-amber-300 bg-amber-950/30">IZIN</th>
                         <th className="p-3 w-20 text-center text-blue-300 bg-blue-950/30">SAKIT</th>
                         <th className="p-3 w-20 text-center text-red-300 bg-red-950/30">ALPHA</th>
@@ -2392,6 +3359,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <td className="p-3 text-center font-mono font-extrabold text-[#d4af37] text-gold-3d">{s.persentase}%</td>
                           <td className="p-3 text-center">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              s.totalSesi === 0 ? 'bg-slate-800 text-slate-400 border border-slate-700' :
                               s.persentase >= 95 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
                               s.persentase >= 85 ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40' :
                               'bg-amber-500/20 text-amber-300 border border-amber-500/40'
@@ -2416,7 +3384,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <th className="p-3">NAMA USTADZ / USTADZAH</th>
                         <th className="p-3">MATA PELAJARAN</th>
                         <th className="p-3 w-32">ANGKATAN</th>
-                        <th className="p-3 w-28 text-center text-emerald-300 bg-emerald-950/40">HADIR (1-30)</th>
+                        <th className="p-3 w-28 text-center text-emerald-300 bg-emerald-950/40">MENGAJAR ({selectedBulanGuru})</th>
                         <th className="p-3 w-20 text-center text-amber-300 bg-amber-950/30">IZIN</th>
                         <th className="p-3 w-24 text-center text-orange-300 bg-orange-950/30">SAKIT/TELAT</th>
                         <th className="p-3 w-20 text-center text-red-300 bg-red-950/30">ALPHA</th>
@@ -2438,6 +3406,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <td className="p-3 text-center font-mono font-extrabold text-[#d4af37] text-gold-3d">{g.persentase}%</td>
                           <td className="p-3 text-center">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              g.totalSesi === 0 ? 'bg-slate-800 text-slate-400 border border-slate-700' :
                               g.persentase >= 95 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
                               g.persentase >= 85 ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40' :
                               'bg-amber-500/20 text-amber-300 border border-amber-500/40'
@@ -2453,8 +3422,309 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               )}
             </div>
 
-            {/* ========================================================================= */}
-            {/* 3. FITUR KALENDER AKADEMIK (BISA DI-EDIT DI OPTION PANEL)                  */}
+            {/* MODAL KELOLA & EDIT LOG ABSENSI BULAN INI (REAL-TIME SINKRONISASI KE REKAPAN) */}
+            {showManageMonthLogsModal && (
+              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+                <div className="card-3d rounded-3xl p-5 sm:p-6 max-w-4xl w-full border-2 border-[#d4af37] bg-gradient-to-b from-[#062d1c] to-[#02140c] space-y-4 shadow-2xl max-h-[90vh] flex flex-col">
+                  {/* Modal Header */}
+                  <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/30 shrink-0">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-[#d4af37] shadow">
+                        <Clock className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-extrabold text-white text-gold-3d">
+                          Kelola & Edit Log Presensi ({manageMonthLogsTab === 'santri' ? selectedBulanSantri : selectedBulanGuru})
+                        </h4>
+                        <p className="text-xs text-emerald-300">
+                          Setiap penambahan, pengeditan status, atau penghapusan absensi di sini langsung memperbarui Rekapan Bulanan secara real-time.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowManageMonthLogsModal(false)}
+                      className="p-1.5 rounded-xl bg-red-950/80 border border-red-500/40 text-red-300 hover:bg-red-900 transition"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Tab Selector & Controls */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
+                    <div className="flex bg-[#042013] border border-[#d4af37]/40 rounded-xl p-1">
+                      <button
+                        onClick={() => setManageMonthLogsTab('santri')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                          manageMonthLogsTab === 'santri' ? 'bg-[#d4af37] text-black shadow' : 'text-emerald-200 hover:text-white'
+                        }`}
+                      >
+                        Log Santri ({combinedSantriLog.filter(a => isDateInSelectedMonth(a.tanggal, selectedBulanSantri)).length})
+                      </button>
+                      <button
+                        onClick={() => setManageMonthLogsTab('guru')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                          manageMonthLogsTab === 'guru' ? 'bg-[#d4af37] text-black shadow' : 'text-emerald-200 hover:text-white'
+                        }`}
+                      >
+                        Log Ustadz/Guru ({combinedGuruLog.filter(l => isDateInSelectedMonth(l.tanggal, selectedBulanGuru)).length})
+                      </button>
+                    </div>
+
+                    <div className="text-xs text-emerald-300 font-mono">
+                      Target Bulan: <b className="text-[#f3e5ab] font-bold">{manageMonthLogsTab === 'santri' ? selectedBulanSantri : selectedBulanGuru}</b>
+                    </div>
+                  </div>
+
+                  {/* Form Tambah Presensi Cepat untuk Bulan Ini */}
+                  <div className="bg-[#03180f] p-3.5 rounded-2xl border border-[#d4af37]/30 space-y-2 shrink-0">
+                    <span className="text-[11px] font-bold text-[#d4af37] block">
+                      + Tambah Presensi Manual ke Bulan {manageMonthLogsTab === 'santri' ? selectedBulanSantri : selectedBulanGuru}
+                    </span>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const form = e.currentTarget;
+                        const tanggal = (form.elements.namedItem('formTanggal') as HTMLInputElement).value;
+                        const targetId = (form.elements.namedItem('formTargetId') as HTMLSelectElement).value;
+                        const status = (form.elements.namedItem('formStatus') as HTMLSelectElement).value;
+                        const keterangan = (form.elements.namedItem('formKeterangan') as HTMLInputElement).value;
+
+                        if (!tanggal || !targetId) {
+                          alert('Mohon lengkapi tanggal dan nama!');
+                          return;
+                        }
+
+                        if (manageMonthLogsTab === 'santri') {
+                          const santri = santriList.find(s => s.id === targetId || s.nama === targetId);
+                          if (!santri) return;
+                          const newRecord: AbsensiSantriRecord = {
+                            tanggal,
+                            idSantri: santri.id,
+                            nama: santri.nama,
+                            kelas: santri.kelas,
+                            status: status as any,
+                            keterangan: keterangan || 'Input manual admin'
+                          };
+                          onSaveAbsensiSantri([newRecord]);
+                          setRekapSantriLog(prev => [newRecord, ...prev.filter(p => !(p.tanggal === tanggal && (p.idSantri === santri.id || p.nama === santri.nama)))]);
+                          alert(`Presensi santri ${santri.nama} (${status}) berhasil ditambahkan dan otomatis memperbarui rekapan bulanan!`);
+                        } else {
+                          const guru = guruList.find(g => g.nama === targetId);
+                          if (!guru) return;
+                          const newRecord: AbsensiGuruRecord = {
+                            tanggal,
+                            nama: guru.nama,
+                            mapel: guru.mapel,
+                            kelas: guru.kelas,
+                            status: status as any,
+                            catatan: keterangan || 'Input manual admin',
+                            hari: 'SENIN',
+                            jamKe: 1,
+                            waktu: '08:00 - 09:00'
+                          };
+                          onSaveAbsensiGuru([newRecord]);
+                          setRekapGuruLog(prev => [newRecord, ...prev.filter(p => !(p.tanggal === tanggal && p.nama === guru.nama && p.kelas === guru.kelas && String(p.jamKe) === '1'))]);
+                          alert(`Presensi guru ${guru.nama} (${status}) berhasil ditambahkan dan otomatis memperbarui rekapan bulanan!`);
+                        }
+                        form.reset();
+                      }}
+                      className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs"
+                    >
+                      <div>
+                        <input
+                          name="formTanggal"
+                          type="date"
+                          defaultValue={new Date().toISOString().split('T')[0]}
+                          className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <select
+                          name="formTargetId"
+                          className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                          required
+                        >
+                          <option value="">{manageMonthLogsTab === 'santri' ? '-- Pilih Santri --' : '-- Pilih Ustadz/Guru --'}</option>
+                          {manageMonthLogsTab === 'santri'
+                            ? santriList.map(s => <option key={s.id} value={s.id}>{s.nama} ({s.kelas})</option>)
+                            : Array.from(new Set(guruList.map(g => g.nama))).map(nama => <option key={nama} value={nama}>{nama}</option>)
+                          }
+                        </select>
+                      </div>
+                      <div className="flex gap-2">
+                        <select
+                          name="formStatus"
+                          defaultValue="Hadir"
+                          className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl px-2.5 py-1.5 text-xs text-[#f3e5ab] font-bold"
+                        >
+                          <option value="Hadir">Hadir</option>
+                          {manageMonthLogsTab === 'guru' && <option value="Terlambat">Terlambat</option>}
+                          <option value="Izin">Izin</option>
+                          {manageMonthLogsTab === 'santri' && <option value="Sakit">Sakit</option>}
+                          <option value="Alpha">Alpha</option>
+                        </select>
+                        <input
+                          name="formKeterangan"
+                          type="text"
+                          placeholder="Keterangan..."
+                          className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                        />
+                      </div>
+                      <div>
+                        <button
+                          type="submit"
+                          className="w-full btn-3d-gold py-1.5 text-black font-extrabold text-xs rounded-xl shadow"
+                        >
+                          + Simpan Presensi
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Daftar Catatan Absensi Bulan Terpilih */}
+                  <div className="flex-1 overflow-y-auto rounded-2xl border border-[#d4af37]/25 bg-[#020e08]">
+                    {manageMonthLogsTab === 'santri' ? (
+                      (() => {
+                        const monthRecords = combinedSantriLog.filter(a => isDateInSelectedMonth(a.tanggal, selectedBulanSantri));
+                        if (monthRecords.length === 0) {
+                          return (
+                            <div className="p-8 text-center text-emerald-300 text-xs">
+                              Belum ada catatan absensi santri di bulan <b>{selectedBulanSantri}</b>. Perhitungan rekap bulanan bernilai 0.
+                            </div>
+                          );
+                        }
+                        return (
+                          <table className="w-full text-xs text-left min-w-[650px]">
+                            <thead className="bg-[#052216] text-[#d4af37] sticky top-0">
+                              <tr>
+                                <th className="p-2.5 w-24">TANGGAL</th>
+                                <th className="p-2.5">NAMA SANTRI</th>
+                                <th className="p-2.5 w-28">KELAS</th>
+                                <th className="p-2.5 w-24 text-center">STATUS</th>
+                                <th className="p-2.5">KETERANGAN</th>
+                                <th className="p-2.5 w-36 text-center text-amber-300">UBAH / HAPUS</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#d4af37]/10">
+                              {monthRecords.map((rec, idx) => (
+                                <tr key={`${rec.tanggal}_${rec.idSantri || rec.nama}_${idx}`} className="hover:bg-[#d4af37]/5 transition">
+                                  <td className="p-2.5 font-mono text-emerald-300 font-bold">{rec.tanggal}</td>
+                                  <td className="p-2.5 font-bold text-white">{rec.nama}</td>
+                                  <td className="p-2.5 text-emerald-200">{rec.kelas}</td>
+                                  <td className="p-2.5 text-center">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                      rec.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50' :
+                                      rec.status === 'Izin' ? 'bg-amber-950 text-amber-300 border-amber-500/50' :
+                                      rec.status === 'Sakit' ? 'bg-blue-950 text-blue-300 border-blue-500/50' :
+                                      'bg-red-950 text-red-300 border-red-500/50'
+                                    }`}>
+                                      {rec.status}
+                                    </span>
+                                  </td>
+                                  <td className="p-2.5 text-slate-300 text-[11px] italic">{rec.keterangan || '-'}</td>
+                                  <td className="p-2.5 text-center">
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      <select
+                                        value={rec.status}
+                                        onChange={(e) => handleUpdateSantriStatus(rec, e.target.value as any)}
+                                        className="bg-[#03140c] border border-[#d4af37]/40 rounded-lg px-2 py-1 text-[11px] text-[#f3e5ab] font-bold focus:outline-none cursor-pointer"
+                                      >
+                                        <option value="Hadir">Hadir</option>
+                                        <option value="Izin">Izin</option>
+                                        <option value="Sakit">Sakit</option>
+                                        <option value="Alpha">Alpha</option>
+                                      </select>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteSantriAttendance(rec)}
+                                        className="p-1 rounded-lg bg-red-950/80 border border-red-500/40 text-red-300 hover:bg-red-900 transition"
+                                        title="Hapus catatan ini"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        );
+                      })()
+                    ) : (
+                      (() => {
+                        const monthLogs = combinedGuruLog.filter(l => isDateInSelectedMonth(l.tanggal, selectedBulanGuru));
+                        if (monthLogs.length === 0) {
+                          return (
+                            <div className="p-8 text-center text-emerald-300 text-xs">
+                              Belum ada catatan absensi guru di bulan <b>{selectedBulanGuru}</b>. Perhitungan rekap bulanan bernilai 0.
+                            </div>
+                          );
+                        }
+                        return (
+                          <table className="w-full text-xs text-left min-w-[700px]">
+                            <thead className="bg-[#052216] text-[#d4af37] sticky top-0">
+                              <tr>
+                                <th className="p-2.5 w-24">TANGGAL</th>
+                                <th className="p-2.5">NAMA USTADZ</th>
+                                <th className="p-2.5">MAPEL</th>
+                                <th className="p-2.5 w-28">KELAS</th>
+                                <th className="p-2.5 w-24 text-center">STATUS</th>
+                                <th className="p-2.5">CATATAN</th>
+                                <th className="p-2.5 w-36 text-center text-amber-300">UBAH / HAPUS</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#d4af37]/10">
+                              {monthLogs.map((item, idx) => (
+                                <tr key={`${item.tanggal}_${item.nama}_${item.jamKe}_${idx}`} className="hover:bg-[#d4af37]/5 transition">
+                                  <td className="p-2.5 font-mono text-emerald-300 font-bold">{item.tanggal}</td>
+                                  <td className="p-2.5 font-bold text-white">{item.nama}</td>
+                                  <td className="p-2.5 text-emerald-200">{item.mapel}</td>
+                                  <td className="p-2.5 text-[#d4af37] font-semibold">{item.kelas}</td>
+                                  <td className="p-2.5 text-center">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                      item.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50' :
+                                      item.status === 'Terlambat' ? 'bg-orange-950 text-orange-300 border-orange-500/50' :
+                                      item.status === 'Izin' ? 'bg-amber-950 text-amber-300 border-amber-500/50' :
+                                      'bg-red-950 text-red-300 border-red-500/50'
+                                    }`}>
+                                      {item.status}
+                                    </span>
+                                  </td>
+                                  <td className="p-2.5 text-slate-300 text-[11px] italic">{item.catatan || '-'}</td>
+                                  <td className="p-2.5 text-center">
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      <select
+                                        value={item.status}
+                                        onChange={(e) => handleUpdateGuruStatus(item, e.target.value as any)}
+                                        className="bg-[#03140c] border border-[#d4af37]/40 rounded-lg px-2 py-1 text-[11px] text-[#f3e5ab] font-bold focus:outline-none cursor-pointer"
+                                      >
+                                        <option value="Hadir">Hadir</option>
+                                        <option value="Terlambat">Terlambat</option>
+                                        <option value="Izin">Izin</option>
+                                        <option value="Alpha">Alpha</option>
+                                      </select>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteGuruAttendance(item)}
+                                        className="p-1 rounded-lg bg-red-950/80 border border-red-500/40 text-red-300 hover:bg-red-900 transition"
+                                        title="Hapus catatan ini"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        );
+                      })()
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
             {/* ========================================================================= */}
             <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 space-y-4 bg-[#03150d]">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[#d4af37]/20">
@@ -3341,12 +4611,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <th className="p-2.5 w-32">ANGKATAN</th>
                         <th className="p-2.5 w-28 text-center">STATUS</th>
                         <th className="p-2.5">KETERANGAN / SUMBER INPUT</th>
-                        <th className="p-2.5 w-28 text-center">SINKRONISASI</th>
+                        <th className="p-2.5 w-24 text-center">SINKRONISASI</th>
+                        <th className="p-2.5 w-36 text-center text-amber-300">AKSI REAL-TIME</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                      {absensiSantriList.slice(0, 8).map((rec, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/5 transition">
+                      {combinedSantriLog.slice(0, 15).map((rec, i) => (
+                        <tr key={`${rec.tanggal}_${rec.idSantri || rec.nama}_${i}`} className="hover:bg-[#d4af37]/5 transition">
                           <td className="p-2.5 font-mono text-emerald-300 font-bold">{rec.tanggal}</td>
                           <td className="p-2.5 font-bold text-white">
                             <span>{rec.nama}</span>
@@ -3375,6 +4646,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold font-mono">
                               ✓ Real-Time
                             </span>
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <select
+                                value={rec.status}
+                                onChange={(e) => handleUpdateSantriStatus(rec, e.target.value as any)}
+                                className="bg-[#03140c] border border-[#d4af37]/40 rounded-lg px-2 py-1 text-[11px] text-[#f3e5ab] font-bold focus:outline-none cursor-pointer"
+                                title="Ubah status presensi real-time"
+                              >
+                                <option value="Hadir">Hadir</option>
+                                <option value="Izin">Izin</option>
+                                <option value="Sakit">Sakit</option>
+                                <option value="Alpha">Alpha</option>
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSantriAttendance(rec)}
+                                className="p-1 rounded-lg bg-red-950/80 border border-red-500/40 text-red-300 hover:bg-red-900 transition"
+                                title="Hapus catatan presensi ini"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -3482,13 +4776,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span className="text-xs text-emerald-300 font-medium">Bulan Rekap:</span>
                   <select
                     value={selectedBulanSantri}
-                    onChange={(e) => setSelectedBulanSantri(e.target.value)}
-                    className="bg-[#052216] border border-[#d4af37]/40 rounded-xl px-3 py-1.5 text-xs text-[#f3e5ab] font-bold shadow-inner focus:outline-none"
+                    onChange={(e) => {
+                      setSelectedBulanSantri(e.target.value);
+                      setSelectedBulanGuru(e.target.value);
+                    }}
+                    className="bg-[#052216] border border-[#d4af37]/40 rounded-xl px-3 py-1.5 text-xs text-[#f3e5ab] font-bold shadow-inner focus:outline-none cursor-pointer"
                   >
-                    <option value="September 2026">September 2026</option>
-                    <option value="Oktober 2026">Oktober 2026</option>
-                    <option value="November 2026">November 2026</option>
-                    <option value="Desember 2026">Desember 2026</option>
+                    {DAFTAR_TAHUN_REKAP.flatMap(th => DAFTAR_BULAN_REKAP.map(bln => `${bln} ${th}`)).map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -3502,7 +4798,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3 w-28">NIS</th>
                       <th className="p-3">NAMA SANTRI</th>
                       <th className="p-3 w-32">ANGKATAN / KELAS</th>
-                      <th className="p-3 w-24 text-center text-emerald-300 font-bold bg-emerald-950/40">HADIR (TGL 1-30)</th>
+                      <th className="p-3 w-28 text-center text-emerald-300 font-bold bg-emerald-950/40">HADIR ({selectedBulanSantri})</th>
                       <th className="p-3 w-20 text-center text-amber-300 font-bold bg-amber-950/30">IZIN</th>
                       <th className="p-3 w-20 text-center text-blue-300 font-bold bg-blue-950/30">SAKIT</th>
                       <th className="p-3 w-20 text-center text-red-300 font-bold bg-red-950/30">ALPHA</th>
@@ -3702,6 +4998,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3 text-center w-24">Jarak</th>
                       <th className="p-3 text-center w-24">Akurasi GPS</th>
                       <th className="p-3 min-w-[150px]">Zona</th>
+                      <th className="p-3 text-center w-36 text-amber-300">Aksi Real-Time</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/15">
@@ -3781,12 +5078,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <td className="p-3 text-slate-300 text-[11px] truncate max-w-[180px]" title={zonaDisplay}>
                               {zonaDisplay}
                             </td>
+                            <td className="p-3 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <select
+                                  value={item.status}
+                                  onChange={(e) => handleUpdateGuruStatus(item, e.target.value as any)}
+                                  className="bg-[#03140c] border border-[#d4af37]/40 rounded-lg px-2 py-1 text-[11px] text-[#f3e5ab] font-bold focus:outline-none cursor-pointer"
+                                  title="Ubah status kehadiran guru real-time"
+                                >
+                                  <option value="Hadir">Hadir</option>
+                                  <option value="Terlambat">Terlambat</option>
+                                  <option value="Izin">Izin</option>
+                                  <option value="Alpha">Alpha</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteGuruAttendance(item)}
+                                  className="p-1 rounded-lg bg-red-950/80 border border-red-500/40 text-red-300 hover:bg-red-900 transition"
+                                  title="Hapus catatan presensi ini"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         );
                       })}
                     {combinedGuruLog.length === 0 && (
                       <tr>
-                        <td colSpan={11} className="p-8 text-center text-emerald-300">
+                        <td colSpan={12} className="p-8 text-center text-emerald-300">
                           Belum ada catatan absensi ustadz hari ini. Pengurus/Asatidz dapat melakukan presensi melalui Dashboard Pengurus.
                         </td>
                       </tr>
@@ -3927,13 +5247,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span className="text-xs text-emerald-300 font-medium">Bulan Rekap:</span>
                   <select
                     value={selectedBulanGuru}
-                    onChange={(e) => setSelectedBulanGuru(e.target.value)}
-                    className="bg-[#052216] border border-[#d4af37]/40 rounded-xl px-3 py-1.5 text-xs text-[#f3e5ab] font-bold shadow-inner focus:outline-none"
+                    onChange={(e) => {
+                      setSelectedBulanGuru(e.target.value);
+                      setSelectedBulanSantri(e.target.value);
+                    }}
+                    className="bg-[#052216] border border-[#d4af37]/40 rounded-xl px-3 py-1.5 text-xs text-[#f3e5ab] font-bold shadow-inner focus:outline-none cursor-pointer"
                   >
-                    <option value="September 2026">September 2026</option>
-                    <option value="Oktober 2026">Oktober 2026</option>
-                    <option value="November 2026">November 2026</option>
-                    <option value="Desember 2026">Desember 2026</option>
+                    {DAFTAR_TAHUN_REKAP.flatMap(th => DAFTAR_BULAN_REKAP.map(bln => `${bln} ${th}`)).map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -3947,7 +5269,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3">NAMA USTADZ / USTADZAH</th>
                       <th className="p-3">MATA PELAJARAN / KITAB</th>
                       <th className="p-3 w-32">KELAS DIASUH</th>
-                      <th className="p-3 w-28 text-center text-emerald-300 font-bold bg-emerald-950/40">MENGAJAR (TGL 1-30)</th>
+                      <th className="p-3 w-28 text-center text-emerald-300 font-bold bg-emerald-950/40">MENGAJAR ({selectedBulanGuru})</th>
                       <th className="p-3 w-20 text-center text-amber-300 font-bold bg-amber-950/30">IZIN</th>
                       <th className="p-3 w-24 text-center text-orange-300 font-bold bg-orange-950/30">SAKIT / TELAT</th>
                       <th className="p-3 w-20 text-center text-red-300 font-bold bg-red-950/30">ALPHA</th>
@@ -4236,6 +5558,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3.5 font-bold">MATA PELAJARAN / FAN</th>
                       <th className="p-3.5">USTADZ / USTADZAH PENGAJAR</th>
                       <th className="p-3.5 text-center w-28">STATUS</th>
+                      <th className="p-3.5 text-center w-32">SETTING / REVISI</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-emerald-500/15 bg-[#011008]/80">
@@ -4270,6 +5593,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               Aktif (Pagi/Siang)
                             </span>
                           </td>
+                          <td className="p-3.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingJadwal(item);
+                                setJadwalForm({
+                                  id: item.id || `JAD-${item.kelas}-${item.hari}-${item.jamKe}`,
+                                  hari: item.hari,
+                                  jamKe: item.jamKe,
+                                  waktu: item.waktu,
+                                  kelas: item.kelas,
+                                  mapel: item.mapel,
+                                  nama: item.nama || item.ustadz || '',
+                                  tingkatan: (item.kelas.includes('ALIYAH') || item.tingkatan === 'Aliyah' ? 'Aliyah' : 'Tsanawiyah') as 'Tsanawiyah' | 'Aliyah'
+                                });
+                                setShowAddJadwalModal(true);
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-600/30 hover:from-[#d4af37] hover:to-amber-400 text-amber-300 hover:text-black font-extrabold border border-amber-400/50 flex items-center justify-center gap-1.5 transition-all shadow-md hover:scale-105 mx-auto text-xs"
+                              title="Setting / Revisi Jadwal Ini"
+                            >
+                              <Settings2 className="w-3.5 h-3.5" />
+                              <span>Setting</span>
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     {jadwalList.filter(j => 
@@ -4278,7 +5625,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       (jadwalTsDay === 'SEMUA' || j.hari.toUpperCase() === jadwalTsDay.toUpperCase())
                     ).length === 0 && (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-emerald-300">
+                        <td colSpan={9} className="p-8 text-center text-emerald-300">
                           Tidak ada jadwal Tsanawiyah yang cocok dengan kombinasi kelas dan hari yang dipilih.
                         </td>
                       </tr>
@@ -4377,6 +5724,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3.5 font-bold">MATA PELAJARAN / FAN</th>
                       <th className="p-3.5">USTADZ / USTADZAH PENGAJAR</th>
                       <th className="p-3.5 text-center w-28">STATUS</th>
+                      <th className="p-3.5 text-center w-32">SETTING / REVISI</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-amber-500/15 bg-[#0e0701]/80">
@@ -4411,6 +5759,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               Sekolah Malam
                             </span>
                           </td>
+                          <td className="p-3.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingJadwal(item);
+                                setJadwalForm({
+                                  id: item.id || `JAD-${item.kelas}-${item.hari}-${item.jamKe}`,
+                                  hari: item.hari,
+                                  jamKe: item.jamKe,
+                                  waktu: item.waktu,
+                                  kelas: item.kelas,
+                                  mapel: item.mapel,
+                                  nama: item.nama || item.ustadz || '',
+                                  tingkatan: (item.kelas.includes('ALIYAH') || item.tingkatan === 'Aliyah' ? 'Aliyah' : 'Tsanawiyah') as 'Tsanawiyah' | 'Aliyah'
+                                });
+                                setShowAddJadwalModal(true);
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-600/30 hover:from-[#d4af37] hover:to-amber-400 text-amber-300 hover:text-black font-extrabold border border-amber-400/50 flex items-center justify-center gap-1.5 transition-all shadow-md hover:scale-105 mx-auto text-xs"
+                              title="Setting / Revisi Jadwal Ini"
+                            >
+                              <Settings2 className="w-3.5 h-3.5" />
+                              <span>Setting</span>
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     {jadwalList.filter(j => 
@@ -4419,7 +5791,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       (jadwalAlDay === 'SEMUA' || j.hari.toUpperCase() === jadwalAlDay.toUpperCase())
                     ).length === 0 && (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-amber-300">
+                        <td colSpan={9} className="p-8 text-center text-amber-300">
                           Tidak ada jadwal Aliyah yang cocok dengan kombinasi kelas dan hari malam yang dipilih.
                         </td>
                       </tr>
@@ -4666,18 +6038,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="card-3d rounded-3xl p-6 max-w-xl w-full border-2 border-[#d4af37] bg-gradient-to-b from-[#062d1c] to-[#02140c] space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
                   <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/30">
                     <div className="flex items-center space-x-3">
-                      <Calendar className="w-6 h-6 text-[#d4af37]" />
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-[#d4af37]">
+                        {editingJadwal ? <Settings2 className="w-5 h-5 text-[#d4af37]" /> : <Calendar className="w-5 h-5 text-[#d4af37]" />}
+                      </div>
                       <div>
                         <h4 className="text-base font-extrabold text-white text-gold-3d">
-                          {editingJadwal ? 'Edit Jadwal Pelajaran' : 'Tambah Jadwal Pelajaran Baru'}
+                          {editingJadwal ? 'Setting & Revisi Jadwal Pelajaran' : 'Tambah Jadwal Pelajaran Baru'}
                         </h4>
                         <p className="text-[11px] text-emerald-300">
-                          Tingkatan Tsanawiyah (Siang) atau Aliyah (Malam)
+                          {editingJadwal ? 'Perbaiki hari, jam ke, waktu, kelas, mapel, atau nama guru pengajar jika ada kekeliruan' : 'Tingkatan Tsanawiyah (Siang) atau Aliyah (Malam)'}
                         </p>
                       </div>
                     </div>
                     <button
-                      onClick={() => setShowAddJadwalModal(false)}
+                      onClick={() => {
+                        setShowAddJadwalModal(false);
+                        setEditingJadwal(null);
+                      }}
                       className="text-stone-400 hover:text-white text-lg font-bold"
                     >
                       ✕
@@ -4697,7 +6074,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           mapel: jadwalForm.mapel,
                           nama: jadwalForm.nama,
                           tingkatan: jadwalForm.tingkatan
-                        });
+                        }, editingJadwal || undefined);
+                        alert(`Jadwal pelajaran ${jadwalForm.mapel} (${jadwalForm.kelas} - ${jadwalForm.hari} Jam ke-${jadwalForm.jamKe}) berhasil ${editingJadwal ? 'direvisi' : 'disimpan'}!`);
                       }
                       setShowAddJadwalModal(false);
                       setEditingJadwal(null);
@@ -4836,21 +6214,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap justify-end gap-2 pt-3 border-t border-[#d4af37]/20 w-full">
-                      <button
-                        type="button"
-                        onClick={() => setShowAddJadwalModal(false)}
-                        className="px-4 py-2 rounded-xl bg-stone-900 border border-stone-700 text-stone-300 font-bold"
-                      >
-                        Batal
-                      </button>
-                      <button
-                        type="submit"
-                        className="btn-3d-gold px-6 py-2 rounded-xl text-black font-extrabold flex items-center gap-1.5 shadow-xl"
-                      >
-                        <Save className="w-4 h-4 text-black" />
-                        <span>Simpan Jadwal</span>
-                      </button>
+                    <div className="flex flex-wrap justify-between items-center gap-2 pt-3 border-t border-[#d4af37]/20 w-full">
+                      {editingJadwal && onDeleteJadwal && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`Yakin ingin menghapus jadwal ${editingJadwal.mapel} (${editingJadwal.kelas} - ${editingJadwal.hari} Jam ke-${editingJadwal.jamKe})?`)) {
+                              onDeleteJadwal(editingJadwal);
+                              setShowAddJadwalModal(false);
+                              setEditingJadwal(null);
+                              alert('Jadwal pelajaran berhasil dihapus!');
+                            }
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-500/50 text-red-200 text-xs font-bold flex items-center gap-1.5 transition shadow"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                          <span>Hapus Jadwal Ini</span>
+                        </button>
+                      )}
+                      <div className="flex items-center gap-2 ml-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAddJadwalModal(false);
+                            setEditingJadwal(null);
+                          }}
+                          className="px-4 py-2 rounded-xl bg-stone-900 border border-stone-700 text-stone-300 font-bold hover:bg-stone-800 transition"
+                        >
+                          Batal
+                        </button>
+                        <button
+                          type="submit"
+                          className="btn-3d-gold px-6 py-2 rounded-xl text-black font-extrabold flex items-center gap-1.5 shadow-xl hover:scale-102 transition"
+                        >
+                          <Save className="w-4 h-4 text-black" />
+                          <span>{editingJadwal ? 'Simpan Revisi Jadwal' : 'Simpan Jadwal'}</span>
+                        </button>
+                      </div>
                     </div>
                   </form>
                 </div>
@@ -5552,75 +6952,1756 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 7: SETORAN NADZHOM */}
+        {/* TAB 7: SETORAN NADZHOM REAL-TIME TERKONEKSI KE SANTRI & WALI SANTRI */}
         {activeTab === 'nadzhom' && (
-          <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-6">
-            <div className="flex justify-between items-center pb-3 border-b border-[#d4af37]/20">
-              <h3 className="text-lg font-bold text-[#d4af37] text-gold-3d">Setoran Nadzhom Seluruh Kelas</h3>
-              <span className="text-xs text-emerald-300 font-semibold">(Mode Tampilan Data)</span>
+          <div className="space-y-6">
+            {/* Header & Status Real-Time */}
+            <div className="card-3d-glass rounded-3xl p-6 border border-[#d4af37]/40 shadow-2xl relative overflow-hidden">
+              <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#f5e298]/80 to-transparent pointer-events-none" />
+
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 pb-4 border-b border-[#d4af37]/20">
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-[#093d25] border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow-xl">
+                    <BookOpen className="w-7 h-7 text-[#d4af37]" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold font-serif text-[#d4af37] text-gold-3d flex items-center gap-2">
+                      Setoran Nadzhom & Hafalan Santri
+                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-sans font-bold">
+                        Live Wali Santri Sync
+                      </span>
+                    </h3>
+                    <p className="text-xs text-emerald-200/90 mt-1">
+                      Terkoneksi langsung ke data santri secara real-time. Tabel dapat diedit langsung untuk mengatur jumlah bait dan kitab nadzhom. Setiap perubahan otomatis tersinkronisasi langsung ke Dashboard Wali Santri.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Status Badges & Save Feedback */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    Santri: <b className="text-white">{santriList.length}</b> Siswa
+                  </span>
+                  <span className="px-3 py-1.5 rounded-xl bg-amber-950/80 border border-[#d4af37]/40 text-[#d4af37] text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+                    <Award className="w-3.5 h-3.5 text-amber-400" />
+                    Total Setoran: <b className="text-white">{nadzhomList.length}</b> Catatan
+                  </span>
+                  {nadzhomSaveSuccess && (
+                    <span className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1.5 animate-bounce shadow-md">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Tersinkronisasi Real-Time ke Wali Santri!
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Class & Filter Selector Toolbar */}
+              <div className="pt-4 space-y-4">
+                {/* 1. Pemilihan Kelas Filter */}
+                <div>
+                  <label className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider mb-2 block flex items-center gap-1.5">
+                    <GraduationCap className="w-3.5 h-3.5 text-[#d4af37]" />
+                    Filter Kelas / Angkatan Santri:
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+                    {['SEMUA', ...classList].map((kelasName) => {
+                      const countSantri = kelasName === 'SEMUA' 
+                        ? santriList.length 
+                        : santriList.filter(s => s.kelas === kelasName).length;
+                      const isSelected = selectedNadzhomKelas === kelasName;
+                      return (
+                        <button
+                          key={kelasName}
+                          onClick={() => {
+                            setSelectedNadzhomKelas(kelasName);
+                            setNadzhomSaveSuccess(false);
+                          }}
+                          className={`px-3 py-2 rounded-2xl text-xs font-bold transition flex flex-col items-center justify-center gap-0.5 border ${
+                            isSelected
+                              ? 'bg-gradient-to-r from-[#d4af37] via-[#f3e5ab] to-[#c59b27] text-black border-amber-300 shadow-lg scale-[1.02]'
+                              : 'bg-[#041a0f]/90 text-emerald-200 hover:bg-[#08351e] border-[#d4af37]/30 hover:border-[#d4af37]'
+                          }`}
+                        >
+                          <span className="text-xs uppercase tracking-tight">{kelasName}</span>
+                          <span className={`text-[10px] ${isSelected ? 'text-black/80 font-bold' : 'text-emerald-400 font-medium'}`}>
+                            {countSantri} santri
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Toolbar: Search, Status, Mode Switcher, & Actions */}
+                <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-3 pt-2">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {/* View Switcher: Ringkasan Santri vs Riwayat Log */}
+                    <div className="flex items-center bg-[#03150d] p-1 rounded-xl border border-[#d4af37]/40">
+                      <button
+                        onClick={() => setActiveNadzhomView('ringkasan')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                          activeNadzhomView === 'ringkasan'
+                            ? 'bg-[#d4af37] text-black shadow'
+                            : 'text-stone-300 hover:text-white'
+                        }`}
+                      >
+                        Tabel Hafalan Santri
+                      </button>
+                      <button
+                        onClick={() => setActiveNadzhomView('riwayat')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                          activeNadzhomView === 'riwayat'
+                            ? 'bg-[#d4af37] text-black shadow'
+                            : 'text-stone-300 hover:text-white'
+                        }`}
+                      >
+                        Log Riwayat ({nadzhomList.length})
+                      </button>
+                    </div>
+
+                    {/* Filter Status Khatam */}
+                    <div className="flex items-center gap-1.5 bg-[#03150d] px-3 py-1.5 rounded-xl border border-[#d4af37]/40">
+                      <span className="text-xs text-stone-300 font-medium">Status:</span>
+                      <select
+                        value={nadzhomFilterStatus}
+                        onChange={(e) => setNadzhomFilterStatus(e.target.value as any)}
+                        className="bg-transparent text-xs font-bold text-[#d4af37] focus:outline-none cursor-pointer"
+                      >
+                        <option value="SEMUA" className="bg-[#052216] text-white">Semua Status</option>
+                        <option value="KHATAM" className="bg-[#052216] text-emerald-400">Khatam (100%)</option>
+                        <option value="BERJALAN" className="bg-[#052216] text-amber-300">Sedang Berjalan</option>
+                        <option value="BELUM" className="bg-[#052216] text-rose-300">Belum Ada Setoran</option>
+                      </select>
+                    </div>
+
+                    {/* Search Santri in Real-Time */}
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-stone-400" />
+                      <input
+                        type="text"
+                        placeholder="Cari santri..."
+                        value={nadzhomSearchQuery}
+                        onChange={(e) => setNadzhomSearchQuery(e.target.value)}
+                        className="pl-8 pr-3 py-1.5 text-xs bg-[#03150d] border border-[#d4af37]/40 rounded-xl text-white placeholder-stone-400 focus:outline-none focus:border-[#d4af37] w-40 sm:w-52"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Setting Kitab & Target Bait */}
+                    <button
+                      onClick={() => setIsNadzhomSettingOpen(true)}
+                      className="px-3 py-1.5 rounded-xl bg-[#093520] hover:bg-[#0e482d] border border-[#d4af37]/60 text-[#d4af37] text-xs font-bold flex items-center gap-1.5 transition shadow"
+                      title="Atur target jumlah bait untuk setiap kitab nadzhom"
+                    >
+                      <Settings2 className="w-3.5 h-3.5 text-[#d4af37]" />
+                      <span>Setting Target Bait</span>
+                    </button>
+
+                    {/* Input Setoran Baru Modal */}
+                    <button
+                      onClick={() => {
+                        const defaultSantri = santriList[0];
+                        setNewNadzhomEntry({
+                          idSantri: defaultSantri ? defaultSantri.id : '',
+                          kitab: defaultSantri ? getDefaultKitabForKelas(defaultSantri.kelas) : 'Nadzhom Al-Imrithi',
+                          bait: 10,
+                          targetBait: defaultSantri ? getTargetBaitForKitab(getDefaultKitabForKelas(defaultSantri.kelas)) : 254,
+                          nilai: 'Mumtaz (A)',
+                          tanggal: new Date().toISOString().split('T')[0],
+                          catatan: 'Lancar & tartil'
+                        });
+                        setIsAddNadzhomModalOpen(true);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-[#042818] hover:bg-[#083822] border border-emerald-500/50 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition shadow"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Input Setoran Baru</span>
+                    </button>
+
+                    {/* Simpan Semua Setoran (Real-Time ke Wali Santri) */}
+                    <button
+                      onClick={handleSaveAllNadzhom}
+                      disabled={isSavingNadzhom}
+                      className="px-4 py-1.5 rounded-xl btn-3d-gold text-black font-extrabold text-xs flex items-center gap-1.5 shadow-lg transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+                    >
+                      {isSavingNadzhom ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Menyinkronkan...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Simpan Semua (Sync Wali)</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Cetak Rekap */}
+                    <button
+                      onClick={() => window.print()}
+                      className="px-2.5 py-1.5 rounded-xl bg-[#03150d] hover:bg-[#072a1a] border border-[#d4af37]/30 text-emerald-300 text-xs font-semibold flex items-center gap-1 transition"
+                      title="Cetak rekap hafalan nadzhom"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Unduh CSV */}
+                    <button
+                      onClick={handleExportNadzhomCSV}
+                      className="px-2.5 py-1.5 rounded-xl bg-[#03150d] hover:bg-[#072a1a] border border-[#d4af37]/30 text-emerald-300 text-xs font-semibold flex items-center gap-1 transition"
+                      title="Unduh format leger CSV"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-inner">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#052216] text-[#d4af37]">
-                  <tr>
-                    <th className="p-3 font-bold">NIS</th>
-                    <th className="p-3 font-bold">NAMA SANTRI</th>
-                    <th className="p-3 font-bold">KITAB NADZHOM</th>
-                    <th className="p-3 text-center font-bold">JUMLAH BAIT</th>
-                    <th className="p-3 font-bold">STATUS / NILAI</th>
-                    <th className="p-3 font-bold">TANGGAL</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#d4af37]/10 bg-[#052216]/60">
-                  {nadzhomList.map((n, i) => (
-                    <tr key={i} className="hover:bg-[#d4af37]/10 transition">
-                      <td className="p-3 font-mono text-[#d4af37]">{n.idSantri}</td>
-                      <td className="p-3 font-bold text-white text-sm">{n.nama}</td>
-                      <td className="p-3 text-emerald-300 font-medium">{n.kitab}</td>
-                      <td className="p-3 text-center font-bold font-mono text-emerald-400">{n.bait} bait</td>
-                      <td className="p-3 font-semibold text-white">{n.nilai}</td>
-                      <td className="p-3 text-emerald-200/80">{n.tanggal}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+            {/* KPI Stat Cards Nadzhom */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-[#031b10]/80 p-3.5 rounded-2xl border border-[#d4af37]/25 shadow flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-950 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-stone-300 uppercase tracking-wider block font-medium">Santri Terpantau</span>
+                  <div className="text-lg font-bold text-white font-mono flex items-baseline gap-1">
+                    {santriList.filter(s => selectedNadzhomKelas === 'SEMUA' || s.kelas === selectedNadzhomKelas).length}
+                    <span className="text-xs text-emerald-400 font-sans font-normal">santri</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-[#031b10]/80 p-3.5 rounded-2xl border border-[#d4af37]/25 shadow flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-950 border border-amber-500/40 flex items-center justify-center text-[#d4af37]">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-stone-300 uppercase tracking-wider block font-medium">Total Bait Disetor</span>
+                  <div className="text-lg font-bold text-[#d4af37] font-mono flex items-baseline gap-1">
+                    {(() => {
+                      const list = santriList.filter(s => selectedNadzhomKelas === 'SEMUA' || s.kelas === selectedNadzhomKelas);
+                      const sum = list.reduce((acc, s) => acc + getSantriNadzhomData(s).bait, 0);
+                      return sum.toLocaleString('id-ID');
+                    })()}
+                    <span className="text-xs text-amber-300 font-sans font-normal">bait</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-[#031b10]/80 p-3.5 rounded-2xl border border-[#d4af37]/25 shadow flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-900 border border-emerald-400/50 flex items-center justify-center text-emerald-300">
+                  <Award className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-stone-300 uppercase tracking-wider block font-medium">Santri Khatam</span>
+                  <div className="text-lg font-bold text-emerald-300 font-mono">
+                    {santriList.filter(s => {
+                      const matchKelas = selectedNadzhomKelas === 'SEMUA' || s.kelas === selectedNadzhomKelas;
+                      if (!matchKelas) return false;
+                      const d = getSantriNadzhomData(s);
+                      return d.targetBait > 0 && d.bait >= d.targetBait;
+                    }).length}
+                    <span className="text-xs text-emerald-400 font-sans font-normal ml-1">khatam</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-[#031b10]/80 p-3.5 rounded-2xl border border-[#d4af37]/25 shadow flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-950 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-stone-300 uppercase tracking-wider block font-medium">Rata-Rata Bait</span>
+                  <div className="text-lg font-bold text-cyan-300 font-mono">
+                    {(() => {
+                      const list = santriList.filter(s => selectedNadzhomKelas === 'SEMUA' || s.kelas === selectedNadzhomKelas);
+                      if (!list.length) return 0;
+                      const sum = list.reduce((acc, s) => acc + getSantriNadzhomData(s).bait, 0);
+                      return Math.round(sum / list.length);
+                    })()}
+                    <span className="text-xs text-cyan-400 font-sans font-normal ml-1">bait/santri</span>
+                  </div>
+                </div>
+              </div>
             </div>
+
+            {/* TABEL EDITABLE ATAU LOG RIWAYAT */}
+            {activeNadzhomView === 'ringkasan' ? (
+              /* ========================================================================= */
+              /* 1. TABEL EDITABLE RINGKASAN HAFALAN SANTRI (TERKONEKSI REAL-TIME)         */
+              /* ========================================================================= */
+              <div className="card-3d rounded-3xl p-4 sm:p-5 backdrop-blur space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-[#d4af37]/20">
+                  <div>
+                    <h4 className="text-base font-bold text-[#d4af37] text-gold-3d flex items-center gap-2">
+                      Tabel Hafalan & Setoran Nadzhom Santri (Editable)
+                      <span className="text-[11px] text-emerald-300 font-mono font-normal">
+                        [{selectedNadzhomKelas}]
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-stone-400">
+                      Tampilan sederhana & cepat: ketik angka bait langsung atau gunakan tombol langkah cepat. Klik <b>Simpan</b> atau tekan <b>Enter</b> untuk sinkronisasi real-time ke wali santri.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] px-2.5 py-1 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-medium flex items-center gap-1.5 shadow-sm">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      Live Sync ke Wali Santri
+                    </span>
+                  </div>
+                </div>
+
+                {/* Toolbar Aksi Input Cepat Per Kelas */}
+                <div className="flex flex-wrap items-center justify-between gap-2.5 bg-[#02140b]/90 p-2.5 rounded-2xl border border-[#d4af37]/30">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] font-bold text-[#d4af37] flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      Input Cepat ({selectedNadzhomKelas}):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleClassBatchIncrement(5)}
+                      className="px-2.5 py-1 rounded-lg bg-[#042818] hover:bg-[#083822] border border-emerald-500/40 text-emerald-300 text-xs font-bold transition hover:scale-105 active:scale-95"
+                      title="Tambah 5 bait untuk semua santri di kelas ini"
+                    >
+                      +5 Bait
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleClassBatchIncrement(10)}
+                      className="px-2.5 py-1 rounded-lg bg-[#042818] hover:bg-[#083822] border border-emerald-500/40 text-emerald-300 text-xs font-bold transition hover:scale-105 active:scale-95"
+                      title="Tambah 10 bait untuk semua santri di kelas ini"
+                    >
+                      +10 Bait
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleClassBatchIncrement('khatam')}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/60 text-emerald-200 text-xs font-bold transition hover:scale-105 active:scale-95"
+                      title="Setel khatam seluruh santri di kelas ini"
+                    >
+                      Khatamkan Semua
+                    </button>
+                  </div>
+
+                  <div className="text-[11px] text-stone-400 flex items-center gap-1.5">
+                    <span className="hidden sm:inline">Tekan <kbd className="px-1.5 py-0.5 rounded bg-stone-800 text-amber-300 font-mono text-[10px] border border-stone-700">Enter</kbd> pada kolom bait untuk langsung simpan baris.</span>
+                  </div>
+                </div>
+
+                {/* Table Container Sederhana & Ergonomis */}
+                <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-inner max-h-[640px] overflow-y-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-[#02130a] text-[#d4af37] sticky top-0 z-20 shadow-md">
+                      <tr>
+                        <th className="py-2.5 px-2 font-bold border-b border-r border-[#d4af37]/20 w-10 text-center sticky left-0 z-30 bg-[#02130a]">
+                          NO
+                        </th>
+                        <th className="py-2.5 px-3 font-bold border-b border-r border-[#d4af37]/20 min-w-[160px] sticky left-10 z-30 bg-[#02130a]">
+                          SANTRI & KELAS
+                        </th>
+                        <th className="py-2.5 px-2.5 font-bold border-b border-r border-[#d4af37]/20 min-w-[145px] bg-[#031b10]">
+                          KITAB NADZHOM
+                        </th>
+                        <th className="py-2.5 px-2.5 font-bold border-b border-r border-[#d4af37]/20 min-w-[245px] text-center bg-[#031b10]">
+                          BAIT HAFALAN (INPUT CEPAT)
+                        </th>
+                        <th className="py-2.5 px-2.5 font-bold border-b border-r border-[#d4af37]/20 min-w-[130px] bg-[#031b10]">
+                          TARGET & PROGRES
+                        </th>
+                        <th className="py-2.5 px-2.5 font-bold border-b border-r border-[#d4af37]/20 min-w-[115px] bg-[#031b10]">
+                          PREDIKAT
+                        </th>
+                        <th className="py-2.5 px-2 font-bold border-b border-r border-[#d4af37]/20 min-w-[120px] bg-[#031b10]">
+                          TANGGAL
+                        </th>
+                        <th className="py-2.5 px-2.5 font-bold border-b border-r border-[#d4af37]/20 min-w-[140px] bg-[#031b10]">
+                          CATATAN USTADZ
+                        </th>
+                        <th className="py-2.5 px-2 font-bold border-b border-[#d4af37]/20 text-center min-w-[90px] sticky right-0 z-20 bg-[#02130a]">
+                          AKSI (SYNC)
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-[#d4af37]/15 bg-[#03150d]/80">
+                      {(() => {
+                        const filtered = santriList.filter(s => {
+                          const matchKelas = selectedNadzhomKelas === 'SEMUA' || s.kelas === selectedNadzhomKelas;
+                          const matchSearch = !nadzhomSearchQuery.trim() || 
+                            s.nama.toLowerCase().includes(nadzhomSearchQuery.toLowerCase()) || 
+                            s.id.toLowerCase().includes(nadzhomSearchQuery.toLowerCase());
+                          if (!matchKelas || !matchSearch) return false;
+
+                          const data = getSantriNadzhomData(s);
+                          const isKhatam = data.targetBait > 0 && data.bait >= data.targetBait;
+                          if (nadzhomFilterStatus === 'KHATAM') return isKhatam;
+                          if (nadzhomFilterStatus === 'BERJALAN') return data.bait > 0 && !isKhatam;
+                          if (nadzhomFilterStatus === 'BELUM') return data.bait === 0;
+                          return true;
+                        });
+
+                        if (filtered.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={9} className="p-8 text-center text-stone-400">
+                                Tidak ada data santri yang sesuai filter <b>{selectedNadzhomKelas}</b>.
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return filtered.map((santri, idx) => {
+                          const data = getSantriNadzhomData(santri);
+                          const pct = data.targetBait > 0 ? Math.min(100, Math.round((data.bait / data.targetBait) * 100)) : 0;
+                          const isKhatam = data.targetBait > 0 && data.bait >= data.targetBait;
+                          const isRowSaved = savedRowIndicator[santri.id];
+
+                          return (
+                            <tr key={santri.id} className="hover:bg-[#072f1a]/80 transition group">
+                              {/* 1. No */}
+                              <td className="py-2 px-1 text-center font-mono text-stone-400 border-r border-[#d4af37]/15 sticky left-0 z-10 bg-[#03150d] group-hover:bg-[#072f1a] text-[11px]">
+                                {idx + 1}
+                              </td>
+
+                              {/* 2. Santri & Kelas (Sederhana & Ringkas) */}
+                              <td className="py-2 px-3 border-r border-[#d4af37]/15 sticky left-10 z-10 bg-[#03150d] group-hover:bg-[#072f1a]">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-full bg-emerald-950 border border-[#d4af37]/40 flex items-center justify-center text-[10px] font-bold text-[#d4af37] shrink-0">
+                                    {santri.nama.charAt(0)}
+                                  </div>
+                                  <div className="truncate max-w-[130px]">
+                                    <span className="font-semibold text-white text-xs block truncate leading-tight">
+                                      {santri.nama}
+                                    </span>
+                                    <span className="text-[10px] text-stone-400 font-mono">
+                                      {santri.kelas}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* 3. Kitab Nadzhom (Dropdown Sederhana) */}
+                              <td className="py-2 px-2.5 border-r border-[#d4af37]/15">
+                                <select
+                                  value={data.kitab}
+                                  onChange={(e) => handleNadzhomFieldChange(santri.id, santri, 'kitab', e.target.value)}
+                                  className="w-full h-7 px-2 text-xs bg-[#010a05] border border-[#d4af37]/40 rounded-lg text-[#d4af37] font-medium focus:outline-none focus:border-[#d4af37] cursor-pointer"
+                                >
+                                  {nadzhomBooksList.map(b => (
+                                    <option key={b.nama} value={b.nama} className="bg-[#03150d] text-white">
+                                      {b.nama}
+                                    </option>
+                                  ))}
+                                  <option value={data.kitab} className="bg-[#03150d] text-white">
+                                    {data.kitab}
+                                  </option>
+                                </select>
+                              </td>
+
+                              {/* 4. Input Jumlah Bait (Fokus Utama: 1 Baris Sejajar, Mudah & Cepat) */}
+                              <td className="py-2 px-2.5 border-r border-[#d4af37]/15">
+                                <div className="flex items-center justify-center gap-1">
+                                  {/* Kurangi */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleQuickIncrementBait(santri, -5)}
+                                    className="w-6 h-7 rounded bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold text-xs flex items-center justify-center transition active:scale-90"
+                                    title="Kurang 5 bait"
+                                  >
+                                    -5
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleQuickIncrementBait(santri, -1)}
+                                    className="w-5 h-7 rounded bg-stone-800/70 hover:bg-stone-700 text-stone-400 font-bold text-xs flex items-center justify-center transition active:scale-90"
+                                    title="Kurang 1 bait"
+                                  >
+                                    -
+                                  </button>
+
+                                  {/* Input Angka - Langsung Ketik, Auto Select saat Diklik, Enter Simpan */}
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={data.targetBait > 0 ? data.targetBait : 2000}
+                                    value={data.bait}
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => handleNadzhomFieldChange(santri.id, santri, 'bait', e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        handleSaveSingleSantriNadzhom(santri);
+                                      }
+                                    }}
+                                    className={`w-14 h-7 text-center font-mono font-black text-xs rounded-lg border transition focus:outline-none focus:ring-1 focus:ring-[#d4af37] ${
+                                      isKhatam
+                                        ? 'bg-emerald-950 text-emerald-300 border-emerald-500'
+                                        : data.bait > 0
+                                        ? 'bg-amber-950/80 text-amber-300 border-amber-500/70'
+                                        : 'bg-[#020e07] text-stone-300 border-stone-700'
+                                    }`}
+                                    title="Ketik angka bait, tekan Enter untuk simpan"
+                                  />
+
+                                  {/* Tambah Cepat (+1, +5, +10, Khatam) */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleQuickIncrementBait(santri, 1)}
+                                    className="w-5 h-7 rounded bg-stone-800/70 hover:bg-stone-700 text-stone-400 font-bold text-xs flex items-center justify-center transition active:scale-90"
+                                    title="Tambah 1 bait"
+                                  >
+                                    +
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleQuickIncrementBait(santri, 5)}
+                                    className="px-1.5 h-7 rounded bg-[#07331e] hover:bg-[#0c492b] border border-emerald-500/40 text-emerald-300 font-bold text-[11px] flex items-center justify-center transition active:scale-90"
+                                    title="Tambah 5 bait"
+                                  >
+                                    +5
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleQuickIncrementBait(santri, 10)}
+                                    className="px-1.5 h-7 rounded bg-[#07331e] hover:bg-[#0c492b] border border-emerald-500/40 text-emerald-300 font-bold text-[11px] flex items-center justify-center transition active:scale-90"
+                                    title="Tambah 10 bait"
+                                  >
+                                    +10
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleQuickIncrementBait(santri, 'khatam')}
+                                    className="px-2 h-7 rounded bg-emerald-900/80 hover:bg-emerald-800 border border-emerald-400/60 text-emerald-200 font-extrabold text-[10px] flex items-center justify-center transition active:scale-90"
+                                    title="Khatamkan hafalan santri ini"
+                                  >
+                                    Khatam
+                                  </button>
+                                </div>
+                              </td>
+
+                              {/* 5. Target & Progres (Kompak Sejajar) */}
+                              <td className="py-2 px-2.5 border-r border-[#d4af37]/15">
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={data.targetBait}
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => handleNadzhomFieldChange(santri.id, santri, 'targetBait', parseInt(e.target.value) || 0)}
+                                    className="w-12 h-7 text-center font-mono font-bold text-xs bg-[#010a05] border border-stone-700 rounded-lg text-amber-300 focus:outline-none focus:border-[#d4af37]"
+                                    title="Target bait"
+                                  />
+                                  <div className="w-14">
+                                    <div className="flex items-center justify-between text-[10px] font-mono leading-none mb-0.5">
+                                      <span className={isKhatam ? 'text-emerald-300 font-bold' : 'text-stone-300'}>{pct}%</span>
+                                      {isKhatam && <span className="text-[8px] text-emerald-400 font-bold">LULUS</span>}
+                                    </div>
+                                    <div className="w-full bg-[#010a05] rounded-full h-1 border border-stone-800 overflow-hidden">
+                                      <div
+                                        className={`h-full transition-all duration-200 ${
+                                          isKhatam ? 'bg-emerald-400' : pct >= 50 ? 'bg-amber-400' : 'bg-cyan-400'
+                                        }`}
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* 6. Predikat / Nilai */}
+                              <td className="py-2 px-2.5 border-r border-[#d4af37]/15">
+                                <select
+                                  value={data.nilai}
+                                  onChange={(e) => handleNadzhomFieldChange(santri.id, santri, 'nilai', e.target.value)}
+                                  className={`w-full h-7 px-1.5 text-[11px] font-semibold rounded-lg border focus:outline-none cursor-pointer ${
+                                    data.nilai.includes('Mumtaz')
+                                      ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
+                                      : data.nilai.includes('Jayyid')
+                                      ? 'bg-amber-950/80 text-amber-300 border-amber-500/50'
+                                      : 'bg-stone-900 text-stone-300 border-stone-700'
+                                  }`}
+                                >
+                                  <option value="Mumtaz (A+)">Mumtaz (A+)</option>
+                                  <option value="Mumtaz (A)">Mumtaz (A)</option>
+                                  <option value="Jayyid Jiddan (B+)">Jayyid Jiddan (B+)</option>
+                                  <option value="Jayyid (B)">Jayyid (B)</option>
+                                  <option value="Mutawasit (C)">Mutawasit (C)</option>
+                                  <option value="Muroja'ah (D)">Muroja'ah (D)</option>
+                                </select>
+                              </td>
+
+                              {/* 7. Tanggal Setoran */}
+                              <td className="py-2 px-2 border-r border-[#d4af37]/15">
+                                <input
+                                  type="date"
+                                  value={data.tanggal}
+                                  onChange={(e) => handleNadzhomFieldChange(santri.id, santri, 'tanggal', e.target.value)}
+                                  className="w-full h-7 px-1 text-[11px] bg-[#010a05] border border-stone-700 rounded-lg text-stone-300 font-mono focus:outline-none focus:border-[#d4af37]"
+                                />
+                              </td>
+
+                              {/* 8. Catatan / Evaluasi Ustadz */}
+                              <td className="py-2 px-2.5 border-r border-[#d4af37]/15">
+                                <input
+                                  type="text"
+                                  value={data.catatan || ''}
+                                  onChange={(e) => handleNadzhomFieldChange(santri.id, santri, 'catatan', e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleSaveSingleSantriNadzhom(santri);
+                                    }
+                                  }}
+                                  placeholder="Catatan..."
+                                  className="w-full h-7 px-2 text-[11px] bg-[#010a05] border border-stone-700 rounded-lg text-stone-200 placeholder-stone-500 focus:outline-none focus:border-[#d4af37]"
+                                  title="Catatan ustadz (Enter untuk simpan)"
+                                />
+                              </td>
+
+                              {/* 9. Aksi Simpan (Live Sync Wali Santri) */}
+                              <td className="py-2 px-1.5 text-center sticky right-0 z-10 bg-[#03150d] group-hover:bg-[#072f1a]">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveSingleSantriNadzhom(santri)}
+                                  className={`w-full h-7 px-2 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1 transition shadow active:scale-95 ${
+                                    isRowSaved
+                                      ? 'bg-emerald-600 text-white shadow-md'
+                                      : 'bg-[#093520] hover:bg-[#0e482d] border border-[#d4af37]/60 text-[#d4af37]'
+                                  }`}
+                                  title="Simpan baris ini & sinkronkan ke wali santri"
+                                >
+                                  {isRowSaved ? (
+                                    <>
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                      <span>Tersimpan</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Save className="w-3.5 h-3.5" />
+                                      <span>Simpan</span>
+                                    </>
+                                  )}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Bottom Info Note */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-2 text-[11px] text-stone-400 border-t border-[#d4af37]/15">
+                  <div className="flex items-center gap-1.5 text-emerald-300">
+                    <CheckCircle2 className="w-4 h-4 text-[#d4af37]" />
+                    <span>Perubahan yang disimpan otomatis muncul di <b>Menu Setoran Nadzhom & Hafalan pada Portal Wali Santri</b> secara real-time.</span>
+                  </div>
+                  <div>
+                    <span>Total santri terdaftar: {santriList.length} orang</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* ========================================================================= */
+              /* 2. LOG RIWAYAT SEMUA SETORAN                                              */
+              /* ========================================================================= */
+              <div className="card-3d rounded-3xl p-4 sm:p-5 backdrop-blur space-y-4">
+                <div className="flex justify-between items-center pb-3 border-b border-[#d4af37]/20">
+                  <div>
+                    <h4 className="text-base font-bold text-[#d4af37] text-gold-3d flex items-center gap-2">
+                      Log Riwayat Seluruh Setoran Nadzhom
+                      <span className="text-xs text-stone-300 font-mono">({nadzhomList.length} Entri)</span>
+                    </h4>
+                    <p className="text-[11px] text-stone-400">
+                      Daftar riwayat kronologis setiap kali santri menyetorkan hafalan bait nadzhom.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const defaultSantri = santriList[0];
+                      setNewNadzhomEntry({
+                        idSantri: defaultSantri ? defaultSantri.id : '',
+                        kitab: 'Nadzhom Al-Imrithi',
+                        bait: 10,
+                        targetBait: 254,
+                        nilai: 'Mumtaz (A)',
+                        tanggal: new Date().toISOString().split('T')[0],
+                        catatan: 'Lancar & tartil'
+                      });
+                      setIsAddNadzhomModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-950 border border-emerald-500/50 text-emerald-300 text-xs font-bold flex items-center gap-1.5 hover:bg-emerald-900 transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Tambah Log Setoran</span>
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-inner max-h-[500px] overflow-y-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#052216] text-[#d4af37] sticky top-0">
+                      <tr>
+                        <th className="p-3 font-bold">NO</th>
+                        <th className="p-3 font-bold">TANGGAL</th>
+                        <th className="p-3 font-bold">NIS</th>
+                        <th className="p-3 font-bold">NAMA SANTRI</th>
+                        <th className="p-3 font-bold">KITAB NADZHOM</th>
+                        <th className="p-3 text-center font-bold">JUMLAH BAIT</th>
+                        <th className="p-3 font-bold">STATUS / NILAI</th>
+                        <th className="p-3 text-center font-bold">AKSI</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#052216]/60">
+                      {nadzhomList.map((item, i) => (
+                        <tr key={i} className="hover:bg-[#d4af37]/10 transition">
+                          <td className="p-3 font-mono text-stone-400">{i + 1}</td>
+                          <td className="p-3 font-mono text-emerald-300">{item.tanggal || '-'}</td>
+                          <td className="p-3 font-mono text-[#d4af37]">{item.idSantri}</td>
+                          <td className="p-3 font-bold text-white text-sm">{item.nama}</td>
+                          <td className="p-3 text-emerald-300 font-medium">{item.kitab}</td>
+                          <td className="p-3 text-center font-bold font-mono text-emerald-400">{item.bait} bait</td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 text-[11px] font-semibold">
+                              {item.nilai}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`Hapus catatan setoran ${item.nama} (${item.bait} bait ${item.kitab}) tanggal ${item.tanggal}?`)) {
+                                  if (onDeleteNadzhom) {
+                                    onDeleteNadzhom(item);
+                                  }
+                                }
+                              }}
+                              className="p-1 rounded bg-rose-950/80 hover:bg-rose-900 border border-rose-700/50 text-rose-300 transition"
+                              title="Hapus catatan ini"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* MODAL SETTING TARGET BAIT & DAFTAR KITAB NADZHOM */}
+            {isNadzhomSettingOpen && (
+              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                <div className="card-3d-glass rounded-3xl p-6 border-2 border-[#d4af37] max-w-3xl w-full space-y-5 shadow-2xl relative my-8">
+                  <div className="flex justify-between items-start pb-3 border-b border-[#d4af37]/20">
+                    <div>
+                      <h3 className="text-lg font-bold font-serif text-[#d4af37] text-gold-3d flex items-center gap-2">
+                        <Settings2 className="w-5 h-5 text-emerald-400" />
+                        Setting Daftar Kitab & Target Bait Nadzhom
+                      </h3>
+                      <p className="text-xs text-stone-300 mt-1">
+                        Atur target jumlah bait untuk setiap kitab nadzhom pesantren, tambahkan kitab baru, atau terapkan kitab secara masal ke seluruh santri di kelas tertentu.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setIsNadzhomSettingOpen(false)}
+                      className="p-1.5 rounded-full hover:bg-stone-800 text-stone-400 hover:text-white transition"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Tabel Daftar Kitab & Target Bait */}
+                  <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25 max-h-72 overflow-y-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[#02130a] text-[#d4af37] sticky top-0 z-10">
+                        <tr>
+                          <th className="p-3 font-bold">KITAB NADZHOM</th>
+                          <th className="p-3 font-bold">FAN ILMU</th>
+                          <th className="p-3 font-bold">KELAS DEFAULT</th>
+                          <th className="p-3 text-center font-bold">TARGET BAIT</th>
+                          <th className="p-3 text-center font-bold">AKSI TERAPKAN</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#d4af37]/15 bg-[#03150d]">
+                        {nadzhomBooksList.map((b) => {
+                          const currentTarget = nadzhomTargetBaitSettings[b.nama] ?? b.targetBait;
+                          return (
+                            <tr key={b.nama} className="hover:bg-[#072f1a]/50">
+                              <td className="p-3 font-bold text-white flex items-center gap-1.5">
+                                <span>{b.nama}</span>
+                                {b.isCustom && (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 border border-amber-500/40">
+                                    Custom
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3 text-emerald-300">{b.fan}</td>
+                              <td className="p-3 text-stone-300 font-mono">{b.kelasDefault}</td>
+                              <td className="p-3 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={currentTarget}
+                                    onChange={(e) => handleSaveTargetBaitSetting(b.nama, parseInt(e.target.value) || 0)}
+                                    className="w-20 px-2 py-1 text-center font-mono font-bold text-xs bg-[#010a05] border border-[#d4af37]/50 rounded-lg text-amber-300 focus:outline-none focus:border-[#d4af37]"
+                                  />
+                                  <span className="text-[11px] text-stone-400">bait</span>
+                                </div>
+                              </td>
+                              <td className="p-3 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleBatchApplyKitabToKelas(b.kelasDefault, b.nama, currentTarget)}
+                                    className="px-2 py-1 rounded-lg bg-[#093520] hover:bg-[#0e482d] border border-emerald-500/40 text-emerald-300 text-[11px] font-semibold transition"
+                                    title={`Terapkan kitab ini ke seluruh santri di kelas ${b.kelasDefault}`}
+                                  >
+                                    Terapkan ke {b.kelasDefault.replace('TSANAWIYAH', 'TSAN').replace('ALIYAH', 'AL')}
+                                  </button>
+                                  {b.isCustom && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteNadzhomBook(b.nama)}
+                                      className="p-1 rounded bg-rose-950/80 hover:bg-rose-900 border border-rose-700/50 text-rose-300"
+                                      title="Hapus kitab custom ini"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Form Tambah Kitab Baru */}
+                  <form onSubmit={handleAddNewNadzhomBook} className="p-3.5 rounded-2xl bg-[#041a0f] border border-[#d4af37]/30 space-y-3">
+                    <span className="text-xs font-bold text-[#d4af37] block flex items-center gap-1.5">
+                      <Plus className="w-3.5 h-3.5" />
+                      Tambah Kitab Nadzhom Baru ke Sistem:
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                      <div>
+                        <label className="text-[10px] text-stone-300 block mb-0.5">Nama Kitab *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Nadzhom Maqsud"
+                          value={newBookForm.nama}
+                          onChange={(e) => setNewBookForm({ ...newBookForm, nama: e.target.value })}
+                          className="w-full px-2.5 py-1.5 text-xs bg-[#010a05] border border-stone-700 rounded-lg text-white focus:outline-none focus:border-[#d4af37]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-stone-300 block mb-0.5">Fan Ilmu</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Shorof, Nahwu, Hadits"
+                          value={newBookForm.fan}
+                          onChange={(e) => setNewBookForm({ ...newBookForm, fan: e.target.value })}
+                          className="w-full px-2.5 py-1.5 text-xs bg-[#010a05] border border-stone-700 rounded-lg text-white focus:outline-none focus:border-[#d4af37]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-stone-300 block mb-0.5">Kelas Rujukan</label>
+                        <select
+                          value={newBookForm.kelasDefault}
+                          onChange={(e) => setNewBookForm({ ...newBookForm, kelasDefault: e.target.value })}
+                          className="w-full px-2.5 py-1.5 text-xs bg-[#010a05] border border-stone-700 rounded-lg text-white focus:outline-none focus:border-[#d4af37]"
+                        >
+                          {classList.map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-stone-300 block mb-0.5">Target Bait *</label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            required
+                            min="1"
+                            value={newBookForm.targetBait}
+                            onChange={(e) => setNewBookForm({ ...newBookForm, targetBait: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2.5 py-1.5 text-xs bg-[#010a05] border border-stone-700 rounded-lg text-white font-mono focus:outline-none focus:border-[#d4af37]"
+                          />
+                          <button
+                            type="submit"
+                            className="px-3 py-1.5 rounded-lg bg-[#d4af37] text-black font-bold text-xs whitespace-nowrap hover:brightness-110"
+                          >
+                            + Tambah
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </form>
+
+                  <div className="flex flex-col sm:flex-row justify-between items-center gap-2 pt-2 border-t border-[#d4af37]/20">
+                    <span className="text-[11px] text-stone-400">
+                      Total kitab terdaftar: <b className="text-white">{nadzhomBooksList.length} kitab</b>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsNadzhomSettingOpen(false)}
+                      className="px-5 py-2 rounded-xl bg-[#d4af37] hover:brightness-110 text-black font-bold text-xs transition"
+                    >
+                      Selesai & Terapkan
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* MODAL INPUT SETORAN SANTRI BARU */}
+            {isAddNadzhomModalOpen && (
+              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                <div className="card-3d-glass rounded-3xl p-6 border-2 border-[#d4af37] max-w-xl w-full space-y-5 shadow-2xl relative my-8">
+                  <div className="flex justify-between items-start pb-3 border-b border-[#d4af37]/20">
+                    <div>
+                      <h3 className="text-lg font-bold font-serif text-[#d4af37] text-gold-3d flex items-center gap-2">
+                        <Plus className="w-5 h-5 text-emerald-400" />
+                        Input Setoran Nadzhom Santri Baru
+                      </h3>
+                      <p className="text-xs text-stone-300 mt-1">
+                        Catat progres setoran hafalan nadzhom santri. Data akan otomatis masuk ke tabel dan dashboard wali santri secara real-time.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setIsAddNadzhomModalOpen(false)}
+                      className="p-1.5 rounded-full hover:bg-stone-800 text-stone-400 hover:text-white transition"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleAddSetoranSubmit} className="space-y-4">
+                    <div>
+                      <label className="text-xs text-stone-300 block mb-1 font-semibold">Pilih Santri *</label>
+                      <select
+                        required
+                        value={newNadzhomEntry.idSantri}
+                        onChange={(e) => {
+                          const s = santriList.find(item => item.id === e.target.value);
+                          setNewNadzhomEntry({
+                            ...newNadzhomEntry,
+                            idSantri: e.target.value,
+                            kitab: s ? getDefaultKitabForKelas(s.kelas) : newNadzhomEntry.kitab
+                          });
+                        }}
+                        className="w-full px-3 py-2 text-xs bg-[#010a05] border border-[#d4af37]/40 rounded-xl text-white focus:outline-none focus:border-[#d4af37]"
+                      >
+                        <option value="">-- Pilih Santri --</option>
+                        {santriList.map(s => (
+                          <option key={s.id} value={s.id} className="bg-[#03150d] text-white">
+                            {s.nama} ({s.id} - {s.kelas})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-stone-300 block mb-1 font-semibold">Kitab Nadzhom *</label>
+                        <select
+                          value={newNadzhomEntry.kitab}
+                          onChange={(e) => setNewNadzhomEntry({
+                            ...newNadzhomEntry,
+                            kitab: e.target.value,
+                            targetBait: getTargetBaitForKitab(e.target.value)
+                          })}
+                          className="w-full px-3 py-2 text-xs bg-[#010a05] border border-[#d4af37]/40 rounded-xl text-white focus:outline-none focus:border-[#d4af37]"
+                        >
+                          {nadzhomBooksList.map(b => (
+                            <option key={b.nama} value={b.nama} className="bg-[#03150d] text-white">
+                              {b.nama} ({nadzhomTargetBaitSettings[b.nama] ?? b.targetBait} bait)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-stone-300 block mb-1 font-semibold">Jumlah Bait Disetor *</label>
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          value={newNadzhomEntry.bait}
+                          onChange={(e) => setNewNadzhomEntry({ ...newNadzhomEntry, bait: parseInt(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 text-xs bg-[#010a05] border border-[#d4af37]/40 rounded-xl text-white focus:outline-none focus:border-[#d4af37]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-stone-300 block mb-1 font-semibold">Status / Penilaian *</label>
+                        <select
+                          value={newNadzhomEntry.nilai}
+                          onChange={(e) => setNewNadzhomEntry({ ...newNadzhomEntry, nilai: e.target.value })}
+                          className="w-full px-3 py-2 text-xs bg-[#010a05] border border-[#d4af37]/40 rounded-xl text-white focus:outline-none focus:border-[#d4af37]"
+                        >
+                          <option value="Mumtaz (A+)">Mumtaz (A+) - Lancar Tartil</option>
+                          <option value="Mumtaz (A)">Mumtaz (A) - Lancar</option>
+                          <option value="Jayyid Jiddan (B+)">Jayyid Jiddan (B+) - Baik Sekali</option>
+                          <option value="Jayyid (B)">Jayyid (B) - Baik</option>
+                          <option value="Mutawasit (C)">Mutawasit (C) - Cukup</option>
+                          <option value="Muroja'ah (D)">Muroja'ah (D) - Mengulang</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-stone-300 block mb-1 font-semibold">Tanggal Setoran *</label>
+                        <input
+                          type="date"
+                          required
+                          value={newNadzhomEntry.tanggal}
+                          onChange={(e) => setNewNadzhomEntry({ ...newNadzhomEntry, tanggal: e.target.value })}
+                          className="w-full px-3 py-2 text-xs bg-[#010a05] border border-[#d4af37]/40 rounded-xl text-white focus:outline-none focus:border-[#d4af37]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2 border-t border-[#d4af37]/20">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddNadzhomModalOpen(false)}
+                        className="px-4 py-2 rounded-xl bg-stone-800 text-stone-300 font-bold text-xs hover:bg-stone-700 transition"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-5 py-2 rounded-xl btn-3d-gold text-black font-extrabold text-xs shadow-lg hover:brightness-110 transition flex items-center gap-1.5"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>Simpan Setoran & Sync ke Wali</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* TAB 8: NILAI UJIAN */}
+        {/* TAB 8: NILAI UJIAN & LEGER TRANSKRIP AKADEMIK REAL-TIME */}
         {activeTab === 'nilai' && (
-          <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-6">
-            <div className="flex justify-between items-center pb-3 border-b border-[#d4af37]/20">
-              <h3 className="text-lg font-bold text-[#d4af37] text-gold-3d">Nilai Ujian & Transkrip Akademik</h3>
-              <span className="text-xs text-emerald-300 font-semibold">(Mode Tampilan Data)</span>
+          <div className="space-y-6">
+            {/* Header & Status Real-Time */}
+            <div className="card-3d-glass rounded-3xl p-6 border border-[#d4af37]/40 shadow-2xl relative overflow-hidden">
+              <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#f5e298]/80 to-transparent pointer-events-none" />
+
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 pb-4 border-b border-[#d4af37]/20">
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-[#093d25] border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow-xl">
+                    <Award className="w-7 h-7 text-[#d4af37]" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold font-serif text-[#d4af37] text-gold-3d flex items-center gap-2">
+                      Nilai Ujian & Leger Transkrip Akademik
+                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-sans font-bold">
+                        Live Real-Time
+                      </span>
+                    </h3>
+                    <p className="text-xs text-emerald-200/90 mt-1">
+                      Terkoneksi langsung ke database santri secara real-time. Tabel dapat diedit langsung untuk input 9 - 10 mata pelajaran dari Kurikulum/Silabus per angkatan (1 Tsanawiyah s/d 3 Aliyah).
+                    </p>
+                  </div>
+                </div>
+
+                {/* Status Badges & Save Feedback */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    Santri: <b className="text-white">{santriForSelectedKelas.length}</b> Siswa
+                  </span>
+                  <span className="px-3 py-1.5 rounded-xl bg-amber-950/80 border border-[#d4af37]/40 text-[#d4af37] text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+                    <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                    Kurikulum: <b className="text-white">{kurikulumForSelectedKelas.length}</b> Mapel
+                  </span>
+                  {nilaiSaveSuccess && (
+                    <span className="px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1.5 animate-bounce shadow-md">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Tersimpan Real-Time!
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Class & Semester Selector */}
+              <div className="pt-4 space-y-4">
+                {/* 1. Pemilihan Kelas (1 Tsanawiyah s/d 3 Aliyah) */}
+                <div>
+                  <label className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider mb-2 block flex items-center gap-1.5">
+                    <GraduationCap className="w-3.5 h-3.5 text-[#d4af37]" />
+                    Pilih Kelas / Angkatan Penilaian:
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                    {classList.map((kelasName) => {
+                      const countSantri = santriList.filter(s => s.kelas === kelasName).length;
+                      const countMapel = kurikulumList.filter(k => k.kelas === kelasName).length;
+                      const isSelected = selectedNilaiKelas === kelasName;
+                      return (
+                        <button
+                          key={kelasName}
+                          onClick={() => {
+                            setSelectedNilaiKelas(kelasName);
+                            setNilaiSaveSuccess(false);
+                          }}
+                          className={`px-3 py-2.5 rounded-2xl text-xs font-bold transition flex flex-col items-center justify-center gap-1 border ${
+                            isSelected
+                              ? 'bg-gradient-to-r from-[#d4af37] via-[#f3e5ab] to-[#c59b27] text-black border-amber-300 shadow-lg scale-[1.02]'
+                              : 'bg-[#041a0f]/90 text-emerald-200 hover:bg-[#08351e] border-[#d4af37]/30 hover:border-[#d4af37]'
+                          }`}
+                        >
+                          <span className="text-xs uppercase tracking-tight">{kelasName}</span>
+                          <div className="flex items-center gap-1.5 text-[10px] opacity-90">
+                            <span className={isSelected ? 'text-black/80 font-bold' : 'text-emerald-400 font-medium'}>
+                              {countSantri} santri
+                            </span>
+                            <span>•</span>
+                            <span className={isSelected ? 'text-black/80 font-bold' : 'text-[#d4af37] font-medium'}>
+                              {countMapel} mapel
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Control Toolbar: Semester, Search, & Actions */}
+                <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3 pt-2">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {/* Semester Picker */}
+                    <div className="flex items-center gap-1.5 bg-[#03150d] px-3 py-1.5 rounded-xl border border-[#d4af37]/40">
+                      <span className="text-xs text-stone-300 font-medium">Semester:</span>
+                      <select
+                        value={selectedNilaiSemester}
+                        onChange={(e) => {
+                          setSelectedNilaiSemester(e.target.value);
+                          setNilaiSaveSuccess(false);
+                        }}
+                        className="bg-transparent text-xs font-bold text-[#d4af37] focus:outline-none cursor-pointer"
+                      >
+                        <option value="Semester 1" className="bg-[#052216] text-white">Semester 1 (Ganjil)</option>
+                        <option value="Semester 2" className="bg-[#052216] text-white">Semester 2 (Genap)</option>
+                      </select>
+                    </div>
+
+                    {/* Search Santri in Real-Time */}
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-stone-400" />
+                      <input
+                        type="text"
+                        placeholder="Cari santri kelas ini..."
+                        value={nilaiSearchQuery}
+                        onChange={(e) => setNilaiSearchQuery(e.target.value)}
+                        className="pl-8 pr-3 py-1.5 text-xs bg-[#03150d] border border-[#d4af37]/40 rounded-xl text-white placeholder-stone-400 focus:outline-none focus:border-[#d4af37] w-44 sm:w-56"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Setting Mata Pelajaran Kurikulum */}
+                    <button
+                      onClick={() => setIsKurikulumSettingOpen(true)}
+                      className="px-3 py-1.5 rounded-xl bg-[#093520] hover:bg-[#0e482d] border border-[#d4af37]/60 text-[#d4af37] text-xs font-bold flex items-center gap-1.5 transition shadow"
+                      title="Atur jumlah mata pelajaran 9 - 10 kurikulum untuk kelas ini"
+                    >
+                      <Settings2 className="w-3.5 h-3.5 text-[#d4af37]" />
+                      <span>Setting Kurikulum ({kurikulumForSelectedKelas.length} Mapel)</span>
+                    </button>
+
+                    {/* Quick Standard Fill */}
+                    <button
+                      onClick={() => handleQuickFillNilai(85)}
+                      className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 border border-stone-700 text-stone-300 text-xs font-medium flex items-center gap-1.5 transition"
+                      title="Isi nilai default 85 untuk mata pelajaran yang belum diisi"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Set Cepat (85)</span>
+                    </button>
+
+                    {/* Simpan Semua Nilai Real-Time */}
+                    <button
+                      onClick={handleSaveAllNilai}
+                      disabled={isSavingNilai}
+                      className="px-4 py-1.5 rounded-xl btn-3d-gold text-black font-extrabold text-xs flex items-center gap-1.5 shadow-lg transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+                    >
+                      {isSavingNilai ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Menyimpan...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Simpan Semua Nilai</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Cetak Leger */}
+                    <button
+                      onClick={() => window.print()}
+                      className="px-2.5 py-1.5 rounded-xl bg-[#03150d] hover:bg-[#072a1a] border border-[#d4af37]/30 text-emerald-300 text-xs font-semibold flex items-center gap-1 transition"
+                      title="Cetak transkrip nilai akademik kelas ini"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Unduh CSV */}
+                    <button
+                      onClick={handleExportNilaiCSV}
+                      className="px-2.5 py-1.5 rounded-xl bg-[#03150d] hover:bg-[#072a1a] border border-[#d4af37]/30 text-emerald-300 text-xs font-semibold flex items-center gap-1 transition"
+                      title="Unduh format leger CSV"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-inner">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#052216] text-[#d4af37]">
-                  <tr>
-                    <th className="p-3 font-bold">NIS</th>
-                    <th className="p-3 font-bold">NAMA SANTRI</th>
-                    <th className="p-3 font-bold">KELAS</th>
-                    <th className="p-3 font-bold">MATA PELAJARAN</th>
-                    <th className="p-3 text-center font-bold">NILAI ANGKA</th>
-                    <th className="p-3 font-bold">SEMESTER</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#d4af37]/10 bg-[#052216]/60">
-                  {nilaiList.map((nl, i) => (
-                    <tr key={i} className="hover:bg-[#d4af37]/10 transition">
-                      <td className="p-3 font-mono text-[#d4af37]">{nl.idSantri}</td>
-                      <td className="p-3 font-bold text-white text-sm">{nl.nama}</td>
-                      <td className="p-3 text-emerald-300">{nl.kelas}</td>
-                      <td className="p-3 font-semibold text-white">{nl.pelajaran}</td>
-                      <td className="p-3 text-center font-mono font-bold text-emerald-400">{nl.nilai}</td>
-                      <td className="p-3 text-emerald-200/80">{nl.semester}</td>
+
+            {/* KPI Stat Cards Per Kelas */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-[#031b10]/80 p-3.5 rounded-2xl border border-[#d4af37]/25 shadow flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-950 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-stone-300 uppercase tracking-wider block font-medium">Santri Terdaftar</span>
+                  <div className="text-lg font-bold text-white font-mono flex items-baseline gap-1">
+                    {santriForSelectedKelas.length}
+                    <span className="text-xs text-emerald-400 font-sans font-normal">anak</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-[#031b10]/80 p-3.5 rounded-2xl border border-[#d4af37]/25 shadow flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-950 border border-amber-500/40 flex items-center justify-center text-[#d4af37]">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-stone-300 uppercase tracking-wider block font-medium">Mata Pelajaran</span>
+                  <div className="text-lg font-bold text-[#d4af37] font-mono flex items-baseline gap-1">
+                    {kurikulumForSelectedKelas.length}
+                    <span className="text-xs text-amber-300 font-sans font-normal">Fan Kitab</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-[#031b10]/80 p-3.5 rounded-2xl border border-[#d4af37]/25 shadow flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-950 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-stone-300 uppercase tracking-wider block font-medium">Rata-Rata Kelas</span>
+                  <div className="text-lg font-bold text-cyan-300 font-mono">
+                    {(() => {
+                      if (!santriForSelectedKelas.length) return '0.0';
+                      let totalAvg = 0;
+                      santriForSelectedKelas.forEach(s => {
+                        totalAvg += (studentMetrics.metricsMap.get(s.id)?.avg ?? 0);
+                      });
+                      return (totalAvg / santriForSelectedKelas.length).toFixed(1);
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-[#031b10]/80 p-3.5 rounded-2xl border border-[#d4af37]/25 shadow flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-950 border border-purple-500/40 flex items-center justify-center text-purple-400">
+                  <Award className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-stone-300 uppercase tracking-wider block font-medium">Mumtaz (≥ 90)</span>
+                  <div className="text-lg font-bold text-purple-300 font-mono">
+                    {santriForSelectedKelas.filter(s => (studentMetrics.metricsMap.get(s.id)?.avg ?? 0) >= 90).length}
+                    <span className="text-xs text-purple-400 font-sans font-normal ml-1">santri</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* TABEL NILAI EDITABLE TERKONEKSI REAL-TIME */}
+            <div className="card-3d rounded-3xl p-4 sm:p-5 backdrop-blur space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-[#d4af37]/20">
+                <div>
+                  <h4 className="text-base font-bold text-[#d4af37] text-gold-3d flex items-center gap-2">
+                    Leger Penilaian Santri Kelas {selectedNilaiKelas}
+                    <span className="text-[11px] text-emerald-300 font-mono font-normal">
+                      ({selectedNilaiSemester})
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-stone-400">
+                    Klik dan ketik langsung angka nilai (0 - 100) pada setiap kolom mata pelajaran. Rata-rata dan peringkat dihitung otomatis.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 font-medium">
+                    Kolom Mapel: {kurikulumForSelectedKelas.length} (9 - 10 Mapel)
+                  </span>
+                </div>
+              </div>
+
+              {/* Editable Matrix Table */}
+              <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-inner max-h-[620px] overflow-y-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-[#02130a] text-[#d4af37] sticky top-0 z-20 shadow-md">
+                    <tr>
+                      <th className="p-3 font-bold border-b border-r border-[#d4af37]/20 w-12 text-center sticky left-0 z-30 bg-[#02130a]">
+                        NO
+                      </th>
+                      <th className="p-3 font-bold border-b border-r border-[#d4af37]/20 min-w-[90px] sticky left-12 z-30 bg-[#02130a]">
+                        NIS
+                      </th>
+                      <th className="p-3 font-bold border-b border-r border-[#d4af37]/20 min-w-[170px] sticky left-[138px] z-30 bg-[#02130a]">
+                        NAMA SANTRI
+                      </th>
+
+                      {/* Kolom 9-10 Mata Pelajaran Dinamis dari Kurikulum */}
+                      {kurikulumForSelectedKelas.map((mapelItem, idx) => (
+                        <th
+                          key={mapelItem.id || idx}
+                          className="p-3 font-bold border-b border-r border-[#d4af37]/20 min-w-[125px] text-center bg-[#031b10] hover:bg-[#072a1a] transition"
+                        >
+                          <div className="text-white font-extrabold text-[12px] truncate">
+                            {mapelItem.mapel}
+                          </div>
+                          <div className="text-[10px] text-[#d4af37] font-serif italic truncate mt-0.5" title={mapelItem.kitab}>
+                            {mapelItem.kitab || '-'}
+                          </div>
+                          <div className="text-[9px] text-emerald-400/80 font-normal truncate">
+                            {mapelItem.ustadzPengampu || 'Asatidz'}
+                          </div>
+                        </th>
+                      ))}
+
+                      {/* Kolom Total, Rata-Rata, Predikat, Ranking */}
+                      <th className="p-3 font-bold border-b border-r border-[#d4af37]/20 text-center min-w-[85px] bg-[#02130a]">
+                        TOTAL
+                      </th>
+                      <th className="p-3 font-bold border-b border-r border-[#d4af37]/20 text-center min-w-[90px] bg-[#041f12] text-amber-300">
+                        RATA-RATA
+                      </th>
+                      <th className="p-3 font-bold border-b border-r border-[#d4af37]/20 text-center min-w-[120px] bg-[#02130a]">
+                        PREDIKAT
+                      </th>
+                      <th className="p-3 font-bold border-b border-[#d4af37]/20 text-center min-w-[85px] bg-[#041f12] text-amber-300">
+                        RANK
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+
+                  <tbody className="divide-y divide-[#d4af37]/15 bg-[#03150d]/80">
+                    {santriForSelectedKelas.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={kurikulumForSelectedKelas.length + 7}
+                          className="p-8 text-center text-stone-400"
+                        >
+                          Tidak ada santri yang ditemukan di kelas <b>{selectedNilaiKelas}</b>.
+                        </td>
+                      </tr>
+                    ) : (
+                      santriForSelectedKelas.map((santri, rowIdx) => {
+                        const metrics = studentMetrics.metricsMap.get(santri.id) || { total: 0, avg: 0, predikat: '-', count: 0 };
+                        const rank = studentMetrics.rankMap.get(santri.id) ?? (rowIdx + 1);
+
+                        return (
+                          <tr
+                            key={santri.id}
+                            className="hover:bg-[#072f1a]/80 transition group"
+                          >
+                            {/* Sticky Columns: No, NIS, Nama */}
+                            <td className="p-2.5 text-center font-mono text-stone-400 border-r border-[#d4af37]/15 sticky left-0 z-10 bg-[#03150d] group-hover:bg-[#072f1a]">
+                              {rowIdx + 1}
+                            </td>
+                            <td className="p-2.5 font-mono text-[#d4af37] font-semibold border-r border-[#d4af37]/15 sticky left-12 z-10 bg-[#03150d] group-hover:bg-[#072f1a]">
+                              {santri.id}
+                            </td>
+                            <td className="p-2.5 border-r border-[#d4af37]/15 sticky left-[138px] z-10 bg-[#03150d] group-hover:bg-[#072f1a]">
+                              <div className="flex items-center gap-2">
+                                {santri.fotoThumbnail || santri.foto ? (
+                                  <img
+                                    src={santri.fotoThumbnail || santri.foto}
+                                    alt={santri.nama}
+                                    className="w-6 h-6 rounded-full object-cover border border-[#d4af37]/40 shrink-0"
+                                    onError={(e) => {
+                                      (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80';
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-emerald-950 border border-[#d4af37]/30 flex items-center justify-center text-[10px] font-bold text-[#d4af37] shrink-0">
+                                    {santri.nama.charAt(0)}
+                                  </div>
+                                )}
+                                <div className="truncate max-w-[140px]">
+                                  <span className="font-bold text-white text-xs block truncate">
+                                    {santri.nama}
+                                  </span>
+                                  <span className="text-[10px] text-stone-400 block truncate">
+                                    {santri.kamar || '-'}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Kolom Nilai Editable untuk setiap Mata Pelajaran */}
+                            {kurikulumForSelectedKelas.map((mapelItem, colIdx) => {
+                              const currentScore = getStudentScore(santri.id, mapelItem.mapel);
+                              const isMumtaz = currentScore >= 90;
+                              const isJayyidJiddan = currentScore >= 80 && currentScore < 90;
+                              const isJayyid = currentScore >= 70 && currentScore < 80;
+                              const isRasib = currentScore < 60;
+
+                              return (
+                                <td
+                                  key={mapelItem.id || colIdx}
+                                  className="p-2 text-center border-r border-[#d4af37]/15"
+                                >
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={currentScore}
+                                    onChange={(e) => handleScoreChange(santri.id, mapelItem.mapel, parseInt(e.target.value) || 0)}
+                                    className={`w-16 px-1.5 py-1 text-center font-mono font-bold text-xs rounded-lg border transition focus:outline-none focus:ring-2 focus:ring-[#d4af37] ${
+                                      isMumtaz
+                                        ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/60'
+                                        : isJayyidJiddan
+                                        ? 'bg-sky-950/80 text-sky-300 border-sky-500/60'
+                                        : isJayyid
+                                        ? 'bg-amber-950/80 text-amber-300 border-amber-500/60'
+                                        : isRasib
+                                        ? 'bg-rose-950/80 text-rose-300 border-rose-500/60'
+                                        : 'bg-[#020e07] text-white border-stone-700'
+                                    }`}
+                                    title={`${santri.nama} - ${mapelItem.mapel}: ${currentScore}`}
+                                  />
+                                </td>
+                              );
+                            })}
+
+                            {/* Ringkasan Total */}
+                            <td className="p-2.5 text-center font-mono font-bold text-white border-r border-[#d4af37]/15 bg-[#021109]/50">
+                              {metrics.total}
+                            </td>
+
+                            {/* Rata-Rata */}
+                            <td className="p-2.5 text-center border-r border-[#d4af37]/15 bg-[#041a0f]/60">
+                              <span className={`px-2 py-0.5 rounded-lg font-mono font-extrabold text-xs inline-block ${
+                                metrics.avg >= 90 ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-500/40' :
+                                metrics.avg >= 80 ? 'bg-sky-900/60 text-sky-300 border border-sky-500/40' :
+                                metrics.avg >= 70 ? 'bg-amber-900/60 text-amber-300 border border-amber-500/40' :
+                                'bg-rose-900/60 text-rose-300 border border-rose-500/40'
+                              }`}>
+                                {metrics.avg}
+                              </span>
+                            </td>
+
+                            {/* Predikat */}
+                            <td className="p-2.5 text-center border-r border-[#d4af37]/15">
+                              <span className="text-[11px] font-semibold text-emerald-200">
+                                {metrics.predikat}
+                              </span>
+                            </td>
+
+                            {/* Peringkat / Rank */}
+                            <td className="p-2.5 text-center font-mono font-bold border-[#d4af37]/15">
+                              <span className={`px-2 py-0.5 rounded-full text-xs inline-flex items-center gap-1 ${
+                                rank === 1 ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-extrabold shadow' :
+                                rank === 2 ? 'bg-slate-300 text-black font-extrabold shadow' :
+                                rank === 3 ? 'bg-amber-700 text-white font-bold shadow' :
+                                'text-stone-300 font-semibold'
+                              }`}>
+                                #{rank}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Bottom Legend & Instructions */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-3 text-[11px] text-stone-400 border-t border-[#d4af37]/15">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="font-bold text-stone-300">Keterangan Nilai:</span>
+                  <span className="flex items-center gap-1 text-emerald-300">
+                    <span className="w-2.5 h-2.5 rounded bg-emerald-500" /> 90 - 100: Mumtaz (A+)
+                  </span>
+                  <span className="flex items-center gap-1 text-sky-300">
+                    <span className="w-2.5 h-2.5 rounded bg-sky-500" /> 80 - 89: Jayyid Jiddan (A)
+                  </span>
+                  <span className="flex items-center gap-1 text-amber-300">
+                    <span className="w-2.5 h-2.5 rounded bg-amber-500" /> 70 - 79: Jayyid (B)
+                  </span>
+                  <span className="flex items-center gap-1 text-rose-300">
+                    <span className="w-2.5 h-2.5 rounded bg-rose-500" /> &lt; 60: Rasib (D)
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span>Data tersimpan otomatis ke cloud storage saat klik "Simpan Semua Nilai".</span>
+                </div>
+              </div>
             </div>
+
+            {/* MODAL SETTING MATA PELAJARAN KURIKULUM (9 - 10 MAPEL REAL-TIME) */}
+            {isKurikulumSettingOpen && (
+              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                <div className="card-3d-glass rounded-3xl p-6 border-2 border-[#d4af37] max-w-3xl w-full space-y-6 shadow-2xl relative my-8">
+                  {/* Modal Header */}
+                  <div className="flex justify-between items-start pb-4 border-b border-[#d4af37]/20">
+                    <div>
+                      <h3 className="text-lg font-bold font-serif text-[#d4af37] text-gold-3d flex items-center gap-2">
+                        <BookOpen className="w-5 h-5 text-emerald-400" />
+                        Pengaturan Kurikulum Mata Pelajaran: {selectedNilaiKelas}
+                      </h3>
+                      <p className="text-xs text-stone-300 mt-1">
+                        Atur 9 - 10 mata pelajaran untuk kelas ini. Setiap penambahan, pengubahan, atau penghapusan mata pelajaran akan <b>langsung memperbarui kolom tabel penilaian ujian secara real-time</b>.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setIsKurikulumSettingOpen(false)}
+                      className="p-1.5 rounded-full hover:bg-stone-800 text-stone-400 hover:text-white transition"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Quick Action: Reset / Lengkapi Standar 10 Mapel */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-[#02130a] p-3 rounded-2xl border border-[#d4af37]/30">
+                    <div className="text-xs text-emerald-300">
+                      Jumlah Mapel Aktif Kelas Ini: <b>{kurikulumForSelectedKelas.length} Mata Pelajaran</b>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResetDefault10Mapel}
+                      className="px-3 py-1.5 rounded-xl bg-amber-950/80 hover:bg-amber-900 border border-[#d4af37]/60 text-[#d4af37] font-bold text-xs flex items-center gap-1.5 transition"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Muat / Lengkapi Standar 10 Mapel</span>
+                    </button>
+                  </div>
+
+                  {/* Daftar Mata Pelajaran Kelas Terpilih */}
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                      Daftar Mata Pelajaran Terdaftar ({kurikulumForSelectedKelas.length} Mapel):
+                    </h4>
+                    <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25 max-h-72 overflow-y-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-[#02130a] text-[#d4af37] sticky top-0">
+                          <tr>
+                            <th className="p-2.5 font-bold">NO</th>
+                            <th className="p-2.5 font-bold">MATA PELAJARAN</th>
+                            <th className="p-2.5 font-bold">KITAB</th>
+                            <th className="p-2.5 font-bold">PENGARANG (MUALLIF)</th>
+                            <th className="p-2.5 font-bold">USTADZ PENGAMPU</th>
+                            <th className="p-2.5 font-bold text-center">AKSI</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#d4af37]/15 bg-[#03150d]">
+                          {kurikulumForSelectedKelas.map((item, idx) => (
+                            <tr key={item.id || idx} className="hover:bg-[#072f1a]/50">
+                              <td className="p-2.5 font-mono text-stone-400">{idx + 1}</td>
+                              <td className="p-2.5 font-bold text-white">
+                                {editingMapelId === item.id ? (
+                                  <input
+                                    type="text"
+                                    value={editingMapelData.mapel}
+                                    onChange={(e) => setEditingMapelData({ ...editingMapelData, mapel: e.target.value })}
+                                    className="px-2 py-1 text-xs bg-[#010a05] border border-[#d4af37] rounded text-white w-full"
+                                  />
+                                ) : (
+                                  item.mapel
+                                )}
+                              </td>
+                              <td className="p-2.5 text-emerald-300 font-medium">
+                                {editingMapelId === item.id ? (
+                                  <input
+                                    type="text"
+                                    value={editingMapelData.kitab}
+                                    onChange={(e) => setEditingMapelData({ ...editingMapelData, kitab: e.target.value })}
+                                    className="px-2 py-1 text-xs bg-[#010a05] border border-[#d4af37] rounded text-white w-full"
+                                  />
+                                ) : (
+                                  item.kitab
+                                )}
+                              </td>
+                              <td className="p-2.5 text-stone-300 italic">
+                                {editingMapelId === item.id ? (
+                                  <input
+                                    type="text"
+                                    value={editingMapelData.muallif}
+                                    onChange={(e) => setEditingMapelData({ ...editingMapelData, muallif: e.target.value })}
+                                    className="px-2 py-1 text-xs bg-[#010a05] border border-[#d4af37] rounded text-white w-full"
+                                  />
+                                ) : (
+                                  item.muallif || '-'
+                                )}
+                              </td>
+                              <td className="p-2.5 text-stone-300">
+                                {editingMapelId === item.id ? (
+                                  <input
+                                    type="text"
+                                    value={editingMapelData.ustadzPengampu || ''}
+                                    onChange={(e) => setEditingMapelData({ ...editingMapelData, ustadzPengampu: e.target.value })}
+                                    className="px-2 py-1 text-xs bg-[#010a05] border border-[#d4af37] rounded text-white w-full"
+                                  />
+                                ) : (
+                                  item.ustadzPengampu || 'Dewan Asatidz'
+                                )}
+                              </td>
+                              <td className="p-2.5 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  {editingMapelId === item.id ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateMapelInKelas(item.id)}
+                                        className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-500"
+                                        title="Simpan"
+                                      >
+                                        <Check className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingMapelId(null)}
+                                        className="p-1 rounded bg-stone-700 text-stone-300 hover:bg-stone-600"
+                                        title="Batal"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingMapelId(item.id);
+                                          setEditingMapelData({
+                                            mapel: item.mapel,
+                                            kitab: item.kitab,
+                                            muallif: item.muallif,
+                                            ustadzPengampu: item.ustadzPengampu
+                                          });
+                                        }}
+                                        className="p-1 rounded bg-stone-800 text-[#d4af37] hover:bg-stone-700"
+                                        title="Edit Mapel"
+                                      >
+                                        <Sliders className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteMapelFromKelas(item.id, item.mapel)}
+                                        className="p-1 rounded bg-rose-950 text-rose-300 hover:bg-rose-900 border border-rose-700/50"
+                                        title="Hapus Mapel"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Form Tambah Mata Pelajaran Baru */}
+                  <form onSubmit={handleAddMapelToKelas} className="bg-[#02130a] p-4 rounded-2xl border border-[#d4af37]/30 space-y-3">
+                    <h4 className="text-xs font-bold text-[#d4af37] uppercase tracking-wider flex items-center gap-1.5">
+                      <Plus className="w-4 h-4 text-emerald-400" />
+                      Tambah Mata Pelajaran Baru ({selectedNilaiKelas}):
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                      <div>
+                        <label className="text-[10px] text-stone-300 block mb-1">Nama Mata Pelajaran *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Contoh: Nahwu, Fiqih..."
+                          value={newMapelForm.mapel}
+                          onChange={(e) => setNewMapelForm({ ...newMapelForm, mapel: e.target.value })}
+                          className="w-full px-2.5 py-1.5 text-xs bg-[#010a05] border border-[#d4af37]/40 rounded-xl text-white focus:outline-none focus:border-[#d4af37]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-stone-300 block mb-1">Kitab Rujukan</label>
+                        <input
+                          type="text"
+                          placeholder="Contoh: Al-Jurumiyyah..."
+                          value={newMapelForm.kitab}
+                          onChange={(e) => setNewMapelForm({ ...newMapelForm, kitab: e.target.value })}
+                          className="w-full px-2.5 py-1.5 text-xs bg-[#010a05] border border-[#d4af37]/40 rounded-xl text-white focus:outline-none focus:border-[#d4af37]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-stone-300 block mb-1">Pengarang / Muallif</label>
+                        <input
+                          type="text"
+                          placeholder="Contoh: Ibnu Ajurrum..."
+                          value={newMapelForm.muallif}
+                          onChange={(e) => setNewMapelForm({ ...newMapelForm, muallif: e.target.value })}
+                          className="w-full px-2.5 py-1.5 text-xs bg-[#010a05] border border-[#d4af37]/40 rounded-xl text-white focus:outline-none focus:border-[#d4af37]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-stone-300 block mb-1">Ustadz Pengampu</label>
+                        <input
+                          type="text"
+                          placeholder="Contoh: Ustadz Ahmad..."
+                          value={newMapelForm.ustadzPengampu}
+                          onChange={(e) => setNewMapelForm({ ...newMapelForm, ustadzPengampu: e.target.value })}
+                          className="w-full px-2.5 py-1.5 text-xs bg-[#010a05] border border-[#d4af37]/40 rounded-xl text-white focus:outline-none focus:border-[#d4af37]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="submit"
+                        className="px-4 py-1.5 rounded-xl btn-3d-gold text-black font-extrabold text-xs flex items-center gap-1.5 shadow"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Tambahkan ke Kurikulum {selectedNilaiKelas}</span>
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Modal Footer */}
+                  <div className="flex justify-end pt-2 border-t border-[#d4af37]/20">
+                    <button
+                      type="button"
+                      onClick={() => setIsKurikulumSettingOpen(false)}
+                      className="px-5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-white font-bold text-xs transition"
+                    >
+                      Selesai & Tutup Pengaturan
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -7925,6 +11006,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
+                    {/* INDIKATOR KONEKSI REAL-TIME DENGAN DATA GURU PENGAJAR */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-[#031d11] via-[#052919] to-[#02140c] border-2 border-emerald-500/50 shadow-inner">
+                      <div className="flex items-center gap-3">
+                        <span className="relative flex h-3.5 w-3.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
+                        </span>
+                        <div>
+                          <div className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
+                            <span>Terkoneksi Real-Time dengan Data Guru Pengajar</span>
+                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[10px] font-mono font-bold">
+                              {pengurusList.length} Akun Terkoneksi
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-emerald-300 mt-0.5">
+                            Jumlah akun login pengurus ({pengurusList.length}) tersinkronisasi 1:1 secara real-time dengan data guru pengajar ({guruList.length}).
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-mono font-bold text-[#d4af37] bg-black/50 px-3 py-1.5 rounded-xl border border-[#d4af37]/35 whitespace-nowrap">
+                        1:1 Real-Time Synced
+                      </span>
+                    </div>
+
                     {/* Pilih Pengurus yang akan diedit */}
                     <div className="bg-[#03140c] p-4 rounded-xl border border-[#d4af37]/20 space-y-3">
                       <label className="text-xs font-bold text-[#d4af37] block">
@@ -7935,9 +11040,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onChange={(e) => setSelectedPengurusId(e.target.value)}
                         className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
                       >
-                        {pengurusList.map(p => (
-                          <option key={p.id} value={p.id}>
-                            {p.nama} — {p.jabatan} ({p.id})
+                        {pengurusList.map((p, idx) => (
+                          <option key={p.id || idx} value={p.id}>
+                            {idx + 1}. {p.nama} — {p.jabatan} ({p.kelasBimbingan ? `Kelas: ${p.kelasBimbingan}` : p.id})
                           </option>
                         ))}
                       </select>
@@ -8072,32 +11177,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     {/* Tabel Seluruh Akun Pengurus */}
                     <div className="space-y-2">
-                      <span className="text-xs text-[#d4af37] font-bold block">
-                        Daftar Akun Pengurus & Kredensial Login
-                      </span>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-[#d4af37] font-bold block">
+                          Daftar Akun Pengurus & Kredensial Login (Total: {pengurusList.length} Akun)
+                        </span>
+                        <span className="text-[11px] text-emerald-300 font-mono">
+                          Live Auto-Sync: 1 Guru = 1 Akun Pengurus
+                        </span>
+                      </div>
                       <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25">
-                        <table className="w-full text-xs text-left min-w-[700px]">
+                        <table className="w-full text-xs text-left min-w-[850px]">
                           <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
                             <tr>
+                              <th className="p-3 text-center w-12">No</th>
                               <th className="p-3">Nama Pengurus (Username)</th>
+                              <th className="p-3">Kelas Bimbingan</th>
+                              <th className="p-3">Mata Pelajaran</th>
                               <th className="p-3">Kata Sandi</th>
                               <th className="p-3">Jabatan</th>
                               <th className="p-3">No. WhatsApp</th>
-                              <th className="p-3">Aksi</th>
+                              <th className="p-3 text-center">Status Real-Time</th>
+                              <th className="p-3 text-center">Aksi</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
-                            {pengurusList.map(p => (
-                              <tr key={p.id} className="hover:bg-[#d4af37]/5">
-                                <td className="p-3 font-bold text-white">{p.nama}</td>
+                            {pengurusList.map((p, idx) => (
+                              <tr key={p.id || idx} className="hover:bg-[#d4af37]/5 transition">
+                                <td className="p-3 text-center font-mono text-emerald-400 font-bold">{idx + 1}</td>
+                                <td className="p-3 font-bold text-white whitespace-nowrap">{p.nama}</td>
+                                <td className="p-3 text-emerald-300 whitespace-nowrap">{p.kelasBimbingan || '-'}</td>
+                                <td className="p-3 text-emerald-200">{p.mapel || '-'}</td>
                                 <td className="p-3 font-mono font-bold text-[#d4af37]">{p.password || 'pengurus123'}</td>
                                 <td className="p-3 text-emerald-300">{p.jabatan}</td>
-                                <td className="p-3 text-slate-300 font-mono">{p.noWa}</td>
-                                <td className="p-3">
+                                <td className="p-3 text-slate-300 font-mono whitespace-nowrap">{p.noWa}</td>
+                                <td className="p-3 text-center whitespace-nowrap">
+                                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                                    ✓ Guru Pengajar
+                                  </span>
+                                </td>
+                                <td className="p-3 text-center whitespace-nowrap">
                                   <button
                                     type="button"
                                     onClick={() => setSelectedPengurusId(p.id)}
-                                    className="px-2 py-1 bg-[#d4af37]/20 hover:bg-[#d4af37] text-[#d4af37] hover:text-black font-bold rounded-lg transition"
+                                    className="px-2.5 py-1 bg-[#d4af37]/20 hover:bg-[#d4af37] text-[#d4af37] hover:text-black font-bold rounded-lg border border-[#d4af37]/40 transition text-[11px]"
                                   >
                                     Edit Sandi
                                   </button>

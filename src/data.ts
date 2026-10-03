@@ -777,45 +777,77 @@ export const INITIAL_UANG_SAKU_LIST: UangSakuRecord[] = [
 ];
 
 export const INITIAL_KURIKULUM_LIST: KurikulumKitabRecord[] = [
-  // 1 TSANAWIYAH
-  { id: 'KUR-1', kelas: '1 TSANAWIYAH', mapel: 'Nahwu', kitab: 'Al-Jurumiyyah & Nadzhom Alala', muallif: 'Ibnu Ajurrum & Az-Zarnuji', targetSemester: 'Bab Kalam s/d Bab Al-Af\'al', ustadzPengampu: 'Ustazah Fina Nikmatul Kamelia' },
-  { id: 'KUR-2', kelas: '1 TSANAWIYAH', mapel: 'Shorof', kitab: 'Al-Amtsilah At-Tashrifiyyah', muallif: 'KH. Muhammad Ma\'shum bin Ali', targetSemester: 'Tashrif Tsulatsi Mujarrad Bab 1 - 6', ustadzPengampu: 'Ustazah Solihah' },
-  { id: 'KUR-3', kelas: '1 TSANAWIYAH', mapel: 'Fiqih', kitab: 'Mabadi Al-Fiqhiyyah Juz 1 & 2', muallif: 'Umar Abdul Jabbar', targetSemester: 'Thoharoh, Wudhu, Shalat Fardhu', ustadzPengampu: 'Ustadzah Qothrunada' },
-  { id: 'KUR-4', kelas: '1 TSANAWIYAH', mapel: 'Tauhid', kitab: 'Aqidatul Awam', muallif: 'Syaikh Ahmad Al-Marzuqi', targetSemester: 'Sifat Wajib, Mustahil, Jaiz Bagi Allah & Rasul', ustadzPengampu: 'Ustazah Solihah' },
-  { id: 'KUR-5', kelas: '1 TSANAWIYAH', mapel: 'Tajwid', kitab: 'Hidayatus Shibyan / Tuhfatul Athfal', muallif: 'Syaikh Sa\'id bin Sa\'d', targetSemester: 'Hukum Nun Mati, Tanwin, Mim Mati, & Idgham', ustadzPengampu: 'Ustazah Maulida Rohmah' },
-  { id: 'KUR-6', kelas: '1 TSANAWIYAH', mapel: 'Pegon & Bahasa Arab', kitab: 'Al-Miftah Lil Pegon & Durusullughah', muallif: 'Tim Asatidz Pondok Salaf', targetSemester: 'Kaidah Tulis Pegon Jawa & Mufradat Harian', ustadzPengampu: 'Ustazah Kasyifatul Aini' },
+  // 1 TSANAWIYAH (10 Mapel)
+  { id: 'KUR-101', kelas: '1 TSANAWIYAH', mapel: 'Nahwu', kitab: 'Al-Jurumiyyah & Nadzhom Alala', muallif: 'Ibnu Ajurrum & Az-Zarnuji', targetSemester: 'Bab Kalam s/d Bab Al-Af\'al', ustadzPengampu: 'Ustazah Fina Nikmatul Kamelia' },
+  { id: 'KUR-102', kelas: '1 TSANAWIYAH', mapel: 'Shorof', kitab: 'Al-Amtsilah At-Tashrifiyyah', muallif: 'KH. Muhammad Ma\'shum bin Ali', targetSemester: 'Tashrif Tsulatsi Mujarrad Bab 1 - 6', ustadzPengampu: 'Ustazah Solihah' },
+  { id: 'KUR-103', kelas: '1 TSANAWIYAH', mapel: 'Fiqih', kitab: 'Mabadi Al-Fiqhiyyah Juz 1 & 2', muallif: 'Umar Abdul Jabbar', targetSemester: 'Thoharoh, Wudhu, Shalat Fardhu', ustadzPengampu: 'Ustadzah Qothrunada' },
+  { id: 'KUR-104', kelas: '1 TSANAWIYAH', mapel: 'Tauhid', kitab: 'Aqidatul Awam', muallif: 'Syaikh Ahmad Al-Marzuqi', targetSemester: 'Sifat Wajib, Mustahil, Jaiz Bagi Allah & Rasul', ustadzPengampu: 'Ustazah Solihah' },
+  { id: 'KUR-105', kelas: '1 TSANAWIYAH', mapel: 'Tajwid', kitab: 'Hidayatus Shibyan / Tuhfatul Athfal', muallif: 'Syaikh Sa\'id bin Sa\'d', targetSemester: 'Hukum Nun Mati, Tanwin, Mim Mati, & Idgham', ustadzPengampu: 'Ustazah Maulida Rohmah' },
+  { id: 'KUR-106', kelas: '1 TSANAWIYAH', mapel: 'Pegon & Khot', kitab: 'Al-Miftah Lil Pegon & Qawa\'idul Khath', muallif: 'Tim Asatidz Pondok Salaf', targetSemester: 'Kaidah Tulis Pegon Jawa & Mufradat Harian', ustadzPengampu: 'Ustazah Kasyifatul Aini' },
+  { id: 'KUR-107', kelas: '1 TSANAWIYAH', mapel: 'Bahasa Arab', kitab: 'Durusullughah Al-Arabiyyah Juz 1', muallif: 'Dr. V. Abdur Rahim', targetSemester: 'Mufradat Dasar & Percakapan Harian', ustadzPengampu: 'Ustazah Kasyifatul Aini' },
+  { id: 'KUR-108', kelas: '1 TSANAWIYAH', mapel: 'Akhlaq', kitab: 'Akhlaq Lil Banin Juz 1', muallif: 'Umar bin Ahmad Baradja', targetSemester: 'Adab Anak Terhadap Orang Tua & Guru', ustadzPengampu: 'Ustazah Fina Nikmatul Kamelia' },
+  { id: 'KUR-109', kelas: '1 TSANAWIYAH', mapel: 'Tarikh Islam', kitab: 'Khulashoh Nurul Yaqin Juz 1', muallif: 'Umar Abdul Jabbar', targetSemester: 'Sirah Nabawiyyah Periode Kelahiran s/d Kenabian', ustadzPengampu: 'Ustazah Dewi Faila Shofa' },
+  { id: 'KUR-110', kelas: '1 TSANAWIYAH', mapel: 'Hadits', kitab: 'Al-Arba\'in An-Nawawiyyah (1-20)', muallif: 'Imam An-Nawawi', targetSemester: 'Hafalan & Terjemah Hadits 1 s/d 20', ustadzPengampu: 'Ustazah Isna Mubarokah' },
 
-  // 2 TSANAWIYAH
-  { id: 'KUR-7', kelas: '2 TSANAWIYAH', mapel: 'Nahwu', kitab: 'Mukhtashar Jiddan & Nadzhom Al-Maqsud', muallif: 'Syaikh Zaini Dahlan & Ahmad bin Abdurrahim', targetSemester: 'Marfuatul Asma\' s/d Manshubatul Asma\'', ustadzPengampu: 'Ustadz Ahmad Shobirin' },
-  { id: 'KUR-8', kelas: '2 TSANAWIYAH', mapel: 'Shorof & I\'lal', kitab: 'Qowa\'idul I\'lal & Nadzhom Maqsud', muallif: 'Mundzir Nadzir', targetSemester: 'Kaidah I\'lal 1 - 19 & Bina\' Mu\'tal', ustadzPengampu: 'Ustadz Adib Setiawan' },
-  { id: 'KUR-9', kelas: '2 TSANAWIYAH', mapel: 'Fiqih', kitab: 'Safinatun Naja & Sullamut Taufiq', muallif: 'Syaikh Salim bin Sumair Al-Hadhrami', targetSemester: 'Kajian Fiqih Ibadah & Muamalah Dasar', ustadzPengampu: 'Ustadz Adib Setiawan' },
-  { id: 'KUR-10', kelas: '2 TSANAWIYAH', mapel: 'Akhlaq', kitab: 'Akhlaq Lil Banin Juz 2', muallif: 'Umar bin Ahmad Baradja', targetSemester: 'Adab Bergaul, Menghormati Guru & Orang Tua', ustadzPengampu: 'Ustadz Yasir' },
-  { id: 'KUR-11', kelas: '2 TSANAWIYAH', mapel: 'Hadits', kitab: 'Al-Arba\'in An-Nawawiyyah', muallif: 'Imam An-Nawawi', targetSemester: 'Hadits 1 s/d Hadits 25 (Hafalan & Pemahaman)', ustadzPengampu: 'Ustazah Isna Mubarokah' },
-  { id: 'KUR-12', kelas: '2 TSANAWIYAH', mapel: 'Tarikh Islam', kitab: 'Khulashoh Nuril Yaqin Juz 1 & 2', muallif: 'Umar Abdul Jabbar', targetSemester: 'Sirah Nabawiyyah Periode Makkah & Madinah', ustadzPengampu: 'Ustazah Dewi Faila Shofa' },
+  // 2 TSANAWIYAH (10 Mapel)
+  { id: 'KUR-201', kelas: '2 TSANAWIYAH', mapel: 'Nahwu', kitab: 'Mukhtashar Jiddan & Nadzhom Al-Maqsud', muallif: 'Syaikh Zaini Dahlan & Ahmad bin Abdurrahim', targetSemester: 'Marfuatul Asma\' s/d Manshubatul Asma\'', ustadzPengampu: 'Ustadz Ahmad Shobirin' },
+  { id: 'KUR-202', kelas: '2 TSANAWIYAH', mapel: 'Shorof & I\'lal', kitab: 'Qowa\'idul I\'lal & Nadzhom Maqsud', muallif: 'Mundzir Nadzir', targetSemester: 'Kaidah I\'lal 1 - 19 & Bina\' Mu\'tal', ustadzPengampu: 'Ustadz Adib Setiawan' },
+  { id: 'KUR-203', kelas: '2 TSANAWIYAH', mapel: 'Fiqih', kitab: 'Safinatun Naja & Sullamut Taufiq', muallif: 'Syaikh Salim bin Sumair Al-Hadhrami', targetSemester: 'Kajian Fiqih Ibadah & Muamalah Dasar', ustadzPengampu: 'Ustadz Adib Setiawan' },
+  { id: 'KUR-204', kelas: '2 TSANAWIYAH', mapel: 'Akhlaq', kitab: 'Akhlaq Lil Banin Juz 2 & Ta\'limul Muta\'allim 1', muallif: 'Umar Baradja & Syaikh Az-Zarnuji', targetSemester: 'Adab Menuntut Ilmu & Menghormati Guru', ustadzPengampu: 'Ustadz Yasir' },
+  { id: 'KUR-205', kelas: '2 TSANAWIYAH', mapel: 'Hadits', kitab: 'Al-Arba\'in An-Nawawiyyah (21-42)', muallif: 'Imam An-Nawawi', targetSemester: 'Hadits 21 s/d Hadits 42 Lengkap', ustadzPengampu: 'Ustazah Isna Mubarokah' },
+  { id: 'KUR-206', kelas: '2 TSANAWIYAH', mapel: 'Tarikh Islam', kitab: 'Khulashoh Nuril Yaqin Juz 2', muallif: 'Umar Abdul Jabbar', targetSemester: 'Sirah Nabawiyyah Periode Madinah & Gazawat', ustadzPengampu: 'Ustazah Dewi Faila Shofa' },
+  { id: 'KUR-207', kelas: '2 TSANAWIYAH', mapel: 'Tauhid', kitab: 'Tijan Ad-Darari & Kifayatul Awam', muallif: 'Syaikh Ibrahim Al-Baijuri', targetSemester: 'Dalil Aqli & Naqli Sifat 20', ustadzPengampu: 'Ustadz Ahmad Shobirin' },
+  { id: 'KUR-208', kelas: '2 TSANAWIYAH', mapel: 'Tajwid', kitab: 'Manzhumatul Jazariyyah Bab 1', muallif: 'Imam Ibnul Jazari', targetSemester: 'Makharij & Sifatul Huruf', ustadzPengampu: 'Ustazah Isna Mubarokah' },
+  { id: 'KUR-209', kelas: '2 TSANAWIYAH', mapel: 'Bahasa Arab', kitab: 'Tamrinatul Lughah & Insya\'', muallif: 'Tim Asatidz Pondok', targetSemester: 'Tarkib & Penulisan Karangan Arab', ustadzPengampu: 'Ustadz Faza' },
+  { id: 'KUR-210', kelas: '2 TSANAWIYAH', mapel: 'Ushul Fiqh', kitab: 'Mabadi Al-Awaliyyah', muallif: 'Syaikh Abdul Hamid Hakim', targetSemester: 'Kaidah Ushuliyyah & Fiqhiyyah Dasar', ustadzPengampu: 'Ustadz Adib Setiawan' },
 
-  // 3 TSANAWIYAH
-  { id: 'KUR-13', kelas: '3 TSANAWIYAH', mapel: 'Nahwu', kitab: 'Al-Imrithi (Nadzhom & Syarah)', muallif: 'Syarafuddin Yahya Al-Imrithi', targetSemester: 'Tarkib Kalimat & Hafalan 254 Bait Lengkap', ustadzPengampu: 'Ustadz Sulaiman' },
-  { id: 'KUR-14', kelas: '3 TSANAWIYAH', mapel: 'Fiqih', kitab: 'Fathul Qorib Al-Mujib', muallif: 'Ibnu Qasim Al-Ghazi', targetSemester: 'Kitab Thoharoh, Sholat, Zakat, & Shiyam', ustadzPengampu: 'Ustadz Ahmad Shobirin' },
-  { id: 'KUR-15', kelas: '3 TSANAWIYAH', mapel: 'Hadits', kitab: 'Bulughul Maram min Adillatil Ahkam', muallif: 'Al-Hafizh Ibnu Hajar Al-Asqalani', targetSemester: 'Kitab Thoharoh & Bab Shalatul Jama\'ah', ustadzPengampu: 'Ustadz Mizan Khoirul' },
-  { id: 'KUR-16', kelas: '3 TSANAWIYAH', mapel: 'Akhlaq', kitab: 'Taisirul Khalaq fi Ilmil Akhlaq', muallif: 'Hafizh Hasan Al-Mas\'udi', targetSemester: 'Tazkiyatun Nafs & Perangai Terpuji', ustadzPengampu: 'Ustadz Yasir' },
-  { id: 'KUR-17', kelas: '3 TSANAWIYAH', mapel: 'Tajwid Al-Quran', kitab: 'Jazariyyah (Manzhumatul Jazariyyah)', muallif: 'Imam Ibnul Jazari', targetSemester: 'Makharij, Shifatul Huruf, Ahkamul Mad', ustadzPengampu: 'Ustadz Sulaiman' },
+  // 3 TSANAWIYAH (10 Mapel)
+  { id: 'KUR-301', kelas: '3 TSANAWIYAH', mapel: 'Nahwu', kitab: 'Al-Imrithi (Nadzhom & Syarah)', muallif: 'Syarafuddin Yahya Al-Imrithi', targetSemester: 'Tarkib Kalimat & Hafalan 254 Bait Lengkap', ustadzPengampu: 'Ustadz Sulaiman' },
+  { id: 'KUR-302', kelas: '3 TSANAWIYAH', mapel: 'Fiqih', kitab: 'Fathul Qorib Al-Mujib (Juz 1)', muallif: 'Ibnu Qasim Al-Ghazi', targetSemester: 'Kitab Thoharoh, Sholat, Zakat, & Shiyam', ustadzPengampu: 'Ustadz Ahmad Shobirin' },
+  { id: 'KUR-303', kelas: '3 TSANAWIYAH', mapel: 'Hadits', kitab: 'Bulughul Maram min Adillatil Ahkam', muallif: 'Al-Hafizh Ibnu Hajar Al-Asqalani', targetSemester: 'Kitab Thoharoh & Bab Shalatul Jama\'ah', ustadzPengampu: 'Ustadz Mizan Khoirul' },
+  { id: 'KUR-304', kelas: '3 TSANAWIYAH', mapel: 'Akhlaq', kitab: 'Taisirul Khalaq fi Ilmil Akhlaq', muallif: 'Hafizh Hasan Al-Mas\'udi', targetSemester: 'Tazkiyatun Nafs & Perangai Terpuji', ustadzPengampu: 'Ustadz Yasir' },
+  { id: 'KUR-305', kelas: '3 TSANAWIYAH', mapel: 'Tajwid Al-Quran', kitab: 'Jazariyyah Lengkap & Ghorib', muallif: 'Imam Ibnul Jazari', targetSemester: 'Makharij, Shifatul Huruf, Ahkamul Mad & Waqaf', ustadzPengampu: 'Ustadz Sulaiman' },
+  { id: 'KUR-306', kelas: '3 TSANAWIYAH', mapel: 'Shorof', kitab: 'Al-Kailani & Tashrif Al-Izzah', muallif: 'Ali bin Hisyam Al-Kailani', targetSemester: 'Bina\' Tsulatsi Mazid & Ruba\'i', ustadzPengampu: 'Ustadz Bagus Danial' },
+  { id: 'KUR-307', kelas: '3 TSANAWIYAH', mapel: 'Tauhid', kitab: 'Jawahirul Kalamiyyah & Fathul Majid', muallif: 'Syaikh Thahir Al-Jazairi', targetSemester: 'Akidah Ahlussunnah wal Jama\'ah Asy\'ariyyah', ustadzPengampu: 'Ustadz Munawar' },
+  { id: 'KUR-308', kelas: '3 TSANAWIYAH', mapel: 'Tarikh Islam', kitab: 'Khulashoh Nurul Yaqin Juz 3', muallif: 'Umar Abdul Jabbar', targetSemester: 'Khulafaur Rasyidin & Daulah Islamiyyah', ustadzPengampu: 'Ustadz Wildan' },
+  { id: 'KUR-309', kelas: '3 TSANAWIYAH', mapel: 'Ushul Fiqh', kitab: 'Al-Waraqat fi Ushulil Fiqh', muallif: 'Imam Al-Haramain Al-Juwaini', targetSemester: 'Dalil Ijma\', Qiyas, Amr & Nahyi', ustadzPengampu: 'Ustadz Adib Setiawan' },
+  { id: 'KUR-310', kelas: '3 TSANAWIYAH', mapel: 'Balaghah Dasar', kitab: 'Durusul Balaghah Dasar', muallif: 'Hifni Nashif dkk', targetSemester: 'Pengenalan Tasybih, Majaz, & Isti\'arah', ustadzPengampu: 'Ustadz M. Khoirul Jadid' },
 
-  // 1 ALIYAH
-  { id: 'KUR-18', kelas: '1 ALIYAH', mapel: 'Nahwu & Shorof', kitab: 'Alfiyah Ibnu Malik (Juz 1)', muallif: 'Ibnu Malik Al-Andalusi', targetSemester: 'Bait 1 s/d 350 (Muqoddimah s/d I\'rab Af\'al)', ustadzPengampu: 'Ustadz Ahmad Shobirin' },
-  { id: 'KUR-19', kelas: '1 ALIYAH', mapel: 'Ushul Fiqh', kitab: 'Al-Waraqat & Lubbul Ushul', muallif: 'Imam Al-Haramain Al-Juwaini', targetSemester: 'Am, Khas, Mujmal, Mubayyan, Amr & Nahyi', ustadzPengampu: 'Ustadz Adib Setiawan' },
-  { id: 'KUR-20', kelas: '1 ALIYAH', mapel: 'Mustholahul Hadits', kitab: 'Al-Baiquniyyah & Taisir Mustholah', muallif: 'Umar Al-Baiquni & Dr. Mahmud Thohan', targetSemester: 'Shahih, Hasan, Dha\'if, Maqlub, Mursal', ustadzPengampu: 'Ustadz Mizan Khoirul' },
-  { id: 'KUR-21', kelas: '1 ALIYAH', mapel: 'Qawa\'id Fiqhiyyah', kitab: 'Al-Faraidul Bahiyyah', muallif: 'Syaikh Abu Bakar Al-Ahdal', targetSemester: 'Al-Qawa\'idul Khomsah Al-Kubra', ustadzPengampu: 'Ustadz Yasir' },
+  // 1 ALIYAH (10 Mapel)
+  { id: 'KUR-401', kelas: '1 ALIYAH', mapel: 'Nahwu & Shorof', kitab: 'Alfiyah Ibnu Malik (Juz 1)', muallif: 'Ibnu Malik Al-Andalusi', targetSemester: 'Bait 1 s/d 350 (Muqoddimah s/d I\'rab Af\'al)', ustadzPengampu: 'Ustadz Ahmad Shobirin' },
+  { id: 'KUR-402', kelas: '1 ALIYAH', mapel: 'Ushul Fiqh', kitab: 'Al-Waraqat & Lubbul Ushul', muallif: 'Imam Al-Haramain & Zakariya Al-Anshari', targetSemester: 'Am, Khas, Mujmal, Mubayyan, Amr & Nahyi', ustadzPengampu: 'Ustadz Adib Setiawan' },
+  { id: 'KUR-403', kelas: '1 ALIYAH', mapel: 'Mustholahul Hadits', kitab: 'Al-Baiquniyyah & Taisir Mustholah', muallif: 'Umar Al-Baiquni & Dr. Mahmud Thohan', targetSemester: 'Shahih, Hasan, Dha\'if, Maqlub, Mursal', ustadzPengampu: 'Ustadz Mizan Khoirul' },
+  { id: 'KUR-404', kelas: '1 ALIYAH', mapel: 'Qawa\'id Fiqhiyyah', kitab: 'Al-Faraidul Bahiyyah', muallif: 'Syaikh Abu Bakar Al-Ahdal', targetSemester: 'Al-Qawa\'idul Khomsah Al-Kubra', ustadzPengampu: 'Ustadz Yasir' },
+  { id: 'KUR-405', kelas: '1 ALIYAH', mapel: 'Fiqih Madzhab', kitab: 'Fathul Qorib Al-Mujib (Juz 2)', muallif: 'Ibnu Qasim Al-Ghazi', targetSemester: 'Kajian Jinayat, Hudud, & Faraidh', ustadzPengampu: 'Ustadz Sulaiman' },
+  { id: 'KUR-406', kelas: '1 ALIYAH', mapel: 'Tauhid & Aqidah', kitab: 'Kifayatul Awam As-Sanusiyyah', muallif: 'Muhammad bin Yusuf As-Sanusi', targetSemester: 'Aqoid Khamsin & Dalil Burhani', ustadzPengampu: 'Ustadz Munawar' },
+  { id: 'KUR-407', kelas: '1 ALIYAH', mapel: 'Tafsir Al-Quran', kitab: 'Tafsir Al-Jalalain (Juz Amma)', muallif: 'Jalaluddin Al-Mahalli & As-Suyuthi', targetSemester: 'Tafsir Surah An-Naba s/d An-Nas', ustadzPengampu: 'Ustadz Ahmad Shobirin' },
+  { id: 'KUR-408', kelas: '1 ALIYAH', mapel: 'Balaghah', kitab: 'Hilyatun Naji & Al-Ma\'ani', muallif: 'Umar Al-Baqir', targetSemester: 'Kajian Kalam Khabari, Insya\'i, & Qashr', ustadzPengampu: 'Ustadz Mizan Khoirul' },
+  { id: 'KUR-409', kelas: '1 ALIYAH', mapel: 'Akhlaq & Tasawuf', kitab: 'Kifayatul Atqiya\' wa Minhajul Ashfiya\'', muallif: 'Sayyid Bakri Syatha Ad-Dimyathi', targetSemester: 'Adab Thariqah & Pembersihan Jiwa', ustadzPengampu: 'Ustadz Wildan' },
+  { id: 'KUR-410', kelas: '1 ALIYAH', mapel: 'Bahasa Arab & I\'rab', kitab: 'Syudzurudz Dzahab', muallif: 'Ibnu Hisyam Al-Anshari', targetSemester: 'Tathbiq I\'rab Kalimat Sastra Arab', ustadzPengampu: 'Ustadz Bagus Danial' },
 
-  // 2 ALIYAH
-  { id: 'KUR-22', kelas: '2 ALIYAH', mapel: 'Tafsir Al-Quran', kitab: 'Tafsir Al-Jalalain', muallif: 'Jalaluddin Al-Mahalli & As-Suyuthi', targetSemester: 'Surah Al-Baqarah s/d An-Nisa', ustadzPengampu: 'Ustadz Ahmad Shobirin' },
-  { id: 'KUR-23', kelas: '2 ALIYAH', mapel: 'Balaghah', kitab: 'Al-Jauharul Maknun', muallif: 'Abdurrahman Al-Akhdhari', targetSemester: 'Ilmu Ma\'ani, Bayan, & Badi\'', ustadzPengampu: 'Ustadz Mizan Khoirul' },
-  { id: 'KUR-24', kelas: '2 ALIYAH', mapel: 'Fiqih Madzhab Syafi\'i', kitab: 'Fathul Wahhab bi Syarhi Manhajit Thullab', muallif: 'Syaikhul Islam Zakariya Al-Anshari', targetSemester: 'Bab Buyu\' & Muamalat Maliyyah', ustadzPengampu: 'Ustadz Yasir' },
-  { id: 'KUR-25', kelas: '2 ALIYAH', mapel: 'Mantiq (Logika Islam)', kitab: 'As-Sullamul Munauraq', muallif: 'Abdurrahman Al-Akhdhari', targetSemester: 'Tashawwur, Tashdiq, Dilalah, & Qiyas', ustadzPengampu: 'Ustadz Munawar' },
+  // 2 ALIYAH (10 Mapel)
+  { id: 'KUR-501', kelas: '2 ALIYAH', mapel: 'Tafsir Al-Quran', kitab: 'Tafsir Al-Jalalain (Al-Baqarah)', muallif: 'Jalaluddin Al-Mahalli & As-Suyuthi', targetSemester: 'Surah Al-Baqarah s/d An-Nisa', ustadzPengampu: 'Ustadz Ahmad Shobirin' },
+  { id: 'KUR-502', kelas: '2 ALIYAH', mapel: 'Balaghah', kitab: 'Al-Jauharul Maknun', muallif: 'Abdurrahman Al-Akhdhari', targetSemester: 'Ilmu Ma\'ani, Bayan, & Badi\'', ustadzPengampu: 'Ustadz Mizan Khoirul' },
+  { id: 'KUR-503', kelas: '2 ALIYAH', mapel: 'Fiqih Madzhab Syafi\'i', kitab: 'Fathul Wahhab bi Syarhi Manhajit Thullab (Juz 1)', muallif: 'Syaikhul Islam Zakariya Al-Anshari', targetSemester: 'Bab Buyu\' & Muamalat Maliyyah', ustadzPengampu: 'Ustadz Yasir' },
+  { id: 'KUR-504', kelas: '2 ALIYAH', mapel: 'Mantiq (Logika Islam)', kitab: 'As-Sullamul Munauraq', muallif: 'Abdurrahman Al-Akhdhari', targetSemester: 'Tashawwur, Tashdiq, Dilalah, & Qiyas', ustadzPengampu: 'Ustadz Munawar' },
+  { id: 'KUR-505', kelas: '2 ALIYAH', mapel: 'Nahwu Lanjutan', kitab: 'Alfiyah Ibnu Malik (Juz 2)', muallif: 'Ibnu Malik Al-Andalusi', targetSemester: 'Bait 351 s/d 700 (Ibtida\' s/d Af\'alut Tafdhil)', ustadzPengampu: 'Ustadz Sulaiman' },
+  { id: 'KUR-506', kelas: '2 ALIYAH', mapel: 'Ushul Fiqh', kitab: 'Ghayatul Wushul Syarah Lubbil Ushul', muallif: 'Zakariya Al-Anshari', targetSemester: 'Kajian Ijtihad, Taqlid, & Ta\'arudh', ustadzPengampu: 'Ustadz Adib Setiawan' },
+  { id: 'KUR-507', kelas: '2 ALIYAH', mapel: 'Hadits Ahkam', kitab: 'Riyadhus Shalihin & Bulughul Maram', muallif: 'Imam An-Nawawi', targetSemester: 'Kajian Adab, Muamalah, & Sunnah Nabawiyyah', ustadzPengampu: 'Ustadz Mizan Khoirul' },
+  { id: 'KUR-508', kelas: '2 ALIYAH', mapel: 'Qawa\'id Fiqhiyyah', kitab: 'Al-Asybah wan Nadza\'ir', muallif: 'Imam Jalaluddin As-Suyuthi', targetSemester: 'Kaidah Kulliyyah & Furu\' Masail', ustadzPengampu: 'Ustadz Yasir' },
+  { id: 'KUR-509', kelas: '2 ALIYAH', mapel: 'Tasawuf', kitab: 'Bidayatul Hidayah & Minhajul Abidin', muallif: 'Hujjatul Islam Imam Al-Ghazali', targetSemester: 'Tuntunan Ibadah Lahir & Batin', ustadzPengampu: 'Ustadz Munawar' },
+  { id: 'KUR-510', kelas: '2 ALIYAH', mapel: 'Ilmu Falak', kitab: 'Sullamun Nayyirain Dasar', muallif: 'KH. Muhammad Manshur Al-Batawi', targetSemester: 'Hisab Awal Bulan Qomariyah & Arah Qiblat', ustadzPengampu: 'Ustadz Adib Setiawan' },
 
-  // 3 ALIYAH
-  { id: 'KUR-26', kelas: '3 ALIYAH', mapel: 'Hadits Shahih', kitab: 'Shahih Al-Bukhari (Khataman Musalsal)', muallif: 'Imam Muhammad bin Ismail Al-Bukhari', targetSemester: 'Kitab Bad\'il Wahyi s/d Kitabul Iman', ustadzPengampu: 'Ustadz Yasir' },
-  { id: 'KUR-27', kelas: '3 ALIYAH', mapel: 'Ushul Fiqh Lanjutan', kitab: 'Jam\'ul Jawami\'', muallif: 'Tajuddin As-Subki', targetSemester: 'Qiyas, Istihsan, Maslahah Mursalah, Ijtihad', ustadzPengampu: 'Ustadz Sulaiman' },
-  { id: 'KUR-28', kelas: '3 ALIYAH', mapel: 'Alfiyah Khataman', kitab: 'Alfiyah Ibnu Malik (Bait 700 s/d 1002)', muallif: 'Ibnu Malik Al-Andalusi', targetSemester: 'Khataman Bait 1002 & Wisuda Alfiyah', ustadzPengampu: 'Ustadz Mizan Khoirul' }
+  // 3 ALIYAH (10 Mapel)
+  { id: 'KUR-601', kelas: '3 ALIYAH', mapel: 'Hadits Shahih', kitab: 'Shahih Al-Bukhari (Khataman Musalsal)', muallif: 'Imam Muhammad bin Ismail Al-Bukhari', targetSemester: 'Kitab Bad\'il Wahyi s/d Kitabul Iman', ustadzPengampu: 'Ustadz Yasir' },
+  { id: 'KUR-602', kelas: '3 ALIYAH', mapel: 'Ushul Fiqh Lanjutan', kitab: 'Jam\'ul Jawami\'', muallif: 'Tajuddin As-Subki', targetSemester: 'Qiyas, Istihsan, Maslahah Mursalah, Ijtihad', ustadzPengampu: 'Ustadz Sulaiman' },
+  { id: 'KUR-603', kelas: '3 ALIYAH', mapel: 'Alfiyah Khataman', kitab: 'Alfiyah Ibnu Malik (Bait 701 s/d 1002)', muallif: 'Ibnu Malik Al-Andalusi', targetSemester: 'Khataman Bait 1002 & Wisuda Alfiyah', ustadzPengampu: 'Ustadz Mizan Khoirul' },
+  { id: 'KUR-604', kelas: '3 ALIYAH', mapel: 'Fiqih Lanjutan', kitab: 'Fathul Wahhab bi Syarhi Manhajit Thullab (Juz 2)', muallif: 'Zakariya Al-Anshari', targetSemester: 'Bab Jinayat, Qadha\', & Da\'wa', ustadzPengampu: 'Ustadz Ahmad Shobirin' },
+  { id: 'KUR-605', kelas: '3 ALIYAH', mapel: 'Tafsir Ahkam', kitab: 'Rawai\'ul Bayan Tafsir Ayatil Ahkam', muallif: 'Syaikh Muhammad Ali Ash-Shabuni', targetSemester: 'Ayat-Ayat Fiqih & Istinbath Hukum', ustadzPengampu: 'Ustadz Sulaiman' },
+  { id: 'KUR-606', kelas: '3 ALIYAH', mapel: 'Balaghah & \'Arudh', kitab: 'Uqudul Juman & \'Arudh Wal Qawafi', muallif: 'Imam Jalaluddin As-Suyuthi', targetSemester: 'Bahar Syair Arab & Kaidah Qafiyah', ustadzPengampu: 'Ustadz Mizan Khoirul' },
+  { id: 'KUR-607', kelas: '3 ALIYAH', mapel: 'Mantiq & Falsafah', kitab: 'Tahdzibul Mantiq wal Kalam', muallif: 'Sa\'duddin At-Taftazani', targetSemester: 'Kajian Argumen Ushuluddin & Burhan', ustadzPengampu: 'Ustadz Munawar' },
+  { id: 'KUR-608', kelas: '3 ALIYAH', mapel: 'Faraidh (Mawarits)', kitab: 'Matan Ar-Rahabiyyah fil Mawarits', muallif: 'Muhammad bin Ali Ar-Rahabi', targetSemester: 'Hisaab Furudh Muqaddarah & \'Ashabah', ustadzPengampu: 'Ustadz Yasir' },
+  { id: 'KUR-609', kelas: '3 ALIYAH', mapel: 'Falak & Hisab', kitab: 'Ad-Durrus Samiyyah fil Falak', muallif: 'KH. Zubair Dahlan', targetSemester: 'Perhitungan Gerhana & Hilal Hakiki', ustadzPengampu: 'Ustadz Adib Setiawan' },
+  { id: 'KUR-610', kelas: '3 ALIYAH', mapel: 'Tasawuf & Hikmah', kitab: 'Kitab Al-Hikam Al-Atha\'iyyah', muallif: 'Syaikh Ibnu Atha\'illah As-Sakandari', targetSemester: 'Kajian 264 Hikmah Ma\'rifatullah', ustadzPengampu: 'Ustadz Ahmad Shobirin' }
 ];
 
 export const INITIAL_PENGURUS_LIST: Pengurus[] = [

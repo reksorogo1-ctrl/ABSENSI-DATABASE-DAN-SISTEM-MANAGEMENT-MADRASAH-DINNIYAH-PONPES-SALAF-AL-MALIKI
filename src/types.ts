@@ -44,6 +44,7 @@ export interface Santri {
   ustadzPengujiKitab?: string; // Nama ustadz penguji
   tanggalUjianKitab?: string; // Tanggal pelaksanaan ujian
   kitabMuhafadzoh?: string;
+  catatanMuhafadzoh?: string;
   kitabBaca?: string;
   kitabKoreksian?: string;
 }
@@ -333,6 +334,8 @@ export interface NadzhomRecord {
   tanggal: string;
   nilai: string;
   kelas?: string;
+  catatan?: string;
+  targetBait?: number;
 }
 
 export interface NilaiUjianRecord {

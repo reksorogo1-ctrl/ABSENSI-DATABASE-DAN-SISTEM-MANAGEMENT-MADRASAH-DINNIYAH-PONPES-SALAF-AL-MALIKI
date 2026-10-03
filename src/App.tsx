@@ -57,6 +57,53 @@ function deduplicateSantriList(list: Santri[]): Santri[] {
   });
 }
 
+// Sinkronisasi data login pengurus dengan data guru pengajar secara real-time (1:1)
+export function syncPengurusWithGuru(currentPengurus: Pengurus[], currentGuruList: GuruPengajar[]): Pengurus[] {
+  if (!currentGuruList || currentGuruList.length === 0) return currentPengurus || [];
+
+  return currentGuruList.map((guru, index) => {
+    const guruId = guru.id || `GP-${index + 1}`;
+    const cleanGuruName = (guru.nama || '').trim().toLowerCase();
+
+    // Cari apakah sudah ada data pengurus yang cocok berdasarkan ID atau nama
+    const existing = currentPengurus?.find(p => 
+      (p.id && guru.id && p.id === guru.id) ||
+      (p.nama && p.nama.trim().toLowerCase() === cleanGuruName) ||
+      (p.id === guruId)
+    );
+
+    const defaultJabatan = guru.jabatan || (guru.kelas ? `Dewan Pengajar / Asatidz (${guru.kelas})` : 'Dewan Pengajar / Asatidz');
+
+    if (existing) {
+      return {
+        ...existing,
+        id: existing.id || guruId,
+        nama: guru.nama, // Selalu tersinkron dengan nama guru
+        password: existing.password || 'pengurus123',
+        jabatan: existing.jabatan || defaultJabatan,
+        kelasBimbingan: guru.kelas || existing.kelasBimbingan || 'Semua Kelas',
+        mapel: guru.mapel || existing.mapel || 'Kitab Kuning',
+        noWa: existing.noWa || guru.noWa || '081234567801',
+        foto: existing.foto || guru.foto,
+        tugasUtama: existing.tugasUtama || guru.tugasUtama || `Pengajar Fan ${guru.mapel || 'Kitab'} & Pembina Santri`
+      };
+    }
+
+    return {
+      id: guruId,
+      nama: guru.nama,
+      password: 'pengurus123',
+      jabatan: defaultJabatan,
+      kelasBimbingan: guru.kelas || 'Semua Kelas',
+      mapel: guru.mapel || 'Kitab Kuning',
+      noWa: guru.noWa || '081234567801',
+      foto: guru.foto,
+      email: `${cleanGuruName.replace(/[^a-z0-9]/g, '')}@almaliki.ac.id`,
+      tugasUtama: `Pengajar Fan ${guru.mapel || 'Kitab'} & Pembina Santri`
+    };
+  });
+}
+
 export default function App() {
   // Intro Video State - disabled to open dashboard login directly
   const [showIntro, setShowIntro] = useState<boolean>(false);
@@ -166,7 +213,22 @@ export default function App() {
   });
   const [kurikulumList, setKurikulumList] = useState<KurikulumKitabRecord[]>(() => {
     const saved = localStorage.getItem('sim_kurikulum');
-    return saved ? JSON.parse(saved) : INITIAL_KURIKULUM_LIST;
+    if (saved) {
+      try {
+        const parsed: KurikulumKitabRecord[] = JSON.parse(saved);
+        const existingKeys = new Set(parsed.map(k => `${k.kelas}__${k.mapel.trim().toLowerCase()}`));
+        const missing = INITIAL_KURIKULUM_LIST.filter(k => !existingKeys.has(`${k.kelas}__${k.mapel.trim().toLowerCase()}`));
+        if (missing.length > 0) {
+          const merged = [...parsed, ...missing];
+          localStorage.setItem('sim_kurikulum', JSON.stringify(merged));
+          return merged;
+        }
+        return parsed;
+      } catch (e) {
+        console.error('Error parsing sim_kurikulum:', e);
+      }
+    }
+    return INITIAL_KURIKULUM_LIST;
   });
   const [silabusList, setSilabusList] = useState<SilabusMemaknaiRecord[]>(() => {
     const saved = localStorage.getItem('sim_silabus');
@@ -176,8 +238,23 @@ export default function App() {
   // Pengurus, Kalender Akademik, & Ujian Santri Data States
   const [pengurusList, setPengurusList] = useState<Pengurus[]>(() => {
     const saved = localStorage.getItem('sim_pengurus');
-    return saved ? JSON.parse(saved) : INITIAL_PENGURUS_LIST;
+    const raw = saved ? JSON.parse(saved) : INITIAL_PENGURUS_LIST;
+    const initialGurus = (localStorage.getItem('sim_guru') ? JSON.parse(localStorage.getItem('sim_guru')!) : INITIAL_GURU_LIST);
+    return syncPengurusWithGuru(raw, initialGurus);
   });
+
+  // Menjaga jumlah login pengurus sama dengan data guru pengajar secara real-time
+  useEffect(() => {
+    setPengurusList(prev => {
+      const synced = syncPengurusWithGuru(prev, guruList);
+      if (synced.length !== prev.length || JSON.stringify(synced) !== JSON.stringify(prev)) {
+        localStorage.setItem('sim_pengurus', JSON.stringify(synced));
+        saveMasterDataToFirestore('pengurus', synced);
+        return synced;
+      }
+      return prev;
+    });
+  }, [guruList]);
   const [kalenderList, setKalenderList] = useState<KalenderAkademikEvent[]>(() => {
     const saved = localStorage.getItem('sim_kalender');
     if (saved) {
@@ -407,7 +484,7 @@ export default function App() {
 
     loadMasterDataFromFirestore<Pengurus[]>('pengurus').then((data) => {
       if (data && Array.isArray(data) && data.length > 0) {
-        setPengurusList(data);
+        setPengurusList(prev => syncPengurusWithGuru(data, guruList));
         localStorage.setItem('sim_pengurus', JSON.stringify(data));
       }
     });
@@ -445,6 +522,18 @@ export default function App() {
         localStorage.setItem('sim_absensi_guru', JSON.stringify(data));
       }
     });
+    const unsubPengurus = subscribeMasterDataFromFirestore<Pengurus[]>('pengurus', (data) => {
+      if (data && Array.isArray(data)) {
+        setPengurusList(prev => syncPengurusWithGuru(data, guruList));
+        localStorage.setItem('sim_pengurus', JSON.stringify(data));
+      }
+    });
+    const unsubJadwal = subscribeMasterDataFromFirestore<JadwalPelajaran[]>('jadwal', (data) => {
+      if (data && Array.isArray(data)) {
+        setJadwalList(data);
+        localStorage.setItem('sim_jadwal', JSON.stringify(data));
+      }
+    });
 
     return () => {
       unsubscribe();
@@ -452,6 +541,8 @@ export default function App() {
       unsubGuru();
       unsubAbsSantri();
       unsubAbsGuru();
+      unsubPengurus();
+      unsubJadwal();
     };
   }, []);
 
@@ -829,6 +920,44 @@ export default function App() {
     }
   };
 
+  const handleDeleteAbsensiSantri = (target: AbsensiSantriRecord) => {
+    setAbsensiSantriList(prev => {
+      const updated = prev.filter(p => !(p.tanggal === target.tanggal && (p.idSantri === target.idSantri || p.nama === target.nama)));
+      try {
+        localStorage.setItem('sim_absensi_santri', JSON.stringify(updated));
+        saveMasterDataToFirestore('absensi_santri', updated);
+      } catch {}
+      return updated;
+    });
+    try {
+      const savedH = localStorage.getItem('sim_rekap_santri_harian_history');
+      if (savedH) {
+        const parsed = JSON.parse(savedH);
+        const filteredH = parsed.filter((p: any) => !(p.tanggal === target.tanggal && (p.idSantri === target.idSantri || p.nama === target.nama)));
+        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(filteredH));
+      }
+    } catch {}
+  };
+
+  const handleDeleteAbsensiGuru = (target: AbsensiGuruRecord) => {
+    setAbsensiGuruList(prev => {
+      const updated = prev.filter(p => !(p.tanggal === target.tanggal && p.nama === target.nama && p.kelas === target.kelas && String(p.jamKe) === String(target.jamKe)));
+      try {
+        localStorage.setItem('sim_absensi_guru', JSON.stringify(updated));
+        saveMasterDataToFirestore('absensi_guru', updated);
+      } catch {}
+      return updated;
+    });
+    try {
+      const savedH = localStorage.getItem('sim_rekap_guru_harian_history');
+      if (savedH) {
+        const parsed = JSON.parse(savedH);
+        const filteredH = parsed.filter((p: any) => !(p.tanggal === target.tanggal && p.nama === target.nama && p.kelas === target.kelas && String(p.jamKe) === String(target.jamKe)));
+        localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(filteredH));
+      }
+    } catch {}
+  };
+
   // Sinkronisasi data presensi real-time lintas tab & komponen
   useEffect(() => {
     const unsub = subscribeAttendanceUpdates((payload) => {
@@ -982,22 +1111,140 @@ export default function App() {
     localStorage.setItem('sim_silabus', JSON.stringify(updated));
   };
 
-  const handleSaveNewJadwal = (newJadwal: JadwalPelajaran) => {
-    const updated = [...jadwalList, newJadwal];
+  const handleSaveNewJadwal = (newJadwal: JadwalPelajaran, oldJadwal?: JadwalPelajaran) => {
+    let updated: JadwalPelajaran[];
+    let existingIdx = -1;
+
+    if (oldJadwal) {
+      existingIdx = jadwalList.findIndex(j => 
+        (oldJadwal.id && j.id && j.id === oldJadwal.id) ||
+        (j.kelas === oldJadwal.kelas && j.hari === oldJadwal.hari && j.jamKe === oldJadwal.jamKe && j.mapel === oldJadwal.mapel) ||
+        (j.kelas === oldJadwal.kelas && j.hari === oldJadwal.hari && j.jamKe === oldJadwal.jamKe)
+      );
+    }
+    if (existingIdx === -1 && newJadwal.id) {
+      existingIdx = jadwalList.findIndex(j => j.id === newJadwal.id);
+    }
+    if (existingIdx === -1) {
+      existingIdx = jadwalList.findIndex(j => j.kelas === newJadwal.kelas && j.hari === newJadwal.hari && j.jamKe === newJadwal.jamKe);
+    }
+
+    if (existingIdx >= 0) {
+      updated = [...jadwalList];
+      updated[existingIdx] = newJadwal;
+    } else {
+      updated = [...jadwalList, newJadwal];
+    }
+    setJadwalList(updated);
+    localStorage.setItem('sim_jadwal', JSON.stringify(updated));
+    saveMasterDataToFirestore('jadwal', updated);
+  };
+
+  const handleDeleteJadwal = (targetJadwal: JadwalPelajaran) => {
+    const updated = jadwalList.filter(j => {
+      if (targetJadwal.id && j.id) return j.id !== targetJadwal.id;
+      return !(j.kelas === targetJadwal.kelas && j.hari === targetJadwal.hari && j.jamKe === targetJadwal.jamKe && j.mapel === targetJadwal.mapel);
+    });
     setJadwalList(updated);
     localStorage.setItem('sim_jadwal', JSON.stringify(updated));
     saveMasterDataToFirestore('jadwal', updated);
   };
 
   const handleSaveNadzhom = (rec: NadzhomRecord) => {
-    const updated = [rec, ...nadzhomList];
+    const existingIdx = nadzhomList.findIndex(n => 
+      (rec.idRow !== undefined && n.idRow === rec.idRow) ||
+      (n.idSantri === rec.idSantri && n.kitab.trim().toLowerCase() === rec.kitab.trim().toLowerCase())
+    );
+    let updated: NadzhomRecord[];
+    if (existingIdx >= 0) {
+      updated = [...nadzhomList];
+      updated[existingIdx] = { ...updated[existingIdx], ...rec };
+    } else {
+      updated = [rec, ...nadzhomList];
+    }
+    setNadzhomList(updated);
+    localStorage.setItem('sim_nadzhom', JSON.stringify(updated));
+    saveMasterDataToFirestore('nadzhom', updated);
+
+    // Sinkronisasi langsung ke profil santri agar wali santri melihat perubahan di dashboard secara real-time
+    const target = santriList.find(s => s.id === rec.idSantri);
+    if (target) {
+      handleUpdateSantriProfile({
+        ...target,
+        kitabMuhafadzoh: rec.kitab,
+        nilaiMuhafadzoh: rec.bait,
+        predikatMuhafadzoh: rec.nilai,
+        catatanMuhafadzoh: rec.catatan
+      });
+    }
+  };
+
+  const handleSaveBatchNadzhom = (records: NadzhomRecord[]) => {
+    const map = new Map<string, NadzhomRecord>();
+    nadzhomList.forEach(n => {
+      const key = `${n.idSantri}__${n.kitab.trim().toLowerCase()}`;
+      map.set(key, n);
+    });
+    records.forEach(r => {
+      const key = `${r.idSantri}__${r.kitab.trim().toLowerCase()}`;
+      map.set(key, { ...(map.get(key) || {}), ...r });
+    });
+    const updated = Array.from(map.values());
+    setNadzhomList(updated);
+    localStorage.setItem('sim_nadzhom', JSON.stringify(updated));
+    saveMasterDataToFirestore('nadzhom', updated);
+
+    // Sinkronisasi ke profil santri agar wali santri melihat nilai muhafadzoh terbaru secara real-time
+    records.forEach(r => {
+      const target = santriList.find(s => s.id === r.idSantri);
+      if (target) {
+        handleUpdateSantriProfile({
+          ...target,
+          kitabMuhafadzoh: r.kitab,
+          nilaiMuhafadzoh: r.bait,
+          predikatMuhafadzoh: r.nilai,
+          catatanMuhafadzoh: r.catatan
+        });
+      }
+    });
+  };
+
+  const handleDeleteNadzhom = (rec: NadzhomRecord) => {
+    const updated = nadzhomList.filter(n => !(n.idSantri === rec.idSantri && n.kitab === rec.kitab && n.tanggal === rec.tanggal));
     setNadzhomList(updated);
     localStorage.setItem('sim_nadzhom', JSON.stringify(updated));
     saveMasterDataToFirestore('nadzhom', updated);
   };
 
   const handleSaveNilai = (rec: NilaiUjianRecord) => {
-    const updated = [rec, ...nilaiList];
+    const existingIdx = nilaiList.findIndex(
+      n => n.idSantri === rec.idSantri &&
+           n.pelajaran.trim().toLowerCase() === rec.pelajaran.trim().toLowerCase() &&
+           n.semester === rec.semester
+    );
+    let updated: NilaiUjianRecord[];
+    if (existingIdx >= 0) {
+      updated = [...nilaiList];
+      updated[existingIdx] = { ...updated[existingIdx], ...rec };
+    } else {
+      updated = [rec, ...nilaiList];
+    }
+    setNilaiList(updated);
+    localStorage.setItem('sim_nilai', JSON.stringify(updated));
+    saveMasterDataToFirestore('nilai', updated);
+  };
+
+  const handleSaveBatchNilai = (records: NilaiUjianRecord[]) => {
+    const map = new Map<string, NilaiUjianRecord>();
+    nilaiList.forEach(n => {
+      const key = `${n.idSantri}__${n.pelajaran.trim().toLowerCase()}__${n.semester}`;
+      map.set(key, n);
+    });
+    records.forEach(r => {
+      const key = `${r.idSantri}__${r.pelajaran.trim().toLowerCase()}__${r.semester}`;
+      map.set(key, { ...(map.get(key) || {}), ...r });
+    });
+    const updated = Array.from(map.values());
     setNilaiList(updated);
     localStorage.setItem('sim_nilai', JSON.stringify(updated));
     saveMasterDataToFirestore('nilai', updated);
@@ -1059,7 +1306,29 @@ export default function App() {
     const updated = pengurusList.map(p => p.id === upP.id ? upP : p);
     setPengurusList(updated);
     localStorage.setItem('sim_pengurus', JSON.stringify(updated));
-    if (session?.role === 'pengurus' && session.identifier === upP.id) {
+    saveMasterDataToFirestore('pengurus', updated);
+
+    // Sinkronisasi real-time ke data guru pengajar
+    setGuruList(prev => {
+      const upGuru = prev.map(g => {
+        if ((g.id && g.id === upP.id) || g.nama.toLowerCase().trim() === upP.nama.toLowerCase().trim()) {
+          return {
+            ...g,
+            nama: upP.nama,
+            kelas: upP.kelasBimbingan || g.kelas,
+            mapel: upP.mapel || g.mapel,
+            noWa: upP.noWa || g.noWa,
+            jabatan: upP.jabatan || g.jabatan
+          };
+        }
+        return g;
+      });
+      localStorage.setItem('sim_guru', JSON.stringify(upGuru));
+      saveMasterDataToFirestore('guru', upGuru);
+      return upGuru;
+    });
+
+    if (session?.role === 'pengurus' && (session.identifier === upP.id || session.identifier === upP.nama)) {
       setSession({
         ...session,
         pengurusData: upP
@@ -1230,7 +1499,8 @@ export default function App() {
 
   // 1. If logged in as Wali Santri -> render WaliSantriPortal with Row-Level Security
   if (session?.role === 'wali_santri') {
-    const liveSantri = session.santriData || santriList.find(s => s.id === session.identifier) || santriList[0];
+    const targetId = session.santriData?.id || session.identifier;
+    const liveSantri = santriList.find(s => s.id === targetId) || session.santriData || santriList[0];
     if (liveSantri) {
       return (
         <>
@@ -1330,12 +1600,18 @@ export default function App() {
             onDataImported={handleDataImported}
             onSaveAbsensiSantri={handleSaveAbsensiSantri}
             onSaveAbsensiGuru={handleSaveAbsensiGuru}
+            onDeleteAbsensiSantri={handleDeleteAbsensiSantri}
+            onDeleteAbsensiGuru={handleDeleteAbsensiGuru}
             onSaveNewSantri={handleSaveNewSantri}
             onSaveNewGuru={handleSaveNewGuru}
             onDeleteGuru={handleDeleteGuru}
             onSaveNewJadwal={handleSaveNewJadwal}
+            onDeleteJadwal={handleDeleteJadwal}
             onSaveNadzhom={handleSaveNadzhom}
+            onSaveBatchNadzhom={handleSaveBatchNadzhom}
+            onDeleteNadzhom={handleDeleteNadzhom}
             onSaveNilai={handleSaveNilai}
+            onSaveBatchNilai={handleSaveBatchNilai}
             onSaveSettings={handleSaveSettings}
             onSaveDashboardAndReset={handleSaveDashboardAndReset}
             onUpdateSantriProfile={handleUpdateSantriProfile}
