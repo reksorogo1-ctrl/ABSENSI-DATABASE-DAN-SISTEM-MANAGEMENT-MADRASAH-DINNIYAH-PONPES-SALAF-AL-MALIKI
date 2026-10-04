@@ -4105,8 +4105,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         >
                           <option value="">{manageMonthLogsTab === 'santri' ? '-- Pilih Santri --' : '-- Pilih Ustadz/Guru --'}</option>
                           {manageMonthLogsTab === 'santri'
-                            ? santriList.map(s => <option key={s.id} value={s.id}>{s.nama} ({s.kelas})</option>)
-                            : Array.from(new Set(guruList.map(g => g.nama))).map(nama => <option key={nama} value={nama}>{nama}</option>)
+                            ? santriList.map((s, idx) => <option key={`${s.id}-${idx}`} value={s.id}>{s.nama} ({s.kelas})</option>)
+                            : Array.from(new Set(guruList.map(g => g.nama))).map((nama, idx) => <option key={`guru-nm-${nama}-${idx}`} value={nama}>{nama}</option>)
                           }
                         </select>
                       </div>
@@ -6769,8 +6769,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl p-2.5 text-white font-bold"
                         />
                         <datalist id="guruListJadwalOptions">
-                          {guruList.map(g => (
-                            <option key={g.id || g.nama} value={g.nama}>{g.nama} ({g.mapel})</option>
+                          {guruList.map((g, idx) => (
+                            <option key={`jadwal-opt-${g.id || g.nama}-${idx}`} value={g.nama}>{g.nama} ({g.mapel})</option>
                           ))}
                         </datalist>
                       </div>
@@ -6919,8 +6919,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl p-2.5 text-white font-bold"
                         />
                         <datalist id="ustadzListOptions">
-                          {guruList.map(g => (
-                            <option key={g.id || g.nama} value={g.nama}>{g.nama} ({g.mapel})</option>
+                          {guruList.map((g, idx) => (
+                            <option key={`ustadz-opt-${g.id || g.nama}-${idx}`} value={g.nama}>{g.nama} ({g.mapel})</option>
                           ))}
                         </datalist>
                       </div>
@@ -7117,7 +7117,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {guruList
                       .filter(g => selectedAngkatanGuru === 'SEMUA' || g.kelas === selectedAngkatanGuru)
                       .map((g, i) => (
-                        <tr key={g.id || `${g.nama}-${i}`} className="hover:bg-[#d4af37]/10 transition">
+                        <tr key={`guru-row-${g.id || g.nama}-${i}`} className="hover:bg-[#d4af37]/10 transition">
                           <td className="p-3 text-center font-bold text-[#d4af37]">{i + 1}</td>
                           <td className="p-3">
                             <div className="flex items-center space-x-2.5">
@@ -7887,7 +7887,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           const isRowSaved = savedRowIndicator[santri.id];
 
                           return (
-                            <tr key={santri.id} className="hover:bg-[#072f1a]/80 transition group">
+                            <tr key={`santri-ndz-${santri.id}-${idx}`} className="hover:bg-[#072f1a]/80 transition group">
                               {/* 1. No */}
                               <td className="py-2.5 px-2 text-center font-mono text-stone-400 border-b border-[#d4af37]/15 text-[11px]">
                                 {idx + 1}
@@ -8386,8 +8386,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="w-full px-3 py-2 text-xs bg-[#010a05] border border-[#d4af37]/40 rounded-xl text-white focus:outline-none focus:border-[#d4af37]"
                       >
                         <option value="">-- Pilih Santri --</option>
-                        {santriList.map(s => (
-                          <option key={s.id} value={s.id} className="bg-[#03150d] text-white">
+                        {santriList.map((s, idx) => (
+                          <option key={`santri-sel-${s.id}-${idx}`} value={s.id} className="bg-[#03150d] text-white">
                             {s.nama} ({s.id} - {s.kelas})
                           </option>
                         ))}
@@ -8828,7 +8828,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                         return (
                           <tr
-                            key={santri.id}
+                            key={`rapot-santri-${santri.id}-${rowIdx}`}
                             className="hover:bg-[#072f1a]/80 transition group"
                           >
                             {/* Single Sticky Column: NO & NAMA SANTRI (Solid Opaque, Bebas Bentrok Ketika Digeser) */}
@@ -11543,7 +11543,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
                       >
                         {pengurusList.map((p, idx) => (
-                          <option key={p.id || idx} value={p.id}>
+                          <option key={`pengurus-opt-${p.id}-${idx}`} value={p.id}>
                             {idx + 1}. {p.nama} — {p.jabatan} ({p.kelasBimbingan ? `Kelas: ${p.kelasBimbingan}` : p.id})
                           </option>
                         ))}
@@ -11704,7 +11704,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </thead>
                           <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
                             {pengurusList.map((p, idx) => (
-                              <tr key={p.id || idx} className="hover:bg-[#d4af37]/5 transition">
+                              <tr key={`pengurus-tr-${p.id}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
                                 <td className="p-3 text-center font-mono text-emerald-400 font-bold">{idx + 1}</td>
                                 <td className="p-3 font-bold text-white whitespace-nowrap">{p.nama}</td>
                                 <td className="p-3 text-emerald-300 whitespace-nowrap">{p.kelasBimbingan || '-'}</td>

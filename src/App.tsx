@@ -57,12 +57,32 @@ function deduplicateSantriList(list: Santri[]): Santri[] {
   });
 }
 
+function deduplicateGuruList(list: GuruPengajar[]): GuruPengajar[] {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set<string>();
+  return list.filter((g, idx) => {
+    const rawId = g?.id ? String(g.id).trim() : `${g?.nama || ''}-${g?.kelas || ''}-${g?.mapel || ''}-${idx}`;
+    if (!rawId || seen.has(rawId)) {
+      return false;
+    }
+    seen.add(rawId);
+    return true;
+  });
+}
+
 // Sinkronisasi data login pengurus dengan data guru pengajar secara real-time (1:1)
 export function syncPengurusWithGuru(currentPengurus: Pengurus[], currentGuruList: GuruPengajar[]): Pengurus[] {
   if (!currentGuruList || currentGuruList.length === 0) return currentPengurus || [];
 
+  const usedIds = new Set<string>();
+
   return currentGuruList.map((guru, index) => {
-    const guruId = guru.id || `GP-${index + 1}`;
+    let guruId = (guru.id && String(guru.id).trim()) || `GP-${index + 1}`;
+    if (usedIds.has(guruId)) {
+      guruId = `${guruId}-${index + 1}`;
+    }
+    usedIds.add(guruId);
+
     const cleanGuruName = (guru.nama || '').trim().toLowerCase();
 
     // Cari apakah sudah ada data pengurus yang cocok berdasarkan ID atau nama
@@ -77,7 +97,7 @@ export function syncPengurusWithGuru(currentPengurus: Pengurus[], currentGuruLis
     if (existing) {
       return {
         ...existing,
-        id: existing.id || guruId,
+        id: guruId, // Selalu gunakan ID slot unik guru agar tidak bentrok key di React
         nama: guru.nama, // Selalu tersinkron dengan nama guru
         password: existing.password || 'pengurus123',
         jabatan: existing.jabatan || defaultJabatan,
@@ -179,7 +199,7 @@ export default function App() {
   });
   const [guruList, setGuruList] = useState<GuruPengajar[]>(() => {
     const saved = localStorage.getItem('sim_guru');
-    return saved ? JSON.parse(saved) : INITIAL_GURU_LIST;
+    return deduplicateGuruList(saved ? JSON.parse(saved) : INITIAL_GURU_LIST);
   });
   const [jadwalList, setJadwalList] = useState<JadwalPelajaran[]>(() => {
     const saved = localStorage.getItem('sim_jadwal');
@@ -457,8 +477,9 @@ export default function App() {
     // 2. Data Guru
     loadMasterDataFromFirestore<GuruPengajar[]>('guru').then((data) => {
       if (data && Array.isArray(data) && data.length > 0) {
-        setGuruList(data);
-        localStorage.setItem('sim_guru', JSON.stringify(data));
+        const cleaned = deduplicateGuruList(data);
+        setGuruList(cleaned);
+        localStorage.setItem('sim_guru', JSON.stringify(cleaned));
       } else {
         saveMasterDataToFirestore('guru', guruList);
       }
@@ -692,8 +713,9 @@ export default function App() {
         localStorage.setItem('sim_santri', JSON.stringify(cleaned));
       }
       if (remoteGuru && remoteGuru.length > 0) {
-        setGuruList(remoteGuru);
-        localStorage.setItem('sim_guru', JSON.stringify(remoteGuru));
+        const cleaned = deduplicateGuruList(remoteGuru);
+        setGuruList(cleaned);
+        localStorage.setItem('sim_guru', JSON.stringify(cleaned));
       }
       if (remoteJadwal && remoteJadwal.length > 0) {
         setJadwalList(remoteJadwal);
@@ -739,8 +761,9 @@ export default function App() {
       localStorage.setItem('sim_santri', JSON.stringify(cleaned));
     }
     if (imported.guruList && imported.guruList.length > 0) {
-      setGuruList(imported.guruList);
-      localStorage.setItem('sim_guru', JSON.stringify(imported.guruList));
+      const cleaned = deduplicateGuruList(imported.guruList);
+      setGuruList(cleaned);
+      localStorage.setItem('sim_guru', JSON.stringify(cleaned));
     }
     if (imported.jadwalList && imported.jadwalList.length > 0) {
       setJadwalList(imported.jadwalList);
@@ -1115,7 +1138,11 @@ export default function App() {
   };
 
   const handleSaveNewGuru = (newGuru: GuruPengajar) => {
-    const updated = [newGuru, ...guruList];
+    const withId: GuruPengajar = {
+      ...newGuru,
+      id: newGuru.id || `GP-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    };
+    const updated = deduplicateGuruList([withId, ...guruList]);
     setGuruList(updated);
     localStorage.setItem('sim_guru', JSON.stringify(updated));
     saveMasterDataToFirestore('guru', updated);
