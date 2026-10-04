@@ -106,6 +106,7 @@ interface AdminDashboardProps {
   onDeleteKalender?: (id: string) => void;
   onSaveUjianSantri?: (record: UjianSantriRecord) => void;
   onApproveIzinMengajar?: (id: string, ustadzPengganti: string, status: 'Disetujui' | 'Ditolak', catatan?: string) => void;
+  onSubmitIzinMengajar?: (req: IzinMengajarRequest) => void;
   onDeleteSantri?: (id: string) => void;
   sheetsService?: any;
   isGoogleConnected?: boolean;
@@ -174,6 +175,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteKalender,
   onSaveUjianSantri,
   onApproveIzinMengajar,
+  onSubmitIzinMengajar,
   onDeleteSantri,
   onTestIntro
 }) => {
@@ -238,6 +240,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           title: `Presensi Ustadz Baru Masuk: ${first.nama}`,
           detail: `Status: ${first.status.toUpperCase()} (${first.catatan || first.waktu}) • Kelas: ${first.kelas}`,
           time: `${timeStr} WIB`
+        });
+        setRekapGuruLog(prev => {
+          const keys = new Set(payload.records.map((r: any) => `${r.tanggal}_${r.nama}_${r.kelas}_${r.jamKe}`));
+          const filtered = prev.filter(p => !keys.has(`${p.tanggal}_${p.nama}_${p.kelas}_${p.jamKe}`));
+          return [...payload.records, ...filtered];
         });
       } else if (payload.type === 'santri' && payload.records?.length) {
         setRealtimeAlert({
@@ -324,9 +331,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Daftar Pilihan Tahun
   const DAFTAR_TAHUN_REKAP = ['2024', '2025', '2026', '2027', '2028'];
 
-  // State Pilihan Bulan untuk Rekapitulasi Bulanan
-  const [selectedBulanSantri, setSelectedBulanSantri] = useState<string>('September 2026');
-  const [selectedBulanGuru, setSelectedBulanGuru] = useState<string>('September 2026');
+  // State Pilihan Bulan untuk Rekapitulasi Bulanan (Otomatis dinamis ke bulan & tahun aktif saat ini)
+  const [selectedBulanSantri, setSelectedBulanSantri] = useState<string>(() => {
+    const d = new Date();
+    const m = DAFTAR_BULAN_REKAP[d.getMonth()] || 'Oktober';
+    return `${m} ${d.getFullYear()}`;
+  });
+  const [selectedBulanGuru, setSelectedBulanGuru] = useState<string>(() => {
+    const d = new Date();
+    const m = DAFTAR_BULAN_REKAP[d.getMonth()] || 'Oktober';
+    return `${m} ${d.getFullYear()}`;
+  });
 
   // Modal untuk Kelola & Edit Log Presensi Bulan Terpilih Secara Real-Time
   const [showManageMonthLogsModal, setShowManageMonthLogsModal] = useState<boolean>(false);
@@ -688,8 +703,84 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     window.print();
   };
 
-  // State untuk Persetujuan Izin Mengajar Ustadz
+  // Bulan & Tahun Aktif Kalender Real-Time Saat Ini
+  const currentRealTimeMonth = useMemo(() => {
+    const d = new Date();
+    const m = DAFTAR_BULAN_REKAP[d.getMonth()] || 'Oktober';
+    return `${m} ${d.getFullYear()}`;
+  }, []);
+
+  // State Pilihan Bulan untuk Grafik Tren (Secara Real-Time terkoneksi langsung ke presensi santri & guru)
+  const [trendMonth, setTrendMonth] = useState<string>(() => {
+    const d = new Date();
+    const m = DAFTAR_BULAN_REKAP[d.getMonth()] || 'Oktober';
+    return `${m} ${d.getFullYear()}`;
+  });
+
+  // State untuk Persetujuan Izin Mengajar Ustadz & Modal Input Baru
   const [penggantiSelected, setPenggantiSelected] = useState<{ [id: string]: string }>({});
+  const [filterIzinStatus, setFilterIzinStatus] = useState<string>('SEMUA');
+  const [searchIzinQuery, setSearchIzinQuery] = useState<string>('');
+  const [showAddIzinModal, setShowAddIzinModal] = useState<boolean>(false);
+  const [newIzinAdminForm, setNewIzinAdminForm] = useState({
+    namaUstadz: '',
+    tanggal: new Date().toISOString().split('T')[0],
+    jamKe: 1,
+    mapel: '',
+    kelas: '1 TSANAWIYAH',
+    alasan: '',
+    ustadzPengganti: '',
+    status: 'Disetujui' as 'Disetujui' | 'Menunggu'
+  });
+
+  const [localIzinList, setLocalIzinList] = useState<IzinMengajarRequest[]>(() => {
+    try {
+      const saved = localStorage.getItem('sim_izin_mengajar');
+      return saved ? JSON.parse(saved) : (izinList || []);
+    } catch {
+      return izinList || [];
+    }
+  });
+
+  useEffect(() => {
+    if (izinList && izinList.length > 0) {
+      setLocalIzinList(izinList);
+    }
+  }, [izinList]);
+
+  // Gabungkan izin dari izinList dengan semua data guru yang berstatus Izin di absensi guru
+  const allGuruIzinList = useMemo(() => {
+    const map = new Map<string, IzinMengajarRequest>();
+    (localIzinList || []).forEach(item => {
+      const key = `${(item.namaUstadz || '').trim().toLowerCase()}_${item.tanggal}_${item.jamKe || 1}`;
+      map.set(key, item);
+    });
+
+    // Masukkan data guru yang berstatus Izin di combinedGuruLog
+    combinedGuruLog.forEach(g => {
+      if (g.status === 'Izin') {
+        const key = `${(g.nama || '').trim().toLowerCase()}_${g.tanggal}_${g.jamKe || 1}`;
+        if (!map.has(key)) {
+          map.set(key, {
+            id: `IZN-ABS-${g.tanggal}-${(g.nama || '').replace(/\s+/g, '')}-${g.jamKe || 1}`,
+            idPengurus: 'GURU',
+            namaUstadz: g.nama,
+            tanggal: g.tanggal,
+            mapel: g.mapel || 'Pengajar',
+            kelas: g.kelas || 'Semua Kelas',
+            jamKe: g.jamKe || 1,
+            alasan: g.alasanIzin || g.catatan || 'Izin Mengajar (Tercatat di Presensi Guru)',
+            ustadzPengganti: g.ustadzPengganti || '-',
+            status: 'Disetujui',
+            catatanAdmin: g.catatan || 'Tercatat otomatis dari Absensi Ustadz',
+            createdAt: g.tanggal
+          });
+        }
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
+  }, [localIzinList, combinedGuruLog]);
 
   // State untuk Ujian Muhafadzoh
   const [muhafadzohAngkatan, setMuhafadzohAngkatan] = useState<string>('SEMUA');
@@ -2431,16 +2522,105 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     alert('Pusat Kontrol Visual, Video Intro Opening, Background, Logo, dan Kata Sandi berhasil diperbarui dan disimpan!');
   };
 
-  // Data Tren untuk Recharts
-  const trendData = [
-    { tanggal: '16/09', hadirSantri: 91, hadirGuru: 88, santriAbsen: 36, guruAbsen: 17 },
-    { tanggal: '17/09', hadirSantri: 94, hadirGuru: 92, santriAbsen: 38, guruAbsen: 18 },
-    { tanggal: '18/09', hadirSantri: 89, hadirGuru: 85, santriAbsen: 35, guruAbsen: 16 },
-    { tanggal: '19/09', hadirSantri: 96, hadirGuru: 95, santriAbsen: 39, guruAbsen: 19 },
-    { tanggal: '20/09', hadirSantri: 92, hadirGuru: 90, santriAbsen: 37, guruAbsen: 18 },
-    { tanggal: '21/09', hadirSantri: 95, hadirGuru: 92, santriAbsen: 38, guruAbsen: 19 },
-    { tanggal: '22/09', hadirSantri: stats.percentSantri, hadirGuru: stats.percentGuru, santriAbsen: stats.hadirSantri, guruAbsen: stats.hadirGuru }
-  ];
+  // Data Tren untuk Recharts yang terkoneksi langsung secara Real-Time ke absensi santri & ustadz
+  const trendData = useMemo(() => {
+    const dateSet = new Set<string>();
+
+    combinedSantriLog.forEach(s => {
+      if (s.tanggal && isDateInSelectedMonth(s.tanggal, trendMonth)) {
+        dateSet.add(s.tanggal);
+      }
+    });
+
+    combinedGuruLog.forEach(g => {
+      if (g.tanggal && isDateInSelectedMonth(g.tanggal, trendMonth)) {
+        dateSet.add(g.tanggal);
+      }
+    });
+
+    const today = new Date();
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    if (isDateInSelectedMonth(todayIso, trendMonth)) {
+      dateSet.add(todayIso);
+    }
+
+    // Jika belum ada catatan presensi di bulan ini, tampilkan hari-hari berjalan bulan ini dimulai dari 0%
+    if (dateSet.size === 0) {
+      const parts = trendMonth.trim().split(/\s+/);
+      const targetMonthName = parts[0]?.toLowerCase() || '';
+      const targetYear = parseInt(parts[1] || `${today.getFullYear()}`, 10);
+      const monthNames = [
+        'januari', 'februari', 'maret', 'april', 'mei', 'juni',
+        'juli', 'agustus', 'september', 'oktober', 'november', 'desember'
+      ];
+      const mIdx = monthNames.findIndex(m => targetMonthName.startsWith(m.slice(0, 3)));
+      const monthNum = mIdx >= 0 ? mIdx + 1 : today.getMonth() + 1;
+      
+      const maxDay = (today.getFullYear() === targetYear && (today.getMonth() + 1) === monthNum)
+        ? Math.max(1, today.getDate())
+        : 7;
+
+      for (let day = 1; day <= Math.min(maxDay, 31); day++) {
+        const dStr = `${targetYear}-${String(monthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        dateSet.add(dStr);
+      }
+    }
+
+    const sortedDates = Array.from(dateSet).sort((a, b) => a.localeCompare(b));
+    const totalSantriCount = santriList.length || 1;
+    const totalGuruCount = new Set(guruList.map(g => g.nama.trim().toLowerCase())).size || guruList.length || 1;
+
+    return sortedDates.map(dateStr => {
+      const santriRecords = combinedSantriLog.filter(s => s.tanggal === dateStr);
+      const guruRecords = combinedGuruLog.filter(g => g.tanggal === dateStr);
+
+      let hadirSantriCount = santriRecords.filter(s => s.status === 'Hadir').length;
+      let hadirGuruCount = guruRecords.filter(g => g.status === 'Hadir').length;
+
+      // Jika tanggal adalah hari ini dan data live belum masuk ke riwayat arsip
+      if (dateStr === todayIso) {
+        if (santriRecords.length === 0 && (stats.hadirSantri ?? 0) > 0) {
+          hadirSantriCount = stats.hadirSantri || 0;
+        }
+        if (guruRecords.length === 0 && (stats.hadirGuru ?? 0) > 0) {
+          hadirGuruCount = stats.hadirGuru || 0;
+        }
+      }
+
+      const totalSantriSesi = santriRecords.length > 0 ? santriRecords.length : totalSantriCount;
+      const totalGuruSesi = guruRecords.length > 0 ? guruRecords.length : totalGuruCount;
+
+      const percentSantri = totalSantriSesi > 0 && hadirSantriCount > 0
+        ? Math.min(100, Math.round((hadirSantriCount / totalSantriSesi) * 100))
+        : 0;
+
+      const percentGuru = totalGuruSesi > 0 && hadirGuruCount > 0
+        ? Math.min(100, Math.round((hadirGuruCount / totalGuruSesi) * 100))
+        : 0;
+
+      let displayDate = dateStr;
+      const match = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (match) {
+        displayDate = `${match[3].padStart(2, '0')}/${match[2].padStart(2, '0')}`;
+      } else {
+        const dmy = dateStr.match(/^(\d{1,2})[-/](\d{1,2})/);
+        if (dmy) {
+          displayDate = `${dmy[1].padStart(2, '0')}/${dmy[2].padStart(2, '0')}`;
+        }
+      }
+
+      return {
+        tanggal: displayDate,
+        rawTanggal: dateStr,
+        hadirSantri: percentSantri,
+        hadirGuru: percentGuru,
+        santriAbsen: hadirSantriCount,
+        guruAbsen: hadirGuruCount,
+        totalSantri: totalSantriSesi,
+        totalGuru: totalGuruSesi
+      };
+    });
+  }, [trendMonth, combinedSantriLog, combinedGuruLog, santriList, guruList, stats]);
 
   return (
     <div 
@@ -2786,9 +2966,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="absolute -top-16 -right-16 w-48 h-48 bg-[#d4af37]/12 rounded-full blur-3xl pointer-events-none" />
                 <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
-                <div className="flex items-center justify-between mb-4 pb-3.5 border-b border-[#d4af37]/25 relative z-10">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 pb-3.5 border-b border-[#d4af37]/25 relative z-10">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-[#114b32] to-[#072418] border border-[#d4af37]/50 flex items-center justify-center text-[#d4af37] shadow-[0_4px_12px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,235,170,0.4)]">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-[#114b32] to-[#072418] border border-[#d4af37]/50 flex items-center justify-center text-[#d4af37] shadow-[0_4px_12px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,235,170,0.4)] shrink-0">
                       <TrendingUp className="w-5 h-5" />
                     </div>
                     <div>
@@ -2796,17 +2976,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         Grafik Tren Persentase Kehadiran Guru & Santri
                       </h3>
                       <p className="text-[11px] text-emerald-300 font-medium">
-                        Visualisasi analitik performa kehadiran 7 hari terakhir (Komponen Recharts 3D)
+                        Visualisasi analitik performa kehadiran harian real-time bulan <b className="text-amber-300">{trendMonth}</b>
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-gradient-to-b from-[#0a3523] to-[#041a11] border border-[#d4af37]/45 shadow-[inset_0_1px_2px_rgba(0,0,0,0.6),0_2px_8px_rgba(212,175,55,0.15)]">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]" />
-                    <span className="text-[11px] font-mono font-bold text-[#f3e5ab] tracking-wider uppercase">
-                      Live Dynamic
-                    </span>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Selector Bulan & Tahun Real-Time */}
+                    <div className="flex items-center gap-1.5 bg-[#031d11] border border-[#d4af37]/50 rounded-xl px-2.5 py-1 shadow-inner">
+                      <Calendar className="w-3.5 h-3.5 text-[#d4af37]" />
+                      <select
+                        value={trendMonth}
+                        onChange={(e) => {
+                          setTrendMonth(e.target.value);
+                          setSelectedBulanSantri(e.target.value);
+                          setSelectedBulanGuru(e.target.value);
+                        }}
+                        className="bg-transparent text-xs text-[#f3e5ab] font-bold focus:outline-none cursor-pointer"
+                      >
+                        {DAFTAR_TAHUN_REKAP.flatMap(th => DAFTAR_BULAN_REKAP.map(bln => `${bln} ${th}`)).map(opt => (
+                          <option key={opt} value={opt} className="bg-[#02130b] text-[#f3e5ab]">{opt}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-gradient-to-b from-[#0a3523] to-[#041a11] border border-[#d4af37]/45 shadow-[inset_0_1px_2px_rgba(0,0,0,0.6),0_2px_8px_rgba(212,175,55,0.15)]">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]" />
+                      <span className="text-[11px] font-mono font-bold text-[#f3e5ab] tracking-wider uppercase">
+                        Live Real-Time
+                      </span>
+                    </div>
                   </div>
                 </div>
+
+                {trendData.every(d => d.hadirSantri === 0 && d.hadirGuru === 0) && (
+                  <div className="mb-3 px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-200 text-[11px] flex items-center gap-2 relative z-10">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                    <span>Bulan baru ({trendMonth}): Grafik tren kehadiran otomatis dimulai dari 0% dan terkoneksi ke absensi real-time.</span>
+                  </div>
+                )}
 
                 <div className="h-72 w-full relative z-10">
                   <div className="chart-3d-grid" />
@@ -2833,7 +3041,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(243,229,171,0.09)" vertical={false} />
                       <XAxis dataKey="tanggal" stroke="#f3e5ab" fontSize={11} tickLine={false} axisLine={{ stroke: 'rgba(212,175,55,0.25)' }} />
-                      <YAxis stroke="#f3e5ab" fontSize={11} domain={[70, 100]} unit="%" tickLine={false} axisLine={{ stroke: 'rgba(212,175,55,0.25)' }} />
+                      <YAxis stroke="#f3e5ab" fontSize={11} domain={[0, 100]} unit="%" tickLine={false} axisLine={{ stroke: 'rgba(212,175,55,0.25)' }} />
                       <Tooltip 
                         contentStyle={{ 
                           backgroundColor: 'rgba(5, 30, 20, 0.94)', 
@@ -2848,7 +3056,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         }}
                         itemStyle={{ color: '#ffffff', fontWeight: 600, padding: '2px 0' }}
                         labelStyle={{ color: '#d4af37', fontWeight: 700, marginBottom: '6px', borderBottom: '1px solid rgba(212, 175, 55, 0.2)', paddingBottom: '4px' }}
-                        formatter={(value: any, name: any) => [`${value}%`, name]}
+                        formatter={(value: any, name: any, entry: any) => {
+                          const isSantri = String(name).includes('Santri');
+                          const count = isSantri ? entry.payload.santriAbsen : entry.payload.guruAbsen;
+                          const total = isSantri ? entry.payload.totalSantri : entry.payload.totalGuru;
+                          return [`${value}% (Hadir: ${count}/${total})`, name];
+                        }}
                       />
                       <Legend 
                         wrapperStyle={{ paddingTop: '12px', fontSize: '12px', fontWeight: 600 }}
@@ -3018,28 +3231,89 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="card-3d rounded-3xl p-6 border-2 border-amber-500/50 bg-gradient-to-r from-[#170e04] via-[#241706] to-[#170e04] shadow-2xl space-y-4">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-amber-500/30">
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/60 flex items-center justify-center text-amber-300 shadow">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/60 flex items-center justify-center text-amber-300 shadow shrink-0">
                     <FileText className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm sm:text-base font-extrabold text-white text-gold-3d flex items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-extrabold text-white text-gold-3d flex flex-wrap items-center gap-2">
                       <span>Persetujuan Izin Tidak Mengajar Ustadz / Ustadzah</span>
-                      {izinList.filter(i => i.status === 'Menunggu').length > 0 && (
+                      {allGuruIzinList.filter(i => i.status === 'Menunggu').length > 0 && (
                         <span className="px-2 py-0.5 rounded-full bg-amber-500 text-black font-mono font-black text-[10px] animate-pulse">
-                          {izinList.filter(i => i.status === 'Menunggu').length} Menunggu Persetujuan
+                          {allGuruIzinList.filter(i => i.status === 'Menunggu').length} Menunggu Persetujuan
                         </span>
                       )}
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-[10px]">
+                        {allGuruIzinList.filter(i => i.status === 'Disetujui').length} Disetujui
+                      </span>
                     </h3>
                     <p className="text-xs text-amber-200/90 mt-0.5">
-                      Ketika Admin menyetujui permohonan, status kehadiran pada Absensi Ustadz/Ustadzah langsung menjadi <b>IZIN</b> dan di sebelahnya tercantum nama <b>Ustadz Penggantinya</b> secara otomatis.
+                      Data izin terhubung langsung secara real-time dengan presensi para guru. Ketika Admin menyetujui, kehadiran langsung menjadi <b>IZIN</b> dan tercantum nama <b>Ustadz Penggantinya</b>.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-amber-300 font-mono">
-                    Total Pengajuan: {izinList.length}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const firstG = guruList[0];
+                      setNewIzinAdminForm({
+                        namaUstadz: firstG?.nama || '',
+                        tanggal: new Date().toISOString().split('T')[0],
+                        jamKe: 1,
+                        mapel: firstG?.mapel || '',
+                        kelas: firstG?.kelas || '1 TSANAWIYAH',
+                        alasan: '',
+                        ustadzPengganti: guruList[1]?.nama || 'Ust. Pengganti',
+                        status: 'Disetujui'
+                      });
+                      setShowAddIzinModal(true);
+                    }}
+                    className="btn-3d-gold px-3.5 py-1.5 text-black font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow"
+                    title="Tambah / Catat Permohonan Izin Guru Baru"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-black" />
+                    <span>+ Catat Izin Ustadz</span>
+                  </button>
+                  <span className="text-xs text-amber-300 font-mono px-2 py-1 rounded-lg bg-[#070502] border border-amber-500/40">
+                    Total: {allGuruIzinList.length}
                   </span>
+                </div>
+              </div>
+
+              {/* Filter Status & Pencarian Izin Guru */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-1.5 bg-[#070502]/90 border border-amber-500/40 rounded-xl p-1 shrink-0">
+                  {['SEMUA', 'Menunggu', 'Disetujui', 'Ditolak'].map(st => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setFilterIzinStatus(st)}
+                      className={`px-3 py-1 rounded-lg font-bold transition text-xs ${
+                        filterIzinStatus === st
+                          ? 'bg-amber-400 text-black shadow'
+                          : 'text-amber-200 hover:text-white'
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2 bg-[#070502]/90 border border-amber-500/40 rounded-xl px-3 py-1.5 flex-1 max-w-sm">
+                  <Search className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <input
+                    type="text"
+                    value={searchIzinQuery}
+                    onChange={(e) => setSearchIzinQuery(e.target.value)}
+                    placeholder="Cari nama Ustadz / Mapel..."
+                    className="bg-transparent text-xs text-white placeholder-amber-200/50 focus:outline-none w-full"
+                  />
+                  {searchIzinQuery && (
+                    <button onClick={() => setSearchIzinQuery('')} className="text-amber-400 hover:text-white text-xs">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -3058,9 +3332,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-amber-500/20">
-                    {izinList.length > 0 ? (
-                      izinList.map((item, idx) => {
+                    {(() => {
+                      const displayedList = allGuruIzinList.filter(item => {
+                        if (filterIzinStatus !== 'SEMUA' && item.status !== filterIzinStatus) return false;
+                        if (searchIzinQuery) {
+                          const q = searchIzinQuery.toLowerCase();
+                          const matchNama = (item.namaUstadz || '').toLowerCase().includes(q);
+                          const matchMapel = (item.mapel || '').toLowerCase().includes(q);
+                          const matchAlasan = (item.alasan || '').toLowerCase().includes(q);
+                          return matchNama || matchMapel || matchAlasan;
+                        }
+                        return true;
+                      });
+
+                      if (displayedList.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={7} className="p-6 text-center text-slate-400">
+                              Belum ada data izin tidak mengajar ustadz/ustadzah yang sesuai dengan filter.
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return displayedList.map((item, idx) => {
                         const currentPengganti = penggantiSelected[item.id] || item.ustadzPengganti || guruList[0]?.nama || 'Ust. M. Rizqi Fadlillah, S.Pd.';
+                        const matchedGuru = guruList.find(g => g.nama.trim().toLowerCase() === (item.namaUstadz || '').trim().toLowerCase());
+
                         return (
                           <tr key={`${item.id}-${idx}`} className="hover:bg-amber-500/10 transition">
                             <td className="p-3 font-mono font-bold text-emerald-300 whitespace-nowrap">
@@ -3068,7 +3366,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <span className="text-[10px] text-amber-200/70 block">Jam Ke-{item.jamKe || 1}</span>
                             </td>
                             <td className="p-3 font-extrabold text-white">
-                              {item.namaUstadz}
+                              <div className="flex items-center space-x-2.5">
+                                {matchedGuru?.foto ? (
+                                  <img 
+                                    src={matchedGuru.foto} 
+                                    alt={item.namaUstadz} 
+                                    className="w-8 h-8 rounded-full object-cover border border-amber-400/50 shrink-0" 
+                                  />
+                                ) : (
+                                  <div className="w-8 h-8 rounded-full bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300 font-bold text-xs shrink-0">
+                                    {(item.namaUstadz || 'U')[0]}
+                                  </div>
+                                )}
+                                <span>{item.namaUstadz}</span>
+                              </div>
                             </td>
                             <td className="p-3">
                               <span className="font-bold text-white block">{item.mapel}</span>
@@ -3094,8 +3405,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   </span>
                                 </div>
                               ) : (
-                                <div className="font-bold text-amber-300">
-                                  {item.ustadzPengganti || '-'}
+                                <div className="font-bold text-amber-300 flex items-center gap-1.5">
+                                  <span className="text-[10px] text-amber-200/70 font-normal">Pengganti:</span>
+                                  <span>{item.ustadzPengganti || '-'}</span>
                                 </div>
                               )}
                             </td>
@@ -3116,10 +3428,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <div className="flex items-center justify-center gap-1.5">
                                   <button
                                     onClick={() => {
+                                      const catatan = `Disetujui Admin. Digantikan oleh ${currentPengganti}`;
                                       if (onApproveIzinMengajar) {
-                                        onApproveIzinMengajar(item.id, currentPengganti, 'Disetujui', `Disetujui Admin. Digantikan oleh ${currentPengganti}`);
-                                        alert(`Izin tidak mengajar ${item.namaUstadz} telah DISETUJUI! Status kehadiran langsung menjadi IZIN dan Ustadz Pengganti: ${currentPengganti} telah dicatat.`);
+                                        onApproveIzinMengajar(item.id, currentPengganti, 'Disetujui', catatan);
                                       }
+                                      // Update local izin state
+                                      setLocalIzinList(prev => prev.map(p => p.id === item.id ? { ...p, status: 'Disetujui', ustadzPengganti: currentPengganti, catatanAdmin: catatan } : p));
+                                      // Sinkronkan ke Absensi Guru
+                                      if (onSaveAbsensiGuru) {
+                                        const newRec: AbsensiGuruRecord = {
+                                          tanggal: item.tanggal,
+                                          nama: item.namaUstadz,
+                                          mapel: item.mapel,
+                                          kelas: item.kelas,
+                                          status: 'Izin',
+                                          catatan: `Izin disetujui Admin. Pengganti: ${currentPengganti}`,
+                                          hari: new Date(item.tanggal).toLocaleDateString('id-ID', { weekday: 'long' }).toUpperCase(),
+                                          jamKe: item.jamKe || 1,
+                                          waktu: '08:00 - Selesai',
+                                          ustadzPengganti: currentPengganti,
+                                          alasanIzin: item.alasan
+                                        };
+                                        onSaveAbsensiGuru([newRec]);
+                                      }
+                                      alert(`Izin tidak mengajar ${item.namaUstadz} telah DISETUJUI! Status kehadiran pada absensi ustadz langsung menjadi IZIN dan Ustadz Pengganti: ${currentPengganti} telah dicatat.`);
                                     }}
                                     className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] rounded-lg shadow transition flex items-center gap-1"
                                     title="Setujui Izin & Catat Ustadz Pengganti"
@@ -3131,8 +3463,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     onClick={() => {
                                       if (onApproveIzinMengajar) {
                                         onApproveIzinMengajar(item.id, currentPengganti, 'Ditolak', 'Permohonan izin tidak disetujui Admin.');
-                                        alert(`Permohonan izin ${item.namaUstadz} telah ditolak.`);
                                       }
+                                      setLocalIzinList(prev => prev.map(p => p.id === item.id ? { ...p, status: 'Ditolak', catatanAdmin: 'Permohonan ditolak oleh Admin.' } : p));
+                                      alert(`Permohonan izin ${item.namaUstadz} telah ditolak.`);
                                     }}
                                     className="px-2.5 py-1 bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-red-300 font-bold text-[11px] rounded-lg transition"
                                   >
@@ -3147,18 +3480,223 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </td>
                           </tr>
                         );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan={7} className="p-6 text-center text-slate-400">
-                          Belum ada permohonan izin tidak mengajar dari ustadz/ustadzah.
-                        </td>
-                      </tr>
-                    )}
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>
             </div>
+
+            {/* MODAL INPUT PERMOHONAN IZIN TIDAK MENGAJAR USTADZ (ADMIN DIRECT) */}
+            {showAddIzinModal && (
+              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+                <div className="card-3d rounded-3xl p-5 sm:p-6 max-w-xl w-full border-2 border-amber-500 bg-gradient-to-b from-[#1c1206] to-[#0c0702] space-y-4 shadow-2xl">
+                  <div className="flex items-center justify-between pb-3 border-b border-amber-500/30">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-300 shadow">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-extrabold text-white text-gold-3d">
+                          Catat Izin Tidak Mengajar Ustadz
+                        </h4>
+                        <p className="text-xs text-amber-200/80">
+                          Sesuai data izin guru & otomatis terhubung ke absensi ustadz
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddIzinModal(false)}
+                      className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!newIzinAdminForm.namaUstadz || !newIzinAdminForm.alasan.trim()) {
+                        alert('Mohon pilih Ustadz dan isi alasan tidak mengajar!');
+                        return;
+                      }
+
+                      const newReq: IzinMengajarRequest = {
+                        id: `IZN-${Date.now()}`,
+                        idPengurus: 'ADMIN',
+                        namaUstadz: newIzinAdminForm.namaUstadz,
+                        tanggal: newIzinAdminForm.tanggal,
+                        mapel: newIzinAdminForm.mapel || 'Kitab Salaf',
+                        kelas: newIzinAdminForm.kelas || '1 TSANAWIYAH',
+                        jamKe: newIzinAdminForm.jamKe || 1,
+                        alasan: newIzinAdminForm.alasan,
+                        ustadzPengganti: newIzinAdminForm.ustadzPengganti || 'Ust. Pengganti',
+                        status: newIzinAdminForm.status,
+                        catatanAdmin: newIzinAdminForm.status === 'Disetujui' 
+                          ? `Dicatat langsung oleh Admin. Digantikan oleh ${newIzinAdminForm.ustadzPengganti || '-'}`
+                          : 'Menunggu konfirmasi',
+                        createdAt: new Date().toISOString()
+                      };
+
+                      if (onSubmitIzinMengajar) {
+                        onSubmitIzinMengajar(newReq);
+                      }
+                      setLocalIzinList(prev => [newReq, ...prev]);
+
+                      // Jika langsung disetujui, sinkronkan ke Absensi Guru
+                      if (newIzinAdminForm.status === 'Disetujui' && onSaveAbsensiGuru) {
+                        const newRec: AbsensiGuruRecord = {
+                          tanggal: newIzinAdminForm.tanggal,
+                          nama: newIzinAdminForm.namaUstadz,
+                          mapel: newIzinAdminForm.mapel,
+                          kelas: newIzinAdminForm.kelas,
+                          status: 'Izin',
+                          catatan: `Izin disetujui Admin: ${newIzinAdminForm.alasan}. Pengganti: ${newIzinAdminForm.ustadzPengganti}`,
+                          hari: new Date(newIzinAdminForm.tanggal).toLocaleDateString('id-ID', { weekday: 'long' }).toUpperCase(),
+                          jamKe: newIzinAdminForm.jamKe || 1,
+                          waktu: '08:00 - Selesai',
+                          ustadzPengganti: newIzinAdminForm.ustadzPengganti,
+                          alasanIzin: newIzinAdminForm.alasan
+                        };
+                        onSaveAbsensiGuru([newRec]);
+                      }
+
+                      setShowAddIzinModal(false);
+                      alert(`Izin tidak mengajar ${newIzinAdminForm.namaUstadz} berhasil dicatat! Status absensi ustadz pada tanggal ${newIzinAdminForm.tanggal} langsung menjadi IZIN.`);
+                    }}
+                    className="space-y-3.5 text-xs"
+                  >
+                    <div>
+                      <label className="block text-amber-300 font-bold mb-1">Pilih Ustadz / Ustadzah *</label>
+                      <select
+                        value={newIzinAdminForm.namaUstadz}
+                        onChange={(e) => {
+                          const picked = guruList.find(g => g.nama === e.target.value);
+                          setNewIzinAdminForm({
+                            ...newIzinAdminForm,
+                            namaUstadz: e.target.value,
+                            mapel: picked?.mapel || newIzinAdminForm.mapel,
+                            kelas: picked?.kelas || newIzinAdminForm.kelas
+                          });
+                        }}
+                        className="w-full bg-[#0a0501] border border-amber-500/50 rounded-xl p-2.5 text-white font-bold"
+                        required
+                      >
+                        <option value="">-- Pilih Ustadz Pengajar --</option>
+                        {Array.from(new Set(guruList.map(g => g.nama))).map((nama, idx) => (
+                          <option key={idx} value={nama}>{nama}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-amber-300 font-bold mb-1">Tanggal Izin *</label>
+                        <input
+                          type="date"
+                          value={newIzinAdminForm.tanggal}
+                          onChange={(e) => setNewIzinAdminForm({ ...newIzinAdminForm, tanggal: e.target.value })}
+                          className="w-full bg-[#0a0501] border border-amber-500/50 rounded-xl p-2 text-white font-mono"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-amber-300 font-bold mb-1">Jam Mengajar Ke- *</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="6"
+                          value={newIzinAdminForm.jamKe}
+                          onChange={(e) => setNewIzinAdminForm({ ...newIzinAdminForm, jamKe: parseInt(e.target.value) || 1 })}
+                          className="w-full bg-[#0a0501] border border-amber-500/50 rounded-xl p-2 text-white font-mono"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-amber-300 font-bold mb-1">Mata Pelajaran / Kitab</label>
+                        <input
+                          type="text"
+                          value={newIzinAdminForm.mapel}
+                          onChange={(e) => setNewIzinAdminForm({ ...newIzinAdminForm, mapel: e.target.value })}
+                          className="w-full bg-[#0a0501] border border-amber-500/50 rounded-xl p-2 text-white"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-amber-300 font-bold mb-1">Kelas</label>
+                        <select
+                          value={newIzinAdminForm.kelas}
+                          onChange={(e) => setNewIzinAdminForm({ ...newIzinAdminForm, kelas: e.target.value })}
+                          className="w-full bg-[#0a0501] border border-amber-500/50 rounded-xl p-2 text-white"
+                        >
+                          {classList.map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-amber-300 font-bold mb-1">Alasan Tidak Mengajar *</label>
+                      <textarea
+                        value={newIzinAdminForm.alasan}
+                        onChange={(e) => setNewIzinAdminForm({ ...newIzinAdminForm, alasan: e.target.value })}
+                        placeholder="Contoh: Sakit demam / Udzur syar'i / Menghadiri harlah pesantren..."
+                        className="w-full bg-[#0a0501] border border-amber-500/50 rounded-xl p-2.5 text-white h-20"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-amber-300 font-bold mb-1">Ustadz Pengganti (Badaal)</label>
+                        <select
+                          value={newIzinAdminForm.ustadzPengganti}
+                          onChange={(e) => setNewIzinAdminForm({ ...newIzinAdminForm, ustadzPengganti: e.target.value })}
+                          className="w-full bg-[#0a0501] border border-amber-500/50 rounded-xl p-2 text-white"
+                        >
+                          <option value="">-- Tetapkan Ustadz Pengganti --</option>
+                          {guruList.filter(g => g.nama !== newIzinAdminForm.namaUstadz).map((g, idx) => (
+                            <option key={idx} value={g.nama}>{g.nama} ({g.mapel})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-amber-300 font-bold mb-1">Status Persetujuan</label>
+                        <select
+                          value={newIzinAdminForm.status}
+                          onChange={(e) => setNewIzinAdminForm({ ...newIzinAdminForm, status: e.target.value as any })}
+                          className="w-full bg-[#0a0501] border border-amber-500/50 rounded-xl p-2 text-white font-bold"
+                        >
+                          <option value="Disetujui">Langsung Setujui (Disetujui)</option>
+                          <option value="Menunggu">Menunggu Persetujuan</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2 border-t border-amber-500/30">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddIzinModal(false)}
+                        className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 transition"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn-3d-gold px-5 py-2 text-black font-extrabold rounded-xl shadow"
+                      >
+                        Simpan & Sinkronkan Izin
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
 
             {/* ========================================================================= */}
             {/* 2. REKAPAN BULANAN TABEL KEHADIRAN SANTRI & GURU + CETAK PDF, WORD, SHEETS */}
@@ -3186,6 +3724,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       onChange={(e) => {
                         setSelectedBulanSantri(e.target.value);
                         setSelectedBulanGuru(e.target.value);
+                        setTrendMonth(e.target.value);
                       }}
                       className="bg-[#02130b] border border-[#d4af37]/60 rounded-lg px-2.5 py-1 text-xs text-[#f3e5ab] font-bold focus:outline-none cursor-pointer"
                     >
@@ -3194,6 +3733,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       ))}
                     </select>
                   </div>
+
+                  {/* Tombol Cepat: Bulan Aktif Real-Time */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedBulanSantri(currentRealTimeMonth);
+                      setSelectedBulanGuru(currentRealTimeMonth);
+                      setTrendMonth(currentRealTimeMonth);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 shadow-sm ${
+                      (dashboardRekapTab === 'santri' ? selectedBulanSantri : selectedBulanGuru) === currentRealTimeMonth
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow'
+                        : 'bg-[#042013] text-[#d4af37] border-[#d4af37]/40 hover:bg-[#062d1c]'
+                    }`}
+                    title="Kembali ke bulan aktif kalender saat ini"
+                  >
+                    <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Bulan Ini (Real-Time): {currentRealTimeMonth}</span>
+                  </button>
 
                   {/* Tab Switcher */}
                   <div className="flex bg-[#042013] border border-[#d4af37]/40 rounded-xl p-1">
@@ -5180,6 +5738,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       .map((item, idx) => {
                         const key = `${item.kelas}_${item.hari}_${item.jamKe}`;
                         const liveRec = combinedGuruLog.find(
+                          r => r.nama.toLowerCase().trim() === item.nama.toLowerCase().trim() &&
+                               (r.jamKe ? Number(r.jamKe) === Number(item.jamKe) : true) &&
+                               (r.tanggal === adminPresensiStatus.todayIso || !r.tanggal)
+                        ) || combinedGuruLog.find(
                           r => r.nama.toLowerCase().trim() === item.nama.toLowerCase().trim() &&
                                (r.jamKe ? Number(r.jamKe) === Number(item.jamKe) : true)
                         );
@@ -7257,74 +7819,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
-                {/* Toolbar Aksi Input Cepat Per Kelas */}
-                <div className="flex flex-wrap items-center justify-between gap-2.5 bg-[#02140b]/90 p-2.5 rounded-2xl border border-[#d4af37]/30">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] font-bold text-[#d4af37] flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      Input Cepat ({selectedNadzhomKelas}):
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleClassBatchIncrement(5)}
-                      className="px-2.5 py-1 rounded-lg bg-[#042818] hover:bg-[#083822] border border-emerald-500/40 text-emerald-300 text-xs font-bold transition hover:scale-105 active:scale-95"
-                      title="Tambah 5 bait untuk semua santri di kelas ini"
-                    >
-                      +5 Bait
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleClassBatchIncrement(10)}
-                      className="px-2.5 py-1 rounded-lg bg-[#042818] hover:bg-[#083822] border border-emerald-500/40 text-emerald-300 text-xs font-bold transition hover:scale-105 active:scale-95"
-                      title="Tambah 10 bait untuk semua santri di kelas ini"
-                    >
-                      +10 Bait
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleClassBatchIncrement('khatam')}
-                      className="px-2.5 py-1 rounded-lg bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/60 text-emerald-200 text-xs font-bold transition hover:scale-105 active:scale-95"
-                      title="Setel khatam seluruh santri di kelas ini"
-                    >
-                      Khatamkan Semua
-                    </button>
-                  </div>
-
-                  <div className="text-[11px] text-stone-400 flex items-center gap-1.5">
-                    <span className="hidden sm:inline">Tekan <kbd className="px-1.5 py-0.5 rounded bg-stone-800 text-amber-300 font-mono text-[10px] border border-stone-700">Enter</kbd> pada kolom bait untuk langsung simpan baris.</span>
-                  </div>
-                </div>
-
-                {/* Table Container Sederhana & Ergonomis */}
+                {/* Table Container Sederhana, Ringkas & Ergonomis (Tanpa Tombol Cepat Menumpuk & Tanpa Kolom Target/Progres) */}
                 <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-inner max-h-[640px] overflow-y-auto">
                   <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-[#02130a] text-[#d4af37] sticky top-0 z-20 shadow-md">
+                    <thead className="bg-[#02130a] text-[#d4af37] sticky top-0 z-10 shadow-md">
                       <tr>
-                        <th className="py-2.5 px-2 font-bold border-b border-r border-[#d4af37]/20 w-10 text-center sticky left-0 z-30 bg-[#02130a]">
+                        <th className="py-2.5 px-2 font-bold border-b border-[#d4af37]/20 w-12 text-center">
                           NO
                         </th>
-                        <th className="py-2.5 px-3 font-bold border-b border-r border-[#d4af37]/20 min-w-[160px] sticky left-10 z-30 bg-[#02130a]">
-                          SANTRI & KELAS
+                        <th className="py-2.5 px-2 font-bold border-b border-[#d4af37]/20 w-16 text-center">
+                          FOTO
                         </th>
-                        <th className="py-2.5 px-2.5 font-bold border-b border-r border-[#d4af37]/20 min-w-[145px] bg-[#031b10]">
+                        <th className="py-2.5 px-3 font-bold border-b border-[#d4af37]/20 min-w-[200px]">
+                          NAMA SANTRI & KELAS
+                        </th>
+                        <th className="py-2.5 px-2.5 font-bold border-b border-[#d4af37]/20 w-44">
                           KITAB NADZHOM
                         </th>
-                        <th className="py-2.5 px-2.5 font-bold border-b border-r border-[#d4af37]/20 min-w-[245px] text-center bg-[#031b10]">
-                          BAIT HAFALAN (INPUT CEPAT)
+                        <th className="py-2.5 px-2 font-bold border-b border-[#d4af37]/20 w-28 text-center">
+                          BAIT (MANUAL)
                         </th>
-                        <th className="py-2.5 px-2.5 font-bold border-b border-r border-[#d4af37]/20 min-w-[130px] bg-[#031b10]">
-                          TARGET & PROGRES
-                        </th>
-                        <th className="py-2.5 px-2.5 font-bold border-b border-r border-[#d4af37]/20 min-w-[115px] bg-[#031b10]">
+                        <th className="py-2.5 px-2.5 font-bold border-b border-[#d4af37]/20 w-36">
                           PREDIKAT
                         </th>
-                        <th className="py-2.5 px-2 font-bold border-b border-r border-[#d4af37]/20 min-w-[120px] bg-[#031b10]">
+                        <th className="py-2.5 px-2 font-bold border-b border-[#d4af37]/20 w-32">
                           TANGGAL
                         </th>
-                        <th className="py-2.5 px-2.5 font-bold border-b border-r border-[#d4af37]/20 min-w-[140px] bg-[#031b10]">
+                        <th className="py-2.5 px-2.5 font-bold border-b border-[#d4af37]/20 min-w-[130px]">
                           CATATAN USTADZ
                         </th>
-                        <th className="py-2.5 px-2 font-bold border-b border-[#d4af37]/20 text-center min-w-[90px] sticky right-0 z-20 bg-[#02130a]">
+                        <th className="py-2.5 px-2 font-bold border-b border-[#d4af37]/20 text-center w-24">
                           AKSI (SYNC)
                         </th>
                       </tr>
@@ -7359,36 +7883,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                         return filtered.map((santri, idx) => {
                           const data = getSantriNadzhomData(santri);
-                          const pct = data.targetBait > 0 ? Math.min(100, Math.round((data.bait / data.targetBait) * 100)) : 0;
                           const isKhatam = data.targetBait > 0 && data.bait >= data.targetBait;
                           const isRowSaved = savedRowIndicator[santri.id];
 
                           return (
                             <tr key={santri.id} className="hover:bg-[#072f1a]/80 transition group">
                               {/* 1. No */}
-                              <td className="py-2 px-1 text-center font-mono text-stone-400 border-r border-[#d4af37]/15 sticky left-0 z-10 bg-[#03150d] group-hover:bg-[#072f1a] text-[11px]">
+                              <td className="py-2.5 px-2 text-center font-mono text-stone-400 border-b border-[#d4af37]/15 text-[11px]">
                                 {idx + 1}
                               </td>
 
-                              {/* 2. Santri & Kelas (Sederhana & Ringkas) */}
-                              <td className="py-2 px-3 border-r border-[#d4af37]/15 sticky left-10 z-10 bg-[#03150d] group-hover:bg-[#072f1a]">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-6 h-6 rounded-full bg-emerald-950 border border-[#d4af37]/40 flex items-center justify-center text-[10px] font-bold text-[#d4af37] shrink-0">
-                                    {santri.nama.charAt(0)}
-                                  </div>
-                                  <div className="truncate max-w-[130px]">
-                                    <span className="font-semibold text-white text-xs block truncate leading-tight">
-                                      {santri.nama}
-                                    </span>
-                                    <span className="text-[10px] text-stone-400 font-mono">
-                                      {santri.kelas}
-                                    </span>
+                              {/* Foto Santri Yang Sudah Diinput Pada Data Santri */}
+                              <td className="py-2 px-2 text-center border-b border-[#d4af37]/15 w-16">
+                                <div
+                                  onClick={() => setSantriHighResPreview(santri)}
+                                  className="w-10 h-12 mx-auto rounded-lg overflow-hidden border border-[#d4af37]/40 shadow bg-[#020e08] cursor-pointer group/photo relative flex items-center justify-center hover:border-[#d4af37] transition"
+                                  title={`Foto ${santri.nama} - Klik untuk lihat penuh`}
+                                >
+                                  {santri.fotoThumbnail || santri.foto ? (
+                                    <img
+                                      src={santri.fotoThumbnail || santri.foto}
+                                      alt={santri.nama}
+                                      loading="lazy"
+                                      className="w-full h-full object-cover transition transform group-hover/photo:scale-105"
+                                      onError={(e) => {
+                                        (e.currentTarget as HTMLElement).style.display = 'none';
+                                      }}
+                                    />
+                                  ) : (
+                                    <span className="text-xs font-bold text-[#d4af37]">{santri.nama.charAt(0)}</span>
+                                  )}
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/photo:opacity-100 flex items-center justify-center transition">
+                                    <Eye className="w-3.5 h-3.5 text-white" />
                                   </div>
                                 </div>
                               </td>
 
-                              {/* 3. Kitab Nadzhom (Dropdown Sederhana) */}
-                              <td className="py-2 px-2.5 border-r border-[#d4af37]/15">
+                              {/* 2. Nama Santri & Kelas (Rapi, Luas, Tidak Menumpuk) */}
+                              <td className="py-2.5 px-3 border-b border-[#d4af37]/15 min-w-[200px]">
+                                <div className="min-w-0">
+                                  <span className="font-bold text-white text-xs block leading-tight truncate" title={santri.nama}>
+                                    {santri.nama}
+                                  </span>
+                                  <span className="text-[10px] text-emerald-400 font-mono block mt-0.5">
+                                    {santri.kelas} • NIS: {santri.id}
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* 3. Kitab Nadzhom */}
+                              <td className="py-2.5 px-2.5 border-b border-[#d4af37]/15 w-44">
                                 <select
                                   value={data.kitab}
                                   onChange={(e) => handleNadzhomFieldChange(santri.id, santri, 'kitab', e.target.value)}
@@ -7405,117 +7949,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 </select>
                               </td>
 
-                              {/* 4. Input Jumlah Bait (Fokus Utama: 1 Baris Sejajar, Mudah & Cepat) */}
-                              <td className="py-2 px-2.5 border-r border-[#d4af37]/15">
-                                <div className="flex items-center justify-center gap-1">
-                                  {/* Kurangi */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleQuickIncrementBait(santri, -5)}
-                                    className="w-6 h-7 rounded bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold text-xs flex items-center justify-center transition active:scale-90"
-                                    title="Kurang 5 bait"
-                                  >
-                                    -5
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleQuickIncrementBait(santri, -1)}
-                                    className="w-5 h-7 rounded bg-stone-800/70 hover:bg-stone-700 text-stone-400 font-bold text-xs flex items-center justify-center transition active:scale-90"
-                                    title="Kurang 1 bait"
-                                  >
-                                    -
-                                  </button>
-
-                                  {/* Input Angka - Langsung Ketik, Auto Select saat Diklik, Enter Simpan */}
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max={data.targetBait > 0 ? data.targetBait : 2000}
-                                    value={data.bait}
-                                    onFocus={(e) => e.target.select()}
-                                    onChange={(e) => handleNadzhomFieldChange(santri.id, santri, 'bait', e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        handleSaveSingleSantriNadzhom(santri);
-                                      }
-                                    }}
-                                    className={`w-14 h-7 text-center font-mono font-black text-xs rounded-lg border transition focus:outline-none focus:ring-1 focus:ring-[#d4af37] ${
-                                      isKhatam
-                                        ? 'bg-emerald-950 text-emerald-300 border-emerald-500'
-                                        : data.bait > 0
-                                        ? 'bg-amber-950/80 text-amber-300 border-amber-500/70'
-                                        : 'bg-[#020e07] text-stone-300 border-stone-700'
-                                    }`}
-                                    title="Ketik angka bait, tekan Enter untuk simpan"
-                                  />
-
-                                  {/* Tambah Cepat (+1, +5, +10, Khatam) */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleQuickIncrementBait(santri, 1)}
-                                    className="w-5 h-7 rounded bg-stone-800/70 hover:bg-stone-700 text-stone-400 font-bold text-xs flex items-center justify-center transition active:scale-90"
-                                    title="Tambah 1 bait"
-                                  >
-                                    +
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleQuickIncrementBait(santri, 5)}
-                                    className="px-1.5 h-7 rounded bg-[#07331e] hover:bg-[#0c492b] border border-emerald-500/40 text-emerald-300 font-bold text-[11px] flex items-center justify-center transition active:scale-90"
-                                    title="Tambah 5 bait"
-                                  >
-                                    +5
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleQuickIncrementBait(santri, 10)}
-                                    className="px-1.5 h-7 rounded bg-[#07331e] hover:bg-[#0c492b] border border-emerald-500/40 text-emerald-300 font-bold text-[11px] flex items-center justify-center transition active:scale-90"
-                                    title="Tambah 10 bait"
-                                  >
-                                    +10
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleQuickIncrementBait(santri, 'khatam')}
-                                    className="px-2 h-7 rounded bg-emerald-900/80 hover:bg-emerald-800 border border-emerald-400/60 text-emerald-200 font-extrabold text-[10px] flex items-center justify-center transition active:scale-90"
-                                    title="Khatamkan hafalan santri ini"
-                                  >
-                                    Khatam
-                                  </button>
-                                </div>
+                              {/* 4. Input Jumlah Bait Manual (Sederhana, Bersih & Manual) */}
+                              <td className="py-2.5 px-2 border-b border-[#d4af37]/15 text-center w-28">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={data.bait}
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => handleNadzhomFieldChange(santri.id, santri, 'bait', e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleSaveSingleSantriNadzhom(santri);
+                                    }
+                                  }}
+                                  placeholder="0"
+                                  className={`w-20 h-7 text-center font-mono font-bold text-xs rounded-lg border transition focus:outline-none focus:ring-1 focus:ring-[#d4af37] ${
+                                    isKhatam
+                                      ? 'bg-emerald-950 text-emerald-300 border-emerald-500'
+                                      : data.bait > 0
+                                      ? 'bg-amber-950/80 text-amber-300 border-amber-500/70'
+                                      : 'bg-[#020e07] text-stone-300 border-stone-700'
+                                  }`}
+                                  title="Isi jumlah bait secara manual, tekan Enter untuk simpan"
+                                />
                               </td>
 
-                              {/* 5. Target & Progres (Kompak Sejajar) */}
-                              <td className="py-2 px-2.5 border-r border-[#d4af37]/15">
-                                <div className="flex items-center gap-1.5">
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    value={data.targetBait}
-                                    onFocus={(e) => e.target.select()}
-                                    onChange={(e) => handleNadzhomFieldChange(santri.id, santri, 'targetBait', parseInt(e.target.value) || 0)}
-                                    className="w-12 h-7 text-center font-mono font-bold text-xs bg-[#010a05] border border-stone-700 rounded-lg text-amber-300 focus:outline-none focus:border-[#d4af37]"
-                                    title="Target bait"
-                                  />
-                                  <div className="w-14">
-                                    <div className="flex items-center justify-between text-[10px] font-mono leading-none mb-0.5">
-                                      <span className={isKhatam ? 'text-emerald-300 font-bold' : 'text-stone-300'}>{pct}%</span>
-                                      {isKhatam && <span className="text-[8px] text-emerald-400 font-bold">LULUS</span>}
-                                    </div>
-                                    <div className="w-full bg-[#010a05] rounded-full h-1 border border-stone-800 overflow-hidden">
-                                      <div
-                                        className={`h-full transition-all duration-200 ${
-                                          isKhatam ? 'bg-emerald-400' : pct >= 50 ? 'bg-amber-400' : 'bg-cyan-400'
-                                        }`}
-                                        style={{ width: `${pct}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-
-                              {/* 6. Predikat / Nilai */}
-                              <td className="py-2 px-2.5 border-r border-[#d4af37]/15">
+                              {/* 5. Predikat / Nilai */}
+                              <td className="py-2.5 px-2.5 border-b border-[#d4af37]/15 w-36">
                                 <select
                                   value={data.nilai}
                                   onChange={(e) => handleNadzhomFieldChange(santri.id, santri, 'nilai', e.target.value)}
@@ -7536,8 +7996,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 </select>
                               </td>
 
-                              {/* 7. Tanggal Setoran */}
-                              <td className="py-2 px-2 border-r border-[#d4af37]/15">
+                              {/* 6. Tanggal Setoran */}
+                              <td className="py-2.5 px-2 border-b border-[#d4af37]/15 w-32">
                                 <input
                                   type="date"
                                   value={data.tanggal}
@@ -7546,8 +8006,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 />
                               </td>
 
-                              {/* 8. Catatan / Evaluasi Ustadz */}
-                              <td className="py-2 px-2.5 border-r border-[#d4af37]/15">
+                              {/* 7. Catatan / Evaluasi Ustadz */}
+                              <td className="py-2.5 px-2.5 border-b border-[#d4af37]/15 min-w-[130px]">
                                 <input
                                   type="text"
                                   value={data.catatan || ''}
@@ -7563,8 +8023,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 />
                               </td>
 
-                              {/* 9. Aksi Simpan (Live Sync Wali Santri) */}
-                              <td className="py-2 px-1.5 text-center sticky right-0 z-10 bg-[#03150d] group-hover:bg-[#072f1a]">
+                              {/* 8. Aksi Simpan (Live Sync Wali Santri) */}
+                              <td className="py-2.5 px-2 text-center border-b border-[#d4af37]/15 w-24">
                                 <button
                                   type="button"
                                   onClick={() => handleSaveSingleSantriNadzhom(santri)}
@@ -7648,6 +8108,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <thead className="bg-[#052216] text-[#d4af37] sticky top-0">
                       <tr>
                         <th className="p-3 font-bold">NO</th>
+                        <th className="p-3 w-16 text-center font-bold">FOTO</th>
                         <th className="p-3 font-bold">TANGGAL</th>
                         <th className="p-3 font-bold">NIS</th>
                         <th className="p-3 font-bold">NAMA SANTRI</th>
@@ -7658,37 +8119,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#d4af37]/10 bg-[#052216]/60">
-                      {nadzhomList.map((item, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10 transition">
-                          <td className="p-3 font-mono text-stone-400">{i + 1}</td>
-                          <td className="p-3 font-mono text-emerald-300">{item.tanggal || '-'}</td>
-                          <td className="p-3 font-mono text-[#d4af37]">{item.idSantri}</td>
-                          <td className="p-3 font-bold text-white text-sm">{item.nama}</td>
-                          <td className="p-3 text-emerald-300 font-medium">{item.kitab}</td>
-                          <td className="p-3 text-center font-bold font-mono text-emerald-400">{item.bait} bait</td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 text-[11px] font-semibold">
-                              {item.nilai}
-                            </span>
-                          </td>
-                          <td className="p-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (window.confirm(`Hapus catatan setoran ${item.nama} (${item.bait} bait ${item.kitab}) tanggal ${item.tanggal}?`)) {
-                                  if (onDeleteNadzhom) {
-                                    onDeleteNadzhom(item);
+                      {nadzhomList.map((item, i) => {
+                        const santriMatch = santriList.find(s => s.id === item.idSantri || s.nama.toLowerCase().trim() === item.nama.toLowerCase().trim());
+                        const fotoSrc = (santriMatch?.fotoThumbnail && santriMatch.fotoThumbnail.trim()) || (santriMatch?.foto && santriMatch.foto.trim());
+                        return (
+                          <tr key={i} className="hover:bg-[#d4af37]/10 transition">
+                            <td className="p-3 font-mono text-stone-400">{i + 1}</td>
+                            <td className="p-2 text-center">
+                              <div
+                                onClick={() => santriMatch && setSantriHighResPreview(santriMatch)}
+                                className="w-9 h-11 mx-auto rounded-lg overflow-hidden border border-[#d4af37]/40 shadow bg-[#020e08] flex items-center justify-center cursor-pointer group/photo relative hover:border-[#d4af37] transition"
+                                title={santriMatch ? `Foto ${item.nama} - Klik untuk lihat penuh` : item.nama}
+                              >
+                                {fotoSrc ? (
+                                  <img
+                                    src={fotoSrc}
+                                    alt={item.nama}
+                                    loading="lazy"
+                                    className="w-full h-full object-cover transition transform group-hover/photo:scale-105"
+                                    onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                                  />
+                                ) : (
+                                  <span className="text-xs font-bold text-[#d4af37]">{item.nama.charAt(0)}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-3 font-mono text-emerald-300">{item.tanggal || '-'}</td>
+                            <td className="p-3 font-mono text-[#d4af37]">{item.idSantri}</td>
+                            <td className="p-3 font-bold text-white text-sm">{item.nama}</td>
+                            <td className="p-3 text-emerald-300 font-medium">{item.kitab}</td>
+                            <td className="p-3 text-center font-bold font-mono text-emerald-400">{item.bait} bait</td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 text-[11px] font-semibold">
+                                {item.nilai}
+                              </span>
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (window.confirm(`Hapus catatan setoran ${item.nama} (${item.bait} bait ${item.kitab}) tanggal ${item.tanggal}?`)) {
+                                    if (onDeleteNadzhom) {
+                                      onDeleteNadzhom(item);
+                                    }
                                   }
-                                }
-                              }}
-                              className="p-1 rounded bg-rose-950/80 hover:bg-rose-900 border border-rose-700/50 text-rose-300 transition"
-                              title="Hapus catatan ini"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                                }}
+                                className="p-1 rounded bg-rose-950/80 hover:bg-rose-900 border border-rose-700/50 text-rose-300 transition"
+                                title="Hapus catatan ini"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -7908,6 +8392,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </option>
                         ))}
                       </select>
+
+                      {/* Pratinjau Foto & Info Santri Terpilih */}
+                      {(() => {
+                        const selSantri = santriList.find(s => s.id === newNadzhomEntry.idSantri);
+                        if (!selSantri) return null;
+                        const fotoSrc = (selSantri.fotoThumbnail && selSantri.fotoThumbnail.trim()) || (selSantri.foto && selSantri.foto.trim());
+                        return (
+                          <div className="mt-2.5 p-2 rounded-xl bg-[#031b10] border border-[#d4af37]/35 flex items-center gap-3">
+                            <div className="w-10 h-12 rounded-lg overflow-hidden border border-[#d4af37]/50 shadow bg-black/40 shrink-0 flex items-center justify-center">
+                              {fotoSrc ? (
+                                <img src={fotoSrc} alt={selSantri.nama} className="w-full h-full object-cover" />
+                              ) : (
+                                <span className="text-sm font-bold text-[#d4af37]">{selSantri.nama.charAt(0)}</span>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <span className="font-bold text-white text-xs block leading-tight truncate">{selSantri.nama}</span>
+                              <span className="text-[10px] text-emerald-300 font-mono block mt-0.5">NIS: {selSantri.id} • Kelas: {selSantri.kelas} • Kamar: {selSantri.kamar || '-'}</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -8258,60 +8764,58 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Editable Matrix Table */}
+              {/* Editable Matrix Table - Lebih Singkat, Sederhana & Nama Santri Bebas Menumpuk Saat Digeser */}
               <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/30 shadow-inner max-h-[620px] overflow-y-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-[#02130a] text-[#d4af37] sticky top-0 z-20 shadow-md">
                     <tr>
-                      <th className="p-3 font-bold border-b border-r border-[#d4af37]/20 w-12 text-center sticky left-0 z-30 bg-[#02130a]">
-                        NO
-                      </th>
-                      <th className="p-3 font-bold border-b border-r border-[#d4af37]/20 min-w-[90px] sticky left-12 z-30 bg-[#02130a]">
-                        NIS
-                      </th>
-                      <th className="p-3 font-bold border-b border-r border-[#d4af37]/20 min-w-[170px] sticky left-[138px] z-30 bg-[#02130a]">
-                        NAMA SANTRI
+                      {/* Single Sticky Column: NO & NAMA SANTRI (Opaque Solid, Bebas Menumpuk Saat Digeser) */}
+                      <th className="py-2.5 px-2.5 font-bold border-b border-r-2 border-[#d4af37]/50 w-48 min-w-[170px] max-w-[195px] sticky left-0 z-30 bg-[#02130a] text-left shadow-[4px_0_10px_rgba(0,0,0,0.85)]">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-5 text-center text-stone-400 font-mono text-[10px]">NO</span>
+                          <span className="text-[11px] uppercase tracking-wide text-[#d4af37]">NAMA SANTRI</span>
+                        </div>
                       </th>
 
-                      {/* Kolom 9-10 Mata Pelajaran Dinamis dari Kurikulum */}
+                      {/* Kolom 9-10 Mata Pelajaran Dinamis dari Kurikulum (Format Kompak & Ringkas) */}
                       {kurikulumForSelectedKelas.map((mapelItem, idx) => (
                         <th
                           key={mapelItem.id || idx}
-                          className="p-3 font-bold border-b border-r border-[#d4af37]/20 min-w-[125px] text-center bg-[#031b10] hover:bg-[#072a1a] transition"
+                          className="py-1.5 px-1 font-bold border-b border-r border-[#d4af37]/20 w-14 min-w-[50px] max-w-[58px] text-center bg-[#031b10] hover:bg-[#072a1a] transition"
+                          title={`${mapelItem.mapel} (${mapelItem.kitab || ''}) - Pengampu: ${mapelItem.ustadzPengampu || 'Asatidz'}`}
                         >
-                          <div className="text-white font-extrabold text-[12px] truncate">
+                          <div className="text-white font-bold text-[10px] truncate leading-tight">
                             {mapelItem.mapel}
                           </div>
-                          <div className="text-[10px] text-[#d4af37] font-serif italic truncate mt-0.5" title={mapelItem.kitab}>
-                            {mapelItem.kitab || '-'}
-                          </div>
-                          <div className="text-[9px] text-emerald-400/80 font-normal truncate">
-                            {mapelItem.ustadzPengampu || 'Asatidz'}
-                          </div>
+                          {mapelItem.kitab && (
+                            <div className="text-[8px] text-[#d4af37] font-mono truncate mt-0.5 leading-none">
+                              {mapelItem.kitab}
+                            </div>
+                          )}
                         </th>
                       ))}
 
-                      {/* Kolom Total, Rata-Rata, Predikat, Ranking */}
-                      <th className="p-3 font-bold border-b border-r border-[#d4af37]/20 text-center min-w-[85px] bg-[#02130a]">
+                      {/* Kolom Ringkasan Singkat: Total, Rata-Rata, Predikat, Ranking */}
+                      <th className="py-2 px-1 font-bold border-b border-r border-[#d4af37]/20 text-center w-12 min-w-[44px] bg-[#02130a] text-[10px]">
                         TOTAL
                       </th>
-                      <th className="p-3 font-bold border-b border-r border-[#d4af37]/20 text-center min-w-[90px] bg-[#041f12] text-amber-300">
-                        RATA-RATA
+                      <th className="py-2 px-1 font-bold border-b border-r border-[#d4af37]/20 text-center w-14 min-w-[48px] bg-[#041f12] text-amber-300 text-[10px]">
+                        RATA²
                       </th>
-                      <th className="p-3 font-bold border-b border-r border-[#d4af37]/20 text-center min-w-[120px] bg-[#02130a]">
+                      <th className="py-2 px-1 font-bold border-b border-r border-[#d4af37]/20 text-center w-16 min-w-[56px] bg-[#02130a] text-[10px]">
                         PREDIKAT
                       </th>
-                      <th className="p-3 font-bold border-b border-[#d4af37]/20 text-center min-w-[85px] bg-[#041f12] text-amber-300">
+                      <th className="py-2 px-1 font-bold border-b border-[#d4af37]/20 text-center w-12 min-w-[40px] bg-[#041f12] text-amber-300 text-[10px]">
                         RANK
                       </th>
                     </tr>
                   </thead>
 
-                  <tbody className="divide-y divide-[#d4af37]/15 bg-[#03150d]/80">
+                  <tbody className="divide-y divide-[#d4af37]/15 bg-[#03150d]">
                     {santriForSelectedKelas.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={kurikulumForSelectedKelas.length + 7}
+                          colSpan={kurikulumForSelectedKelas.length + 5}
                           className="p-8 text-center text-stone-400"
                         >
                           Tidak ada santri yang ditemukan di kelas <b>{selectedNilaiKelas}</b>.
@@ -8327,41 +8831,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             key={santri.id}
                             className="hover:bg-[#072f1a]/80 transition group"
                           >
-                            {/* Sticky Columns: No, NIS, Nama */}
-                            <td className="p-2.5 text-center font-mono text-stone-400 border-r border-[#d4af37]/15 sticky left-0 z-10 bg-[#03150d] group-hover:bg-[#072f1a]">
-                              {rowIdx + 1}
-                            </td>
-                            <td className="p-2.5 font-mono text-[#d4af37] font-semibold border-r border-[#d4af37]/15 sticky left-12 z-10 bg-[#03150d] group-hover:bg-[#072f1a]">
-                              {santri.id}
-                            </td>
-                            <td className="p-2.5 border-r border-[#d4af37]/15 sticky left-[138px] z-10 bg-[#03150d] group-hover:bg-[#072f1a]">
+                            {/* Single Sticky Column: NO & NAMA SANTRI (Solid Opaque, Bebas Bentrok Ketika Digeser) */}
+                            <td className="py-1.5 px-2.5 border-r-2 border-[#d4af37]/50 sticky left-0 z-20 w-48 min-w-[170px] max-w-[195px] bg-[#02130a] group-hover:bg-[#052216] shadow-[4px_0_10px_rgba(0,0,0,0.85)]">
                               <div className="flex items-center gap-2">
-                                {santri.fotoThumbnail || santri.foto ? (
-                                  <img
-                                    src={santri.fotoThumbnail || santri.foto}
-                                    alt={santri.nama}
-                                    className="w-6 h-6 rounded-full object-cover border border-[#d4af37]/40 shrink-0"
-                                    onError={(e) => {
-                                      (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80';
-                                    }}
-                                  />
-                                ) : (
-                                  <div className="w-6 h-6 rounded-full bg-emerald-950 border border-[#d4af37]/30 flex items-center justify-center text-[10px] font-bold text-[#d4af37] shrink-0">
-                                    {santri.nama.charAt(0)}
-                                  </div>
-                                )}
-                                <div className="truncate max-w-[140px]">
-                                  <span className="font-bold text-white text-xs block truncate">
+                                <span className="text-[11px] font-mono font-bold text-stone-400 w-5 text-center shrink-0">
+                                  {rowIdx + 1}
+                                </span>
+                                <div className="w-7 h-7 rounded-full overflow-hidden bg-emerald-950 border border-[#d4af37]/45 flex items-center justify-center text-[10px] font-bold text-[#d4af37] shrink-0 shadow-sm">
+                                  {santri.fotoThumbnail || santri.foto ? (
+                                    <img
+                                      src={santri.fotoThumbnail || santri.foto}
+                                      alt={santri.nama}
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => {
+                                        (e.currentTarget as HTMLElement).style.display = 'none';
+                                      }}
+                                    />
+                                  ) : (
+                                    <span>{santri.nama.charAt(0)}</span>
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <span className="font-bold text-white text-xs block leading-tight truncate" title={santri.nama}>
                                     {santri.nama}
                                   </span>
-                                  <span className="text-[10px] text-stone-400 block truncate">
-                                    {santri.kamar || '-'}
+                                  <span className="text-[10px] text-emerald-400 font-mono block mt-0.5 truncate">
+                                    NIS: {santri.id}
                                   </span>
                                 </div>
                               </div>
                             </td>
 
-                            {/* Kolom Nilai Editable untuk setiap Mata Pelajaran */}
+                            {/* Kolom Nilai Editable untuk setiap Mata Pelajaran (Kompak & Singkat) */}
                             {kurikulumForSelectedKelas.map((mapelItem, colIdx) => {
                               const currentScore = getStudentScore(santri.id, mapelItem.mapel);
                               const isMumtaz = currentScore >= 90;
@@ -8372,15 +8873,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               return (
                                 <td
                                   key={mapelItem.id || colIdx}
-                                  className="p-2 text-center border-r border-[#d4af37]/15"
+                                  className="p-1 text-center border-r border-[#d4af37]/15 w-14 min-w-[50px] max-w-[58px]"
                                 >
                                   <input
                                     type="number"
                                     min="0"
                                     max="100"
-                                    value={currentScore}
+                                    value={currentScore === 0 ? '' : currentScore}
+                                    placeholder="0"
                                     onChange={(e) => handleScoreChange(santri.id, mapelItem.mapel, parseInt(e.target.value) || 0)}
-                                    className={`w-16 px-1.5 py-1 text-center font-mono font-bold text-xs rounded-lg border transition focus:outline-none focus:ring-2 focus:ring-[#d4af37] ${
+                                    className={`w-10 h-6 px-0.5 text-center font-mono font-bold text-xs rounded border transition focus:outline-none focus:ring-1 focus:ring-[#d4af37] ${
                                       isMumtaz
                                         ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/60'
                                         : isJayyidJiddan
@@ -8398,13 +8900,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             })}
 
                             {/* Ringkasan Total */}
-                            <td className="p-2.5 text-center font-mono font-bold text-white border-r border-[#d4af37]/15 bg-[#021109]/50">
+                            <td className="p-1 text-center font-mono font-bold text-white border-r border-[#d4af37]/15 bg-[#021109]/50 w-12 min-w-[44px] text-xs">
                               {metrics.total}
                             </td>
 
                             {/* Rata-Rata */}
-                            <td className="p-2.5 text-center border-r border-[#d4af37]/15 bg-[#041a0f]/60">
-                              <span className={`px-2 py-0.5 rounded-lg font-mono font-extrabold text-xs inline-block ${
+                            <td className="p-1 text-center border-r border-[#d4af37]/15 bg-[#041a0f]/60 w-14 min-w-[48px]">
+                              <span className={`px-1 py-0.5 rounded font-mono font-extrabold text-[11px] inline-block ${
                                 metrics.avg >= 90 ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-500/40' :
                                 metrics.avg >= 80 ? 'bg-sky-900/60 text-sky-300 border border-sky-500/40' :
                                 metrics.avg >= 70 ? 'bg-amber-900/60 text-amber-300 border border-amber-500/40' :
@@ -8415,15 +8917,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </td>
 
                             {/* Predikat */}
-                            <td className="p-2.5 text-center border-r border-[#d4af37]/15">
-                              <span className="text-[11px] font-semibold text-emerald-200">
+                            <td className="p-1 text-center border-r border-[#d4af37]/15 w-16 min-w-[56px]">
+                              <span className="text-[10px] font-semibold text-emerald-200">
                                 {metrics.predikat}
                               </span>
                             </td>
 
                             {/* Peringkat / Rank */}
-                            <td className="p-2.5 text-center font-mono font-bold border-[#d4af37]/15">
-                              <span className={`px-2 py-0.5 rounded-full text-xs inline-flex items-center gap-1 ${
+                            <td className="p-1 text-center font-mono font-bold border-[#d4af37]/15 w-12 min-w-[40px]">
+                              <span className={`px-1.5 py-0.2 rounded-full text-[10px] inline-flex items-center gap-0.5 ${
                                 rank === 1 ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-extrabold shadow' :
                                 rank === 2 ? 'bg-slate-300 text-black font-extrabold shadow' :
                                 rank === 3 ? 'bg-amber-700 text-white font-bold shadow' :

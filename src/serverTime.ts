@@ -205,10 +205,14 @@ export function checkPresensiSchedule(
 ): PresensiCheckResult {
   const serverTime = customDate || getServerTime();
 
-  // Waktu WIB (UTC+7)
-  const hours = serverTime.getHours();
-  const minutes = serverTime.getMinutes();
-  const seconds = serverTime.getSeconds();
+  // Hitung waktu WIB (UTC+7) dengan presisi real-time
+  const utcMs = serverTime.getTime() + (serverTime.getTimezoneOffset() * 60000);
+  const wibMs = utcMs + (7 * 3600 * 1000);
+  const wibDate = new Date(wibMs);
+
+  const hours = wibDate.getHours();
+  const minutes = wibDate.getMinutes();
+  const seconds = wibDate.getSeconds();
 
   const currentSeconds = hours * 3600 + minutes * 60 + seconds;
   const currentMinutes = hours * 60 + minutes;
@@ -216,10 +220,10 @@ export function checkPresensiSchedule(
   const pad = (n: number) => String(n).padStart(2, '0');
   const wibTimeStr = `${pad(hours)}:${pad(minutes)}:${pad(seconds)} WIB`;
   const wibClockShort = `${pad(hours)}:${pad(minutes)}`;
-  const todayIso = serverTime.toISOString().split('T')[0];
+  const todayIso = `${wibDate.getFullYear()}-${pad(wibDate.getMonth() + 1)}-${pad(wibDate.getDate())}`;
 
   const daysOfWeek = ['AHAD', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
-  const currentDayName = daysOfWeek[serverTime.getDay()];
+  const currentDayName = daysOfWeek[wibDate.getDay()];
 
   // Mode Pengujian Bebas (Bypass)
   if (options?.bypassActive) {

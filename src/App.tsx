@@ -195,11 +195,31 @@ export default function App() {
   });
   const [absensiSantriList, setAbsensiSantriList] = useState<AbsensiSantriRecord[]>(() => {
     const saved = localStorage.getItem('sim_absensi_santri');
-    return saved ? JSON.parse(saved) : INITIAL_ABSENSI_SANTRI;
+    if (saved) return JSON.parse(saved);
+    // Simpan data bawaan ke riwayat arsip lokal agar rekapan bulan sebelumnya tetap aman
+    try {
+      const prevHS = JSON.parse(localStorage.getItem('sim_rekap_santri_harian_history') || '[]');
+      if (prevHS.length === 0 && INITIAL_ABSENSI_SANTRI.length > 0) {
+        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(INITIAL_ABSENSI_SANTRI));
+      }
+    } catch {}
+    // Hanya ambil absensi jika sesuai dengan bulan yang sedang aktif saat ini
+    const today = new Date();
+    const currentYearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    return INITIAL_ABSENSI_SANTRI.filter(a => a.tanggal.startsWith(currentYearMonth));
   });
   const [absensiGuruList, setAbsensiGuruList] = useState<AbsensiGuruRecord[]>(() => {
     const saved = localStorage.getItem('sim_absensi_guru');
-    return saved ? JSON.parse(saved) : INITIAL_ABSENSI_GURU;
+    if (saved) return JSON.parse(saved);
+    try {
+      const prevHG = JSON.parse(localStorage.getItem('sim_rekap_guru_harian_history') || '[]');
+      if (prevHG.length === 0 && INITIAL_ABSENSI_GURU.length > 0) {
+        localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(INITIAL_ABSENSI_GURU));
+      }
+    } catch {}
+    const today = new Date();
+    const currentYearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    return INITIAL_ABSENSI_GURU.filter(g => g.tanggal.startsWith(currentYearMonth));
   });
 
   // New features data states (Syahriyah, Uang Saku, Kurikulum)
@@ -283,13 +303,43 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_IZIN_MENGAJAR_LIST;
   });
 
-  // Otomatis simpan rekap saat berganti hari dan pemeliharaan arsip harian
+  // Otomatis simpan rekap saat berganti hari / bulan dan pemeliharaan arsip harian
   useEffect(() => {
-    const checkDayChange = () => {
+    const checkDayAndMonthChange = () => {
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const currentMonthStr = todayStr.slice(0, 7); // Format: YYYY-MM
       const lastActiveDate = localStorage.getItem('sim_active_dashboard_date');
+      const lastActiveMonth = localStorage.getItem('sim_active_dashboard_month');
 
+      // 1. Cek Ganti Bulan: Rekapan bulanan otomatis reset ke nol saat ganti bulan baru, dan arsip tersimpan aman
+      if (!lastActiveMonth) {
+        localStorage.setItem('sim_active_dashboard_month', currentMonthStr);
+      } else if (lastActiveMonth !== currentMonthStr) {
+        try {
+          const currentGuru = JSON.parse(localStorage.getItem('sim_absensi_guru') || '[]');
+          const currentSantri = JSON.parse(localStorage.getItem('sim_absensi_santri') || '[]');
+          if (currentGuru.length > 0) {
+            const prevHistory = JSON.parse(localStorage.getItem('sim_rekap_guru_harian_history') || '[]');
+            localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify([...currentGuru, ...prevHistory]));
+          }
+          if (currentSantri.length > 0) {
+            const prevHistoryS = JSON.parse(localStorage.getItem('sim_rekap_santri_harian_history') || '[]');
+            localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify([...currentSantri, ...prevHistoryS]));
+          }
+        } catch {}
+
+        // Reset sesi absensi harian ke nol (0) untuk bulan baru
+        setAbsensiSantriList([]);
+        setAbsensiGuruList([]);
+        localStorage.setItem('sim_absensi_santri', JSON.stringify([]));
+        localStorage.setItem('sim_absensi_guru', JSON.stringify([]));
+        localStorage.setItem('sim_active_dashboard_month', currentMonthStr);
+        localStorage.setItem('sim_active_dashboard_date', todayStr);
+        return;
+      }
+
+      // 2. Cek Ganti Hari dalam bulan yang sama
       if (!lastActiveDate) {
         localStorage.setItem('sim_active_dashboard_date', todayStr);
       } else if (lastActiveDate !== todayStr) {
@@ -312,8 +362,8 @@ export default function App() {
       }
     };
 
-    checkDayChange();
-    const timer = setInterval(checkDayChange, 30000);
+    checkDayAndMonthChange();
+    const timer = setInterval(checkDayAndMonthChange, 30000);
     return () => clearInterval(timer);
   }, []);
 
@@ -321,17 +371,17 @@ export default function App() {
   const [loginMode, setLoginMode] = useState<'wali' | 'pengurus' | 'admin'>('wali');
   
   // Wali Santri login uses NAMA SANTRI as identifier, and NIS as password (editable in Option Panel)
-  const [santriNamaInput, setSantriNamaInput] = useState<string>('Ahmad Fathan Mubina');
-  const [santriPasswordInput, setSantriPasswordInput] = useState<string>('S-1001');
+  const [santriNamaInput, setSantriNamaInput] = useState<string>('');
+  const [santriPasswordInput, setSantriPasswordInput] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
 
   // Pengurus login uses NAMA PENGURUS and PASSWORD (editable in Option Panel)
-  const [pengurusNamaInput, setPengurusNamaInput] = useState<string>('Ust. M. Rizqi Fadlillah, S.Pd.');
-  const [pengurusPasswordInput, setPengurusPasswordInput] = useState<string>('pengurus123');
+  const [pengurusNamaInput, setPengurusNamaInput] = useState<string>('');
+  const [pengurusPasswordInput, setPengurusPasswordInput] = useState<string>('');
 
-  // Admin login uses username 'admin' and fixed/editable password
-  const [adminUsername, setAdminUsername] = useState<string>('admin');
-  const [adminPassword, setAdminPassword] = useState<string>('salaf123');
+  // Admin login uses username 'admin' and fixed/editable password (diisi mandiri oleh admin)
+  const [adminUsername, setAdminUsername] = useState<string>('');
+  const [adminPassword, setAdminPassword] = useState<string>('');
   const [loginError, setLoginError] = useState<string>('');
 
   // Track Auth state with Firebase / Google
@@ -1628,6 +1678,7 @@ export default function App() {
             onDeleteKalender={handleDeleteKalender}
             onSaveUjianSantri={handleSaveUjianSantri}
             onApproveIzinMengajar={handleApproveIzinMengajar}
+            onSubmitIzinMengajar={handleAddIzinMengajar}
             onDeleteSantri={handleDeleteSantri}
             onTestIntro={() => setShowIntro(true)}
           />

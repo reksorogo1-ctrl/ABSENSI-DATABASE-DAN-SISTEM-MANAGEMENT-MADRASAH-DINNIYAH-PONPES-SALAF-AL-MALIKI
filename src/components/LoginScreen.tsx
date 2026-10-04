@@ -48,7 +48,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
   } = p;
 
   const logos = resolveLogos(settings);
-  const pickMode = (m: LoginMode) => { setLoginMode(m); setLoginError(''); };
+  const pickMode = (m: LoginMode) => { 
+    setLoginMode(m); 
+    setLoginError(''); 
+    setSantriNamaInput('');
+    setSantriPasswordInput('');
+    setPengurusNamaInput('');
+    setPengurusPasswordInput('');
+    setAdminUsername('');
+    setAdminPassword('');
+  };
 
   const resolveWaUrl = (wa?: string) => {
     if (!wa) return 'https://wa.me/6281234567890';
@@ -223,18 +232,29 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
                   <>
                     <div className="relative">
                       <User className="w-4 h-4 text-[#d4af37] absolute left-4 top-1/2 -translate-y-1/2" />
-                      <input data-testid="login-username-input" type="text" list="santri-name-suggestions" value={santriNamaInput} required placeholder="Nama Lengkap / NISN Santri" className={inputCls}
-                        onChange={(e) => { setSantriNamaInput(e.target.value); const m = santriList.find(s => s.nama.toLowerCase() === e.target.value.toLowerCase()); if (m) setSantriPasswordInput(m.password || m.id); }} />
-                      <datalist id="santri-name-suggestions">{santriList.map((s, idx) => <option key={`${s.id}-${idx}`} value={s.nama}>{s.kelas} — {s.id}</option>)}</datalist>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {santriList.slice(0, 4).map((d, idx) => (
-                        <button key={`${d.id}-${idx}`} type="button" data-testid={`demo-chip-${d.id}`} onClick={() => { setSantriNamaInput(d.nama); setSantriPasswordInput(d.password || d.id); }} className="text-[9px] px-2.5 py-1 rounded-lg bg-[#072918]/80 border border-[#d4af37]/35 text-[#faebaa] hover:bg-[#d4af37] hover:text-black transition tracking-wider">{d.nama.split(' ')[0]} ({d.id})</button>
-                      ))}
+                      <input
+                        data-testid="login-username-input"
+                        type="text"
+                        value={santriNamaInput}
+                        required
+                        autoComplete="off"
+                        placeholder="Nama Lengkap / NISN Santri"
+                        className={inputCls}
+                        onChange={(e) => setSantriNamaInput(e.target.value)}
+                      />
                     </div>
                     <div className="relative">
                       <Lock className="w-4 h-4 text-[#d4af37] absolute left-4 top-1/2 -translate-y-1/2" />
-                      <input data-testid="login-password-input" type={showPassword ? 'text' : 'password'} value={santriPasswordInput} onChange={(e) => setSantriPasswordInput(e.target.value)} placeholder="Kata Sandi" required className={`${inputCls} font-mono`} />
+                      <input
+                        data-testid="login-password-input"
+                        type={showPassword ? 'text' : 'password'}
+                        value={santriPasswordInput}
+                        onChange={(e) => setSantriPasswordInput(e.target.value)}
+                        placeholder="Kata Sandi (NIS)"
+                        required
+                        autoComplete="new-password"
+                        className={`${inputCls} font-mono`}
+                      />
                       {eyeBtn}
                     </div>
                   </>
@@ -244,18 +264,29 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
                   <>
                     <div className="relative">
                       <Users className="w-4 h-4 text-[#d4af37] absolute left-4 top-1/2 -translate-y-1/2" />
-                      <input data-testid="login-username-input" type="text" list="pengurus-name-suggestions" value={pengurusNamaInput} required placeholder="Nama Pengurus / Ustadz" className={inputCls}
-                        onChange={(e) => { setPengurusNamaInput(e.target.value); const m = pengurusList.find(x => x.nama.toLowerCase() === e.target.value.toLowerCase()); if (m) setPengurusPasswordInput(m.password || 'pengurus123'); }} />
-                      <datalist id="pengurus-name-suggestions">{pengurusList.map((x, idx) => <option key={`${x.id}-${idx}`} value={x.nama}>{x.jabatan} ({x.id})</option>)}</datalist>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {pengurusList.slice(0, 4).map((d, idx) => (
-                        <button key={`${d.id}-${idx}`} type="button" data-testid={`demo-chip-${d.id}`} onClick={() => { setPengurusNamaInput(d.nama); setPengurusPasswordInput(d.password || 'pengurus123'); }} className="text-[9px] px-2.5 py-1 rounded-lg bg-[#072918]/80 border border-[#d4af37]/35 text-[#faebaa] hover:bg-[#d4af37] hover:text-black transition tracking-wider">{d.nama.split(',')[0]}</button>
-                      ))}
+                      <input
+                        data-testid="login-username-input"
+                        type="text"
+                        value={pengurusNamaInput}
+                        required
+                        autoComplete="off"
+                        placeholder="Nama Pengurus / Ustadz"
+                        className={inputCls}
+                        onChange={(e) => setPengurusNamaInput(e.target.value)}
+                      />
                     </div>
                     <div className="relative">
                       <Lock className="w-4 h-4 text-[#d4af37] absolute left-4 top-1/2 -translate-y-1/2" />
-                      <input data-testid="login-password-input" type={showPassword ? 'text' : 'password'} value={pengurusPasswordInput} onChange={(e) => setPengurusPasswordInput(e.target.value)} placeholder="Kata Sandi" required className={`${inputCls} font-mono`} />
+                      <input
+                        data-testid="login-password-input"
+                        type={showPassword ? 'text' : 'password'}
+                        value={pengurusPasswordInput}
+                        onChange={(e) => setPengurusPasswordInput(e.target.value)}
+                        placeholder="Kata Sandi"
+                        required
+                        autoComplete="new-password"
+                        className={`${inputCls} font-mono`}
+                      />
                       {eyeBtn}
                     </div>
                   </>
@@ -265,11 +296,29 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
                   <>
                     <div className="relative">
                       <Lock className="w-4 h-4 text-[#d4af37] absolute left-4 top-1/2 -translate-y-1/2" />
-                      <input data-testid="login-username-input" type="text" value={adminUsername} onChange={(e) => setAdminUsername(e.target.value)} placeholder="Username Administrator" required className={inputCls} />
+                      <input
+                        data-testid="login-username-input"
+                        type="text"
+                        value={adminUsername}
+                        onChange={(e) => setAdminUsername(e.target.value)}
+                        placeholder="Username Administrator"
+                        required
+                        autoComplete="off"
+                        className={inputCls}
+                      />
                     </div>
                     <div className="relative">
                       <Lock className="w-4 h-4 text-[#d4af37] absolute left-4 top-1/2 -translate-y-1/2" />
-                      <input data-testid="login-password-input" type={showPassword ? 'text' : 'password'} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="Kata Sandi" required className={`${inputCls} font-mono`} />
+                      <input
+                        data-testid="login-password-input"
+                        type={showPassword ? 'text' : 'password'}
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        placeholder="Kata Sandi Administrator"
+                        required
+                        autoComplete="new-password"
+                        className={`${inputCls} font-mono`}
+                      />
                       {eyeBtn}
                     </div>
                   </>

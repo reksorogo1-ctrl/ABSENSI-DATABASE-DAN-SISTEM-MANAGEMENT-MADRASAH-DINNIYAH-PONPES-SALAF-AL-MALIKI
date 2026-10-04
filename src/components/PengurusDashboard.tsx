@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   Pengurus, KalenderAkademikEvent, AppSettings, Santri, GuruPengajar, JadwalPelajaran, 
   NadzhomRecord, NilaiUjianRecord, AbsensiSantriRecord, AbsensiGuruRecord, 
@@ -157,19 +157,35 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     ustadzPengampu: pengurus.nama || ''
   });
 
-  // Filter personal attendance for this pengurus
+  // Filter personal attendance for this pengurus (real-time dari absensiGuruList & riwayat rekapan)
   const personalAbsensi = useMemo(() => {
-    return absensiGuruList.filter(a => 
-      a.nama?.toLowerCase().trim() === pengurus.nama.toLowerCase().trim()
-    );
-  }, [absensiGuruList, pengurus]);
+    const list: AbsensiGuruRecord[] = [...(absensiGuruList || [])];
+    try {
+      const historyStr = localStorage.getItem('sim_rekap_guru_harian_history');
+      if (historyStr) {
+        const hist: AbsensiGuruRecord[] = JSON.parse(historyStr);
+        hist.forEach(h => {
+          if (!list.some(l => l.tanggal === h.tanggal && l.nama === h.nama && l.kelas === h.kelas && l.jamKe === h.jamKe)) {
+            list.push(h);
+          }
+        });
+      }
+    } catch {}
 
-  const personalHadir = personalAbsensi.filter(a => a.status === 'Hadir').length || 22;
-  const personalIzin = personalAbsensi.filter(a => a.status === 'Izin').length || 1;
-  const personalTerlambat = personalAbsensi.filter(a => a.status === 'Terlambat').length || 0;
-  const personalAlpha = personalAbsensi.filter(a => a.status === 'Alpha').length || 0;
+    const cleanName = (pengurus.nama || '').toLowerCase().trim();
+    return list.filter(a => {
+      const aName = (a.nama || '').toLowerCase().trim();
+      const aPengganti = (a.ustadzPengganti || '').toLowerCase().trim();
+      return aName === cleanName || aPengganti === cleanName || (cleanName && aName.includes(cleanName));
+    }).sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
+  }, [absensiGuruList, pengurus.nama]);
+
+  const personalHadir = personalAbsensi.filter(a => a.status === 'Hadir').length;
+  const personalIzin = personalAbsensi.filter(a => a.status === 'Izin').length;
+  const personalTerlambat = personalAbsensi.filter(a => a.status === 'Terlambat').length;
+  const personalAlpha = personalAbsensi.filter(a => a.status === 'Alpha').length;
   const personalTotal = personalHadir + personalIzin + personalTerlambat + personalAlpha;
-  const personalPercent = personalTotal > 0 ? Math.round((personalHadir / personalTotal) * 100) : 98;
+  const personalPercent = personalTotal > 0 ? Math.round(((personalHadir + personalTerlambat) / personalTotal) * 100) : 100;
 
   // Filter pengajuan izin milik pengurus ini
   const myIzinList = useMemo(() => {
@@ -450,47 +466,120 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     });
   }, [serverClock, settings.bypass_jam_presensi_testing]);
 
-  // JADWAL OTOMATIS AKTIF DARI DATABASE JADWAL PELAJARAN
+  // JADWAL OTOMATIS AKTIF DARI DATABASE JADWAL PELAJARAN SESUAI HARI & KELAS REAL-TIME
   const currentDayName = activeSession.currentDayName;
-  const activeMatchingSchedules = useMemo(() => {
-    // Cari jadwal hari ini yang sesuai dengan sesi jam aktif (atau semua jadwal hari ini jika testing)
-    return jadwalList.filter(j => {
-      const isHariMatch = j.hari.toUpperCase() === currentDayName.toUpperCase() ||
-                          (activeSession.tingkat === 'ALIYAH' && j.hari.toUpperCase().includes('MALAM'));
-      const isJamMatch = activeSession.jamKe ? Number(j.jamKe) === Number(activeSession.jamKe) : true;
-      return isHariMatch && isJamMatch;
+
+  // Helper pencocokan nama pengurus login dengan nama ustadz di jadwal pelajaran
+  const isMatchMyTeacherName = useCallback((scheduleTeacherName: string | undefined): boolean => {
+    if (!scheduleTeacherName || !pengurus.nama) return false;
+    const s = scheduleTeacherName.toLowerCase().trim();
+    const p = pengurus.nama.toLowerCase().trim();
+    if (s === p) return true;
+
+    // Normalisasi gelar & titel agar akurat (Ustadz, Ust., Ustazah, S.Pd., dll)
+    const clean = (str: string) => str
+      .replace(/\b(ustadz|ustazah|ustadzah|ust|kh|k\.h|h\.|h|kyai|gus|s\.pd|s\.pd\.i|m\.pd|lc|al-hafidz|al-hafiz)\b/gi, '')
+      .replace(/[^a-z0-9]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const cleanS = clean(s);
+    const cleanP = clean(p);
+    if (cleanS && cleanP && (cleanS === cleanP || cleanS.includes(cleanP) || cleanP.includes(cleanS))) {
+      return true;
+    }
+
+    const wordsS = cleanS.split(' ').filter(w => w.length > 2);
+    const wordsP = cleanP.split(' ').filter(w => w.length > 2);
+    const matches = wordsS.filter(w => wordsP.includes(w));
+    return matches.length >= 2 || (wordsS.length === 1 && wordsP.includes(wordsS[0])) || (wordsP.length === 1 && wordsS.includes(wordsP[0]));
+  }, [pengurus.nama]);
+
+  // JADWAL PELAJARAN KHUSUS PENGURUS/USTADZ YANG SEDANG LOGIN (DATA PRIBADI)
+  const myAllSchedules = useMemo(() => {
+    const list = (jadwalList || []).filter(j => isMatchMyTeacherName(j.nama || j.ustadz));
+    if (list.length > 0) return list;
+    
+    // Cadangan jika ustadz baru atau mapping mapel/kelas pribadi
+    if (pengurus.mapel || pengurus.kelasBimbingan) {
+      return (jadwalList || []).filter(j => {
+        const matchMapel = pengurus.mapel && j.mapel && j.mapel.toLowerCase().includes(pengurus.mapel.toLowerCase().trim());
+        const matchKelas = pengurus.kelasBimbingan && j.kelas === pengurus.kelasBimbingan;
+        return matchMapel || (matchKelas && isMatchMyTeacherName(j.nama || j.ustadz));
+      });
+    }
+    return [];
+  }, [jadwalList, isMatchMyTeacherName, pengurus.mapel, pengurus.kelasBimbingan]);
+
+  // Kelas-kelas yang diampu oleh ustadz yang sedang login
+  const myTeachingClasses = useMemo(() => {
+    const clsSet = new Set<string>();
+    myAllSchedules.forEach(j => {
+      if (j.kelas) clsSet.add(j.kelas);
     });
-  }, [jadwalList, currentDayName, activeSession]);
+    if (clsSet.size === 0 && pengurus.kelasBimbingan) {
+      clsSet.add(pengurus.kelasBimbingan);
+    }
+    return Array.from(clsSet);
+  }, [myAllSchedules, pengurus.kelasBimbingan]);
 
-  // Jadwal aktif untuk ustadz yang sedang login ini
+  // 1. Ambil jadwal mengajar pribadi ustadz pada hari ini
+  const myTodaySchedules = useMemo(() => {
+    const dayUpper = (currentDayName || '').toUpperCase();
+    return myAllSchedules.filter(j => {
+      const jHari = (j.hari || '').toUpperCase();
+      return jHari === dayUpper || jHari === `MALAM ${dayUpper}` || jHari.includes(dayUpper);
+    });
+  }, [myAllSchedules, currentDayName]);
+
+  // State filter kelas untuk jadwal presensi hari ini (hanya dari kelas yang diampu)
+  const [selectedPresensiKelas, setSelectedPresensiKelas] = useState<string>('SEMUA');
+
+  // 2. Filter jadwal hari ini berdasarkan kelas yang dipilih (khusus data pribadi)
+  const myTodaySchedulesByClass = useMemo(() => {
+    if (selectedPresensiKelas === 'SEMUA' || !selectedPresensiKelas) {
+      return myTodaySchedules;
+    }
+    return myTodaySchedules.filter(j => j.kelas === selectedPresensiKelas);
+  }, [myTodaySchedules, selectedPresensiKelas]);
+
+  // State jadwal yang dipilih oleh ustadz
+  const [selectedJadwalId, setSelectedJadwalId] = useState<string>('');
+
   const myActiveSchedule = useMemo(() => {
-    return activeMatchingSchedules.find(j => 
-      (j.ustadz || j.nama)?.toLowerCase().trim() === pengurus.nama.toLowerCase().trim()
-    ) || activeMatchingSchedules[0] || null;
-  }, [activeMatchingSchedules, pengurus.nama]);
+    if (selectedJadwalId) {
+      const found = myTodaySchedulesByClass.find(j => (j.id || `${j.kelas}_${j.hari}_${j.jamKe}`) === selectedJadwalId) ||
+                    myTodaySchedules.find(j => (j.id || `${j.kelas}_${j.hari}_${j.jamKe}`) === selectedJadwalId) ||
+                    myAllSchedules.find(j => (j.id || `${j.kelas}_${j.hari}_${j.jamKe}`) === selectedJadwalId);
+      if (found) return found;
+    }
 
-  // Cek apakah ustadz login ini sudah presensi hari ini pada sesi aktif
+    return myTodaySchedulesByClass[0] || myTodaySchedules[0] || null;
+  }, [selectedJadwalId, myTodaySchedulesByClass, myTodaySchedules, myAllSchedules]);
+
+  // Cek apakah ustadz login ini sudah presensi hari ini pada sesi jadwal yang dipilih
   const isAlreadyCheckedIn = useMemo(() => {
     return (absensiGuruList || []).some(rec => 
       rec.tanggal === activeSession.todayIso &&
       rec.nama.toLowerCase().trim() === pengurus.nama.toLowerCase().trim() &&
-      (activeSession.jamKe ? Number(rec.jamKe) === Number(activeSession.jamKe) : true)
+      (myActiveSchedule ? (rec.kelas === myActiveSchedule.kelas && (rec.mapel === myActiveSchedule.mapel || Number(rec.jamKe) === Number(myActiveSchedule.jamKe))) : true)
     );
-  }, [absensiGuruList, activeSession, pengurus.nama]);
+  }, [absensiGuruList, activeSession.todayIso, pengurus.nama, myActiveSchedule]);
 
-  // Form Pengajuan Pengganti Ustadz
+  // Form Pengajuan Pengganti Ustadz (Khusus jadwal yang diampu pengurus ini)
   const [selectedJadwalToReplaceId, setSelectedJadwalToReplaceId] = useState<string>('');
   const [selectedUstadzPenggantiName, setSelectedUstadzPenggantiName] = useState<string>(guruList[0]?.nama || '');
   const [alasanPenggantianInput, setAlasanPenggantianInput] = useState<string>('');
   const [showAjukanPenggantiModal, setShowAjukanPenggantiModal] = useState<boolean>(false);
 
-  // Jadwal yang dipilih untuk digantikan
+  // Jadwal yang dipilih untuk digantikan (hanya dari jadwal milik pengurus ini)
   const targetJadwalForReplacement = useMemo(() => {
     if (selectedJadwalToReplaceId) {
-      return jadwalList.find(j => (j.id || `${j.kelas}_${j.hari}_${j.jamKe}`) === selectedJadwalToReplaceId);
+      return myAllSchedules.find(j => (j.id || `${j.kelas}_${j.hari}_${j.jamKe}`) === selectedJadwalToReplaceId) ||
+             (jadwalList || []).find(j => (j.id || `${j.kelas}_${j.hari}_${j.jamKe}`) === selectedJadwalToReplaceId);
     }
-    return myActiveSchedule || activeMatchingSchedules[0] || jadwalList[0];
-  }, [selectedJadwalToReplaceId, jadwalList, myActiveSchedule, activeMatchingSchedules]);
+    return myActiveSchedule || myTodaySchedules[0] || myAllSchedules[0] || null;
+  }, [selectedJadwalToReplaceId, myAllSchedules, jadwalList, myActiveSchedule, myTodaySchedules]);
 
   // Kirim Pengajuan Ustadz Pengganti
   const handleAjukanPenggantiSubmit = (e: React.FormEvent) => {
@@ -558,24 +647,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
   // Eksekusi Tombol HADIR NORMAL
   const handleHadirNormal = () => {
-    // Validasi 1: Waktu Server
-    if (!activeSession.isActive) {
-      setValidationAlertModal({
-        isOpen: true,
-        type: 'outside_hours',
-        title: '⏰ Di Luar Jam Absensi Pelajaran',
-        message: `Waktu server saat ini adalah ${activeSession.wibTimeStr} WIB. Jadwal mengajar belum dimulai atau telah melewati batas jam sesi pelajaran resmi.`,
-        submessage: `Presensi hanya dapat dilakukan pada jam mengajar yang terdaftar di jadwal (${myActiveSchedule?.waktu || '08:00 - 09:00'}).`,
-        details: {
-          currentTime: activeSession.wibTimeStr,
-          allowedSchedule: myActiveSchedule ? `${myActiveSchedule.mapel} (${myActiveSchedule.kelas}) - ${myActiveSchedule.waktu || 'Sesi Jam'}` : 'Jadwal Reguler'
-        }
-      });
-      return;
-    }
-
-    // Validasi 2: Geofencing & Lokasi
-    if (!geofenceCheck.isValid) {
+    // Validasi 1: Geofencing & Lokasi
+    if (settings.geofencing_enabled && !geofenceCheck.isValid) {
       setValidationAlertModal({
         isOpen: true,
         type: 'outside_radius',
@@ -591,19 +664,31 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       return;
     }
 
-    // Validasi 3: Cek Jadwal Aktif
+    // Validasi 2: Cek Jadwal Aktif Milik Pribadi
     if (!myActiveSchedule) {
       setValidationAlertModal({
         isOpen: true,
         type: 'no_schedule',
-        title: 'ℹ️ Tidak Ada Jadwal Mengajar Aktif',
-        message: `Tidak ditemukan jadwal mengajar aktif untuk ${pengurus.nama} pada hari ${currentDayName} sesi jam saat ini.`,
-        submessage: 'Sistem menyinkronkan data otomatis dari database jadwal pelajaran.'
+        title: 'ℹ️ Tidak Ada Jadwal Mengajar',
+        message: `Tidak ditemukan jadwal mengajar untuk Anda (${pengurus.nama}) pada hari ${currentDayName}.`,
+        submessage: 'Sistem hanya mengizinkan presensi untuk jadwal pelajaran dan jam yang Anda ampu sendiri.'
       });
       return;
     }
 
-    // Validasi 4: Cek Belum Absen
+    // Validasi Integritas: Tidak bisa mengabsensikan pengurus / ustadz lain
+    if (!isMatchMyTeacherName(myActiveSchedule.nama || myActiveSchedule.ustadz)) {
+      setValidationAlertModal({
+        isOpen: true,
+        type: 'no_schedule',
+        title: '⛔ Akses Presensi Ditolak',
+        message: `Anda tidak dapat melakukan presensi untuk ustadz lain (${myActiveSchedule.nama || myActiveSchedule.ustadz}).`,
+        submessage: 'Sistem menjaga integritas data presensi, Anda hanya dapat absen untuk jam mengajar Anda sendiri.'
+      });
+      return;
+    }
+
+    // Validasi 3: Cek Belum Absen
     if (isAlreadyCheckedIn) {
       setValidationAlertModal({
         isOpen: true,
@@ -616,6 +701,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     }
 
     const nowTime = activeSession.wibClockShort;
+    const finalStatus: 'Hadir' | 'Terlambat' = activeSession.isLate ? 'Terlambat' : 'Hadir';
+
     const newRecord: AbsensiGuruRecord = {
       id: `ABS-G-${Date.now()}`,
       absensiId: `ABS-G-${Date.now()}`,
@@ -629,10 +716,10 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       nama: pengurus.nama,
       mapel: myActiveSchedule.mapel,
       kelas: myActiveSchedule.kelas,
-      status: activeSession.status,
-      catatan: activeSession.status === 'Hadir'
-        ? `Presensi Hadir Normal Tepat Waktu (${nowTime} WIB - Jarak: ${geofenceCheck.distanceMeters.toFixed(1)}m)`
-        : `Presensi Terlambat (${nowTime} WIB - Melewati Batas Awal - Jarak: ${geofenceCheck.distanceMeters.toFixed(1)}m)`,
+      status: finalStatus,
+      catatan: finalStatus === 'Hadir'
+        ? `Presensi Hadir Tepat Waktu (${nowTime} WIB - Hari: ${currentDayName} - Sesuai Jadwal ${myActiveSchedule.kelas})`
+        : `Presensi Terlambat (${nowTime} WIB - Hari: ${currentDayName} - Sesuai Jadwal ${myActiveSchedule.kelas})`,
       hari: currentDayName,
       jamKe: myActiveSchedule.jamKe || activeSession.jamKe || 1,
       jamJadwal: myActiveSchedule.waktu || `${nowTime} WIB`,
@@ -651,6 +738,14 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       onSaveAbsensiGuru([newRecord]);
     }
 
+    try {
+      const savedG = JSON.parse(localStorage.getItem('sim_absensi_guru') || '[]');
+      const filtered = savedG.filter((p: any) => !(p.tanggal === newRecord.tanggal && p.nama === newRecord.nama && p.kelas === newRecord.kelas && String(p.jamKe) === String(newRecord.jamKe)));
+      const updated = [newRecord, ...filtered];
+      localStorage.setItem('sim_absensi_guru', JSON.stringify(updated));
+      window.dispatchEvent(new Event('storage'));
+    } catch {}
+
     broadcastAttendanceUpdate('guru', [newRecord], pengurus.nama);
 
     setValidationAlertModal({
@@ -658,7 +753,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       type: 'success',
       title: '✅ Presensi Hadir Berhasil Dicatat!',
       message: `Alhamdulillah, presensi Ustadz ${newRecord.nama} (${newRecord.mapel} - ${newRecord.kelas}) telah berhasil dicatat.`,
-      submessage: `Status: ${newRecord.status.toUpperCase()} • Jam Absen: ${nowTime} WIB • Jarak: ${geofenceCheck.distanceMeters.toFixed(1)}m. Data langsung tersinkronkan ke Dashboard Admin secara realtime!`
+      submessage: `Hari: ${currentDayName} • Jam: ${nowTime} WIB • Status: ${finalStatus.toUpperCase()}. Data langsung tersinkronkan ke Dashboard Admin secara realtime!`
     });
   };
 
@@ -743,6 +838,14 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     if (onSaveAbsensiGuru) {
       onSaveAbsensiGuru([newRecord]);
     }
+
+    try {
+      const savedG = JSON.parse(localStorage.getItem('sim_absensi_guru') || '[]');
+      const filtered = savedG.filter((p: any) => !(p.tanggal === newRecord.tanggal && p.nama === newRecord.nama && p.kelas === newRecord.kelas && String(p.jamKe) === String(newRecord.jamKe)));
+      const updated = [newRecord, ...filtered];
+      localStorage.setItem('sim_absensi_guru', JSON.stringify(updated));
+      window.dispatchEvent(new Event('storage'));
+    } catch {}
 
     broadcastAttendanceUpdate('guru', [newRecord], pengurus.nama);
 
@@ -987,13 +1090,13 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
           </div>
         </header>
 
-        {/* Tab Navigation Menu - Sejajar & Selaras Format Menu Tab Dashboard Admin */}
-        <div className="card-3d-glass rounded-2xl p-2.5 border border-[#d4af37]/30 shadow-lg overflow-x-auto no-scrollbar">
-          <nav className="flex items-center gap-2 min-w-max">
+        {/* Tab Navigation Menu - Rapi, Sederhana, Tidak Melebar & Fleksibel Bisa Digeser */}
+        <div className="card-3d-glass rounded-2xl p-2 sm:p-2.5 border border-[#d4af37]/30 shadow-lg overflow-x-auto no-scrollbar scroll-smooth touch-pan-x">
+          <nav className="flex items-center gap-1.5 sm:gap-2 min-w-max pb-0.5">
             <button
               type="button"
               onClick={() => setActiveTab('dashboard')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === 'dashboard'
                   ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
@@ -1006,7 +1109,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('izin-mengajar')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === 'izin-mengajar'
                   ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
@@ -1015,7 +1118,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               <FileText className="w-3.5 h-3.5" />
               <span>Izin Mengajar</span>
               {myIzinList.filter(i => i.status === 'Menunggu').length > 0 && (
-                <span className="ml-1 px-2 py-0.5 rounded-full bg-black text-[#fef08a] font-mono text-[9px] font-bold border border-yellow-300/40">
+                <span className="ml-1 px-1.5 py-0.2 rounded-full bg-black text-[#fef08a] font-mono text-[9px] font-bold border border-yellow-300/40">
                   {myIzinList.filter(i => i.status === 'Menunggu').length}
                 </span>
               )}
@@ -1024,15 +1127,15 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('wali-kelas')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === 'wali-kelas'
                   ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
               <GraduationCap className="w-3.5 h-3.5" />
-              <span>Kelas Bimbingan (Wali Kelas)</span>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-900 border border-emerald-500/40 text-[9px] text-emerald-300 font-bold">
+              <span>Wali Kelas</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-emerald-900 border border-emerald-500/40 text-[9px] text-emerald-300 font-bold">
                 {waliKelasKelas}
               </span>
             </button>
@@ -1040,7 +1143,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('kalender')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === 'kalender'
                   ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
@@ -1049,7 +1152,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               <Calendar className="w-3.5 h-3.5" />
               <span>Kalender & Agenda</span>
               {urgentEvents.length > 0 && (
-                <span className="ml-1 px-2 py-0.5 rounded-full bg-red-600 text-white font-mono text-[9px] animate-pulse">
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-600 text-white font-mono text-[9px] animate-pulse">
                   {urgentEvents.length}
                 </span>
               )}
@@ -1058,20 +1161,20 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('absensi-santri')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === 'absensi-santri'
                   ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
               <UserCheck className="w-3.5 h-3.5" />
-              <span>Presensi Seluruh Santri</span>
+              <span>Presensi Santri</span>
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab('jadwal')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === 'jadwal'
                   ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
@@ -1080,8 +1183,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               <BookOpen className="w-3.5 h-3.5" />
               <span>Jadwal & Kitab</span>
               {unreadSilabusUpdates.length > 0 && (
-                <span className="ml-1 px-2 py-0.5 rounded-full bg-black text-[#fef08a] font-black text-[9px] animate-pulse border border-yellow-200 shadow-md">
-                  ⚡ {unreadSilabusUpdates.length} Update
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-black text-[#fef08a] font-black text-[9px] animate-pulse border border-yellow-200 shadow-md">
+                  ⚡ {unreadSilabusUpdates.length}
                 </span>
               )}
             </button>
@@ -1089,20 +1192,20 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('ujian-kitab')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === 'ujian-kitab'
                   ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
               }`}
             >
               <Award className="w-3.5 h-3.5" />
-              <span>Nilai Ujian & Muhafadzoh</span>
+              <span>Nilai Ujian</span>
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab('profil-saya')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap ${
+              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
                 activeTab === 'profil-saya'
                   ? 'btn-3d-gold text-black font-extrabold shadow-lg'
                   : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
@@ -1288,54 +1391,54 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </div>
               </div>
 
-              {/* TABS MODE: [ ABSENSI NORMAL ] vs [ ABSENSI PENGGANTI ] */}
-              <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-[#03140c] p-2.5 sm:p-3 rounded-2xl border border-[#d4af37]/35 shadow-inner">
-                <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+              {/* TABS MODE: [ ABSENSI NORMAL ] vs [ ABSENSI PENGGANTI ] - Rapi, Sederhana & Bisa Digeser */}
+              <div className="flex items-center justify-between gap-2.5 bg-[#03140c] p-2.5 sm:p-3 rounded-2xl border border-[#d4af37]/35 shadow-inner overflow-x-auto no-scrollbar scroll-smooth">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => setAbsensiMode('normal')}
-                    className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 ${
+                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 ${
                       absensiMode === 'normal'
                         ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
                         : 'text-slate-300 hover:text-white hover:bg-emerald-950/40 border border-transparent'
                     }`}
                   >
-                    <UserCheck className="w-4 h-4 shrink-0" />
-                    <span>[ ABSENSI NORMAL ]</span>
+                    <UserCheck className="w-3.5 h-3.5 shrink-0" />
+                    <span>Absensi Normal</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setAbsensiMode('pengganti')}
-                    className={`flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 ${
+                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 ${
                       absensiMode === 'pengganti'
                         ? 'btn-3d-yellow text-[#1a1202] shadow-lg'
                         : 'text-amber-300/80 hover:text-amber-200 hover:bg-amber-950/40 border border-transparent'
                     }`}
                   >
-                    <Users className="w-4 h-4 shrink-0" />
-                    <span>[ ABSENSI PENGGANTI ]</span>
+                    <Users className="w-3.5 h-3.5 shrink-0" />
+                    <span>Absensi Pengganti</span>
                     {penggantiRequestList.filter(r => r.status === 'Disetujui' && r.ustadzPengganti.toLowerCase().trim() === pengurus.nama.toLowerCase().trim()).length > 0 && (
-                      <span className="px-1.5 py-0.5 rounded-full bg-black text-amber-300 text-[10px] font-mono font-bold">
+                      <span className="px-1.5 py-0.2 rounded-full bg-black text-amber-300 text-[9px] font-mono font-bold">
                         Aktif
                       </span>
                     )}
                   </button>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 text-xs">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => setShowAjukanPenggantiModal(true)}
-                    className="btn-3d-yellow px-3.5 py-2 text-xs font-bold flex items-center gap-1.5"
+                    className="btn-3d-yellow px-3 py-2 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shrink-0"
                   >
                     <PlusCircle className="w-3.5 h-3.5 shrink-0" />
-                    <span>Ajukan Pengganti Ustadz</span>
+                    <span>Ajukan Pengganti</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowIzinModal(true)}
-                    className="px-3.5 py-2 rounded-xl bg-[#0a2f1e] hover:bg-[#0f402a] border-t border-white/30 border-b border-black text-[#fef08a] font-bold text-xs flex items-center gap-1.5 transition shadow"
+                    className="px-3 py-2 rounded-xl bg-[#0a2f1e] hover:bg-[#0f402a] border-t border-white/30 border-b border-black text-[#fef08a] font-bold text-xs flex items-center gap-1.5 transition shadow whitespace-nowrap shrink-0"
                   >
                     <Send className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <span>Izin Mengajar</span>
@@ -1349,36 +1452,123 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   /* ================= MODE A: ABSENSI NORMAL ================= */
                   <div className="space-y-5">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-3 border-b border-[#d4af37]/20">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300 shrink-0">
                           <BookOpen className="w-4 h-4" />
                         </div>
-                        <span className="text-sm font-extrabold text-[#fef08a] uppercase tracking-wider">
-                          Jadwal Mengajar Saat Ini (Otomatis dari Database)
-                        </span>
+                        <div>
+                          <span className="text-sm font-extrabold text-[#fef08a] tracking-wide block">
+                            Jadwal Mengajar Anda Hari {currentDayName}
+                          </span>
+                          <span className="text-[10px] text-emerald-400 font-mono">
+                            Data Pribadi: {pengurus.nama} ({pengurus.jabatan})
+                          </span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-bold">
-                          Hari: {currentDayName}
+                        <span className="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-bold flex items-center gap-1.5 shrink-0">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                          Hari: {currentDayName} • {activeSession.todayIso}
                         </span>
-                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border ${
+                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border shrink-0 ${
                           activeSession.isActive
                             ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                             : 'bg-red-500/20 text-red-300 border-red-500/40'
                         }`}>
-                          {activeSession.isActive ? `Sesi ${activeSession.status}` : 'Di Luar Jam Pelajaran'}
+                          {activeSession.isActive ? `Sesi ${activeSession.status}` : 'Di Luar Jam'}
                         </span>
                       </div>
+                    </div>
+
+                    {/* SELECTOR KELAS & JADWAL TERKONEKSI REAL-TIME DATA PRIBADI */}
+                    <div className="bg-[#02140b] p-3.5 rounded-2xl border border-[#d4af37]/30 space-y-2.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                        <label className="text-xs font-bold text-[#fef08a] flex items-center gap-1.5">
+                          <GraduationCap className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>Kelas yang Anda Ampu (Hari: {currentDayName}):</span>
+                        </label>
+                        <span className="text-[10px] text-emerald-400 font-mono">
+                          {myTodaySchedules.length} Sesi Mengajar Terjadwal Anda
+                        </span>
+                      </div>
+
+                      {myTeachingClasses.length > 0 ? (
+                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                          {myTeachingClasses.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedPresensiKelas('SEMUA');
+                                setSelectedJadwalId('');
+                              }}
+                              className={`px-3 py-1 rounded-xl text-xs font-bold transition border whitespace-nowrap shrink-0 ${
+                                selectedPresensiKelas === 'SEMUA'
+                                  ? 'bg-[#d4af37] text-black border-amber-300 shadow-md font-extrabold'
+                                  : 'bg-[#031d13] text-emerald-200 border-[#d4af37]/30 hover:border-[#d4af37]'
+                              }`}
+                            >
+                              Semua Kelas Anda ({myTeachingClasses.length})
+                            </button>
+                          )}
+                          {myTeachingClasses.map((kls) => {
+                            const isSel = selectedPresensiKelas === kls || (myTeachingClasses.length === 1);
+                            return (
+                              <button
+                                key={kls}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedPresensiKelas(kls);
+                                  setSelectedJadwalId('');
+                                }}
+                                className={`px-3 py-1 rounded-xl text-xs font-bold transition border whitespace-nowrap shrink-0 ${
+                                  isSel
+                                    ? 'bg-[#d4af37] text-black border-amber-300 shadow-md font-extrabold'
+                                    : 'bg-[#031d13] text-emerald-200 border-[#d4af37]/30 hover:border-[#d4af37]'
+                                }`}
+                              >
+                                {kls}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-slate-400 italic">
+                          Belum ada penetapan kelas mengajar khusus pada profil Anda.
+                        </div>
+                      )}
+
+                      {/* Dropdown Pilihan Jadwal Mata Pelajaran Pribadi */}
+                      {myTodaySchedulesByClass.length > 0 && (
+                        <div className="pt-1">
+                          <label className="text-[11px] text-stone-300 block mb-1">
+                            Pilih Jam Pelajaran / Jadwal yang Sedang Anda Ampu:
+                          </label>
+                          <select
+                            value={selectedJadwalId || (myActiveSchedule ? (myActiveSchedule.id || `${myActiveSchedule.kelas}_${myActiveSchedule.hari}_${myActiveSchedule.jamKe}`) : '')}
+                            onChange={(e) => setSelectedJadwalId(e.target.value)}
+                            className="w-full bg-[#010c06] border border-[#d4af37]/50 rounded-xl px-3 py-2 text-xs font-bold text-[#fef08a] focus:outline-none focus:border-[#d4af37] cursor-pointer"
+                          >
+                            {myTodaySchedulesByClass.map((j) => {
+                              const jId = j.id || `${j.kelas}_${j.hari}_${j.jamKe}`;
+                              return (
+                                <option key={jId} value={jId} className="bg-[#052216] text-white">
+                                  {j.kelas} • Jam Ke-{j.jamKe} ({j.waktu}) : {j.mapel}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+                      )}
                     </div>
 
                     {myActiveSchedule ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
                         <div className="bg-black/50 border border-[#d4af37]/25 rounded-2xl p-3.5 space-y-1">
-                          <span className="text-[11px] text-slate-400 block font-medium">Ustadz Terjadwal</span>
+                          <span className="text-[11px] text-slate-400 block font-medium">Ustadz Pengampu</span>
                           <span className="text-sm font-extrabold text-white block truncate">
-                            {myActiveSchedule.nama || myActiveSchedule.ustadz || pengurus.nama}
+                            {pengurus.nama}
                           </span>
-                          <span className="text-[10px] text-emerald-400 font-mono">ID: {pengurus.id}</span>
+                          <span className="text-[10px] text-emerald-400 font-mono">Data Pribadi Anda ({pengurus.id})</span>
                         </div>
 
                         <div className="bg-black/50 border border-[#d4af37]/25 rounded-2xl p-3.5 space-y-1">
@@ -1394,7 +1584,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                           <span className="text-sm font-extrabold text-white block">
                             {myActiveSchedule.kelas}
                           </span>
-                          <span className="text-[10px] text-slate-400">Madrasah Diniyah</span>
+                          <span className="text-[10px] text-slate-400">Kelas yang Diampu</span>
                         </div>
 
                         <div className="bg-black/50 border border-[#d4af37]/25 rounded-2xl p-3.5 space-y-1">
@@ -1406,38 +1596,61 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                         </div>
                       </div>
                     ) : (
-                      <div className="p-4 rounded-2xl bg-black/60 border border-amber-500/30 text-slate-300 text-xs space-y-1">
-                        <p className="font-extrabold text-[#fde047] text-sm">Tidak ada jadwal mengajar aktif pada sesi saat ini.</p>
-                        <p className="text-slate-400 text-[11px]">
-                          Sistem mengambil jadwal mengajar otomatis dari database jadwal pelajaran untuk Ustadz {pengurus.nama}.
+                      <div className="p-4 sm:p-5 rounded-2xl bg-black/60 border border-amber-500/30 text-slate-300 text-xs space-y-2">
+                        <div className="flex items-center gap-2 text-amber-300">
+                          <AlertTriangle className="w-4 h-4 shrink-0" />
+                          <span className="font-extrabold text-sm text-[#fde047]">
+                            Tidak Ada Jadwal Mengajar Hari Ini ({currentDayName}) untuk {pengurus.nama}
+                          </span>
+                        </div>
+                        <p className="text-slate-300 text-[11px] leading-relaxed">
+                          Sistem hanya menampilkan data jadwal mengajar milik akun pribadi Anda. Anda hanya dapat absen sesuai jadwal pelajaran dan kelas yang Anda ampu sendiri, serta tidak dapat mengabsensikan pengurus lain.
                         </p>
+                        {myAllSchedules.length > 0 && (
+                          <div className="pt-1.5 border-t border-amber-500/20">
+                            <span className="text-[10px] text-emerald-400 font-semibold block mb-1">
+                              Jadwal Pelajaran Anda di Hari Lain:
+                            </span>
+                            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                              {myAllSchedules.map((j, idx) => (
+                                <span key={idx} className="px-2.5 py-1 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-200 text-[10px] whitespace-nowrap shrink-0">
+                                  {j.hari} • {j.kelas} (Jam Ke-{j.jamKe}: {j.mapel})
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {/* Status Ringkas Absensi & Tombol HADIR 3D */}
                     <div className="pt-2 flex flex-col items-center justify-center space-y-3">
                       {isAlreadyCheckedIn ? (
-                        <div className="w-full p-4 rounded-2xl bg-emerald-950/80 border border-emerald-500/60 text-emerald-200 text-center font-bold text-sm flex items-center justify-center gap-2.5 shadow-lg">
-                          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                          <span>Anda sudah berhasil melakukan Presensi Hadir pada sesi ini ({myActiveSchedule?.mapel || 'Pelajaran'}).</span>
+                        <div className="w-full max-w-lg p-3.5 sm:p-4 rounded-2xl bg-emerald-950/80 border border-emerald-500/60 text-emerald-200 text-center font-bold text-xs sm:text-sm flex items-center justify-center gap-2.5 shadow-lg">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                          <span>Anda sudah berhasil melakukan Presensi Hadir pada sesi ini ({myActiveSchedule?.mapel || 'Pelajaran'} - {myActiveSchedule?.kelas || 'Kelas'}).</span>
+                        </div>
+                      ) : !myActiveSchedule ? (
+                        <div className="w-full max-w-sm text-center p-3 rounded-xl bg-black/40 border border-slate-700/50 text-slate-400 text-xs font-semibold">
+                          Tombol Presensi Dinonaktifkan (Tidak Ada Jadwal Mengajar Anda Hari Ini)
                         </div>
                       ) : (
                         <button
                           type="button"
                           onClick={handleHadirNormal}
-                          className="btn-3d-hadir-yellow w-full max-w-md text-center flex items-center justify-center gap-3"
+                          className="btn-3d-hadir-yellow w-full max-w-xs sm:max-w-sm text-center flex items-center justify-center gap-2.5 py-3 px-5 rounded-2xl shadow-xl transition-all"
                         >
-                          <Check className="w-6 h-6 stroke-[3.5] text-[#1a1202]" />
-                          <span className="text-base sm:text-lg font-black tracking-wider uppercase">
+                          <Check className="w-5 h-5 stroke-[3.5] text-[#1a1202]" />
+                          <span className="text-base font-black tracking-wider uppercase text-[#1a1202]">
                             [ HADIR ]
                           </span>
                         </button>
                       )}
 
-                      <div className="flex flex-wrap items-center justify-center gap-4 text-[11px] text-slate-400 pt-1">
+                      <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-[11px] text-slate-400 pt-1">
                         <span className="flex items-center gap-1.5">
                           <span className={`w-2 h-2 rounded-full ${geofenceCheck.isValid ? 'bg-emerald-400' : 'bg-red-400 animate-pulse'}`} />
-                          <span>Lokasi: {geofenceCheck.isValid ? 'Dalam Radius Madrasah' : `Di Luar Radius (${geofenceCheck.distanceMeters.toFixed(0)}m)`}</span>
+                          <span>Lokasi: {geofenceCheck.isValid ? 'Radius Madrasah' : `Luar Radius (${geofenceCheck.distanceMeters.toFixed(0)}m)`}</span>
                         </span>
                         <span>•</span>
                         <span className="flex items-center gap-1.5">
@@ -1450,7 +1663,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                           onClick={() => setShowGeofenceMap(!showGeofenceMap)}
                           className="text-[#d4af37] hover:underline font-bold"
                         >
-                          {showGeofenceMap ? 'Sembunyikan Info Peta GPS' : 'Lihat Info Peta & Koordinat GPS'}
+                          {showGeofenceMap ? 'Tutup Peta GPS' : 'Lihat Peta GPS'}
                         </button>
                       </div>
                     </div>
@@ -1848,26 +2061,11 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                             </tr>
                           ))
                         ) : (
-                          [
-                            { tgl: '2026-09-25', tugas: 'Nahwu & Shorof', stat: 'Hadir', pengganti: '-', jam: 'Tepat Waktu' },
-                            { tgl: '2026-09-24', tugas: 'Fathul Qorib', stat: 'Hadir', pengganti: '-', jam: 'Tepat Waktu' },
-                            { tgl: '2026-09-23', tugas: 'Ujian Muhafadzoh', stat: 'Izin', pengganti: 'Ust. Muhammad Ilyas', jam: 'Udzur Syar\'i Disetujui' }
-                          ].map((mock, i) => (
-                            <tr key={i} className="hover:bg-[#d4af37]/5">
-                              <td className="p-2.5 font-mono text-emerald-300">{mock.tgl}</td>
-                              <td className="p-2.5 font-bold text-white">{mock.tugas}</td>
-                              <td className="p-2.5">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  mock.stat === 'Hadir' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
-                                  'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                                }`}>
-                                  {mock.stat}
-                                </span>
-                              </td>
-                              <td className="p-2.5 text-amber-300">{mock.pengganti}</td>
-                              <td className="p-2.5 text-slate-300">{mock.jam}</td>
-                            </tr>
-                          ))
+                          <tr>
+                            <td colSpan={5} className="p-4 text-center text-stone-400 text-xs">
+                              Belum ada riwayat presensi yang tercatat untuk Ustadz {pengurus.nama}. Tekan tombol <b>[ HADIR ]</b> di atas untuk mencatat presensi secara real-time.
+                            </td>
+                          </tr>
                         )}
                       </tbody>
                     </table>
@@ -3494,7 +3692,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   onChange={(e) => setSelectedJadwalToReplaceId(e.target.value)}
                   className="w-full bg-[#03140c] border border-[#d4af37]/40 rounded-xl p-2.5 text-white"
                 >
-                  {jadwalList.map((j, idx) => (
+                  {(myAllSchedules.length > 0 ? myAllSchedules : jadwalList).map((j, idx) => (
                     <option key={j.id || idx} value={j.id || `${j.kelas}_${j.hari}_${j.jamKe}`}>
                       [{j.hari} - {j.waktu || `Jam ${j.jamKe}`}] {j.kelas} • {j.mapel} (Ustadz: {j.nama || j.ustadz})
                     </option>
