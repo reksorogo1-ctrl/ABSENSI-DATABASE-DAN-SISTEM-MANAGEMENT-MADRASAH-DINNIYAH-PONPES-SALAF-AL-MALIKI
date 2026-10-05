@@ -65,12 +65,125 @@ export const OFFICIAL_SCHEDULES: ScheduleWindow[] = [
   }
 ];
 
+export interface PesantrenDayInfo {
+  wibDate: Date;
+  calendarDayName: string;       // AHAD, SENIN, SELASA, RABU, KAMIS, JUMAT, SABTU
+  malamDayName: string;          // MALAM SABTU, MALAM AHAD, MALAM SENIN, MALAM SELASA, MALAM RABU, MALAM KAMIS, MALAM JUMAT
+  isNightSession: boolean;       // true jika jam >= 18:00 WIB atau jam < 04:00 WIB
+  activeScheduleDay: string;     // Jika malam: malamDayName; jika siang: calendarDayName
+  malamDescription: string;      // e.g. "Jumat Malam (Pukul 19:00 - 23:00 WIB)"
+  malamShortDescription: string; // e.g. "Jumat Malam"
+  wibClockShort: string;         // HH:mm
+  todayIso: string;              // YYYY-MM-DD
+}
+
+/**
+ * Evaluasi Nama Hari Resmi & Hari Sesi Malam (Pesantren Salaf Al-Maliki)
+ * 
+ * ATURAN RESMI WAKTU PESANTREN (WIB):
+ * - Malam Senin  = Minggu malam (18:00 - 23:59) / Senin dini hari (00:00 - 04:00)
+ * - Malam Selasa = Senin malam (18:00 - 23:59) / Selasa dini hari (00:00 - 04:00)
+ * - Malam Rabu   = Selasa malam (18:00 - 23:59) / Rabu dini hari (00:00 - 04:00)
+ * - Malam Kamis  = Rabu malam (18:00 - 23:59) / Kamis dini hari (00:00 - 04:00)
+ * - Malam Jumat  = Kamis malam (18:00 - 23:59) / Jumat dini hari (00:00 - 04:00)
+ * - Malam Sabtu  = Jumat malam (18:00 - 23:59) / Sabtu dini hari (00:00 - 04:00)
+ * - Malam Minggu/Ahad = Sabtu malam (18:00 - 23:59) / Ahad dini hari (00:00 - 04:00)
+ * 
+ * Contoh:
+ * Kelas Aliyah - Malam Sabtu - 19:00 WIB -> Masuk Jumat pukul 19:00 WIB.
+ * Jumat 19:00 - 23:59 dan Sabtu 00:00 - 04:00 dianggap MALAM SABTU.
+ */
+export function getPesantrenDayInfo(serverDate?: Date): PesantrenDayInfo {
+  const dateObj = serverDate || getServerTime();
+  const utcMs = dateObj.getTime() + (dateObj.getTimezoneOffset() * 60000);
+  const wibMs = utcMs + (7 * 3600 * 1000);
+  const wibDate = new Date(wibMs);
+
+  const hours = wibDate.getHours();
+  const minutes = wibDate.getMinutes();
+  const dayIndex = wibDate.getDay(); // 0 = AHAD, 1 = SENIN, 2 = SELASA, 3 = RABU, 4 = KAMIS, 5 = JUMAT, 6 = SABTU
+  const daysOfWeek = ['AHAD', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
+  const calendarDayName = daysOfWeek[dayIndex];
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const wibClockShort = `${pad(hours)}:${pad(minutes)}`;
+  const todayIso = `${wibDate.getFullYear()}-${pad(wibDate.getMonth() + 1)}-${pad(wibDate.getDate())}`;
+
+  // Sesi malam (ba'da Maghrib 18:00 - 23:59 WIB serta dini hari 00:00 - 04:00 WIB)
+  const isNightSession = hours >= 18 || hours < 4;
+
+  let targetMalamDayIndex: number;
+  if (hours >= 18) {
+    // Malam hari ini mengarah ke hari esok (Jumat malam -> Malam Sabtu)
+    targetMalamDayIndex = (dayIndex + 1) % 7;
+  } else if (hours < 4) {
+    // Dini hari (Sabtu 00:00 - 04:00) masih kelanjutan Malam Sabtu
+    targetMalamDayIndex = dayIndex;
+  } else {
+    // Siang hari (misal jam 10 pagi hari Jumat): jika melihat jadwal Aliyah malam nanti, hari malamnya adalah malam esok (MALAM SABTU)
+    targetMalamDayIndex = (dayIndex + 1) % 7;
+  }
+
+  const malamDayName = `MALAM ${daysOfWeek[targetMalamDayIndex]}`;
+
+  const malamShortDescriptions: Record<string, string> = {
+    'MALAM SABTU': 'Jumat Malam',
+    'MALAM AHAD': 'Sabtu Malam',
+    'MALAM SENIN': 'Minggu Malam',
+    'MALAM SELASA': 'Senin Malam',
+    'MALAM RABU': 'Selasa Malam',
+    'MALAM KAMIS': 'Rabu Malam',
+    'MALAM JUMAT': 'Kamis Malam'
+  };
+
+  const malamDescriptions: Record<string, string> = {
+    'MALAM SABTU': 'Jumat Malam (Pukul 19:00 - 23:00 WIB)',
+    'MALAM AHAD': 'Sabtu Malam (Pukul 19:00 - 23:00 WIB)',
+    'MALAM SENIN': 'Minggu/Ahad Malam (Pukul 19:00 - 23:00 WIB)',
+    'MALAM SELASA': 'Senin Malam (Pukul 19:00 - 23:00 WIB)',
+    'MALAM RABU': 'Selasa Malam (Pukul 19:00 - 23:00 WIB)',
+    'MALAM KAMIS': 'Rabu Malam (Pukul 19:00 - 23:00 WIB)',
+    'MALAM JUMAT': 'Kamis Malam (Pukul 19:00 - 23:00 WIB)'
+  };
+
+  return {
+    wibDate,
+    calendarDayName,
+    malamDayName,
+    isNightSession,
+    activeScheduleDay: isNightSession ? malamDayName : calendarDayName,
+    malamDescription: malamDescriptions[malamDayName] || malamDayName,
+    malamShortDescription: malamShortDescriptions[malamDayName] || malamDayName,
+    wibClockShort,
+    todayIso
+  };
+}
+
+export function getMalamDaySubtitle(dayStr: string): string {
+  if (!dayStr) return '';
+  const upper = dayStr.toUpperCase().trim();
+  const map: Record<string, string> = {
+    'MALAM SABTU': '(Jumat Malam)',
+    'MALAM AHAD': '(Sabtu Malam)',
+    'MALAM SENIN': '(Ahad/Minggu Malam)',
+    'MALAM SELASA': '(Senin Malam)',
+    'MALAM RABU': '(Selasa Malam)',
+    'MALAM KAMIS': '(Rabu Malam)',
+    'MALAM JUMAT': '(Kamis Malam)'
+  };
+  return map[upper] || '';
+}
+
 export interface PresensiCheckResult {
   serverTime: Date;
   wibTimeStr: string;        // HH:mm:ss WIB
   wibClockShort: string;     // HH:mm
   todayIso: string;          // YYYY-MM-DD
-  currentDayName: string;    // SENIN, SELASA, dsb
+  currentDayName: string;    // SENIN, SELASA, MALAM SABTU, dsb
+  calendarDayName: string;   // AHAD, SENIN, dsb
+  malamDayName: string;      // MALAM SABTU, MALAM AHAD, dsb
+  malamDescription: string;  // Penjelasan Jumat Malam, dsb
+  isNightSession: boolean;   // true jika malam hari
   isActive: boolean;         // Apakah sedang dalam jendela jadwal presensi
   tingkat: 'TSANAWIYAH' | 'ALIYAH' | '-';
   sesi: string;
@@ -222,8 +335,9 @@ export function checkPresensiSchedule(
   const wibClockShort = `${pad(hours)}:${pad(minutes)}`;
   const todayIso = `${wibDate.getFullYear()}-${pad(wibDate.getMonth() + 1)}-${pad(wibDate.getDate())}`;
 
-  const daysOfWeek = ['AHAD', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
-  const currentDayName = daysOfWeek[wibDate.getDay()];
+  const dayInfo = getPesantrenDayInfo(serverTime);
+  const { calendarDayName, malamDayName, malamDescription, isNightSession } = dayInfo;
+  const currentDayName = isNightSession ? malamDayName : calendarDayName;
 
   // Mode Pengujian Bebas (Bypass)
   if (options?.bypassActive) {
@@ -233,8 +347,12 @@ export function checkPresensiSchedule(
       wibClockShort,
       todayIso,
       currentDayName,
+      calendarDayName,
+      malamDayName,
+      malamDescription,
+      isNightSession,
       isActive: true,
-      tingkat: 'TSANAWIYAH',
+      tingkat: isNightSession ? 'ALIYAH' : 'TSANAWIYAH',
       sesi: 'Uji Coba Bebas',
       jamKe: 1,
       status: 'Hadir',
@@ -303,7 +421,11 @@ export function checkPresensiSchedule(
       wibTimeStr,
       wibClockShort,
       todayIso,
-      currentDayName,
+      currentDayName: calendarDayName,
+      calendarDayName,
+      malamDayName,
+      malamDescription,
+      isNightSession: false,
       isActive: true,
       tingkat: 'TSANAWIYAH',
       sesi,
@@ -353,7 +475,11 @@ export function checkPresensiSchedule(
       wibTimeStr,
       wibClockShort,
       todayIso,
-      currentDayName,
+      currentDayName: malamDayName,
+      calendarDayName,
+      malamDayName,
+      malamDescription,
+      isNightSession: true,
       isActive: true,
       tingkat: 'ALIYAH',
       sesi,
@@ -386,7 +512,7 @@ export function checkPresensiSchedule(
   } else if (currentSeconds < al1StartSec) {
     const diffMin = Math.round((al1StartSec - currentSeconds) / 60);
     jadwalBerikutnya = {
-      label: 'ALIYAH (Jam Ke-1 Malam)',
+      label: `ALIYAH (Jam Ke-1 ${malamDayName})`,
       jamMulai: `${al1Mulai} WIB`,
       sisaWaktuText: diffMin > 60 ? `${Math.floor(diffMin / 60)} jam ${diffMin % 60} menit lagi` : `${diffMin} menit lagi`
     };
@@ -404,6 +530,10 @@ export function checkPresensiSchedule(
     wibClockShort,
     todayIso,
     currentDayName,
+    calendarDayName,
+    malamDayName,
+    malamDescription,
+    isNightSession,
     isActive: false,
     tingkat: '-',
     sesi: 'Di Luar Jadwal',
@@ -533,6 +663,69 @@ export function subscribeAttendanceUpdates(
     if (typeof window !== 'undefined') {
       window.removeEventListener('sim_attendance_realtime_event', handleCustomEvent);
       window.removeEventListener('storage', handleStorageEvent);
+      if (broadcastChannel) {
+        broadcastChannel.removeEventListener('message', handleBroadcastMessage);
+      }
+    }
+  };
+}
+
+/**
+ * Broadcast & Subscribe untuk sinkronisasi Jadwal Pelajaran Real-Time
+ * Menghubungkan Tab Jadwal Pelajaran di Admin Dashboard dengan Presensi Mandiri Pengurus
+ */
+export function broadcastScheduleUpdate(schedules: any[], sender = 'Admin') {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('sim_jadwal', JSON.stringify(schedules));
+    } catch {}
+    window.dispatchEvent(new CustomEvent('sim_schedule_realtime_event', { detail: { schedules, sender } }));
+    window.dispatchEvent(new Event('storage'));
+  }
+  if (broadcastChannel) {
+    try {
+      broadcastChannel.postMessage({ type: 'jadwal_sync', schedules, sender });
+    } catch {}
+  }
+}
+
+export function subscribeScheduleUpdates(callback: (schedules: any[]) => void): () => void {
+  const handleCustomEvent = (e: Event) => {
+    const custom = e as CustomEvent<{ schedules: any[] }>;
+    if (custom.detail && custom.detail.schedules) {
+      callback(custom.detail.schedules);
+    }
+  };
+
+  const handleBroadcastMessage = (ev: MessageEvent) => {
+    if (ev.data && ev.data.type === 'jadwal_sync' && ev.data.schedules) {
+      callback(ev.data.schedules);
+    }
+  };
+
+  const handleStorage = (ev: StorageEvent) => {
+    if (ev.key === 'sim_jadwal' && ev.newValue) {
+      try {
+        const parsed = JSON.parse(ev.newValue);
+        if (Array.isArray(parsed)) {
+          callback(parsed);
+        }
+      } catch {}
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('sim_schedule_realtime_event', handleCustomEvent);
+    window.addEventListener('storage', handleStorage);
+    if (broadcastChannel) {
+      broadcastChannel.addEventListener('message', handleBroadcastMessage);
+    }
+  }
+
+  return () => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('sim_schedule_realtime_event', handleCustomEvent);
+      window.removeEventListener('storage', handleStorage);
       if (broadcastChannel) {
         broadcastChannel.removeEventListener('message', handleBroadcastMessage);
       }

@@ -34,7 +34,12 @@ import {
   loadMasterDataFromFirestore,
   subscribeMasterDataFromFirestore
 } from './firebase';
-import { broadcastAttendanceUpdate, subscribeAttendanceUpdates } from './serverTime';
+import {
+  broadcastAttendanceUpdate,
+  subscribeAttendanceUpdates,
+  broadcastScheduleUpdate,
+  subscribeScheduleUpdates
+} from './serverTime';
 import { AdminDashboard } from './components/AdminDashboard';
 import { WaliSantriPortal } from './components/WaliSantriPortal';
 import { PengurusDashboard } from './components/PengurusDashboard';
@@ -490,6 +495,7 @@ export default function App() {
       if (data && Array.isArray(data) && data.length > 0) {
         setJadwalList(data);
         localStorage.setItem('sim_jadwal', JSON.stringify(data));
+        broadcastScheduleUpdate(data, 'Firestore');
       } else {
         saveMasterDataToFirestore('jadwal', jadwalList);
       }
@@ -720,6 +726,7 @@ export default function App() {
       if (remoteJadwal && remoteJadwal.length > 0) {
         setJadwalList(remoteJadwal);
         localStorage.setItem('sim_jadwal', JSON.stringify(remoteJadwal));
+        broadcastScheduleUpdate(remoteJadwal, 'Sheets');
       }
       if (remoteNadzhom && remoteNadzhom.length > 0) {
         setNadzhomList(remoteNadzhom);
@@ -768,6 +775,7 @@ export default function App() {
     if (imported.jadwalList && imported.jadwalList.length > 0) {
       setJadwalList(imported.jadwalList);
       localStorage.setItem('sim_jadwal', JSON.stringify(imported.jadwalList));
+      broadcastScheduleUpdate(imported.jadwalList, 'Import');
     }
     if (imported.nadzhomList && imported.nadzhomList.length > 0) {
       setNadzhomList(imported.nadzhomList);
@@ -1215,6 +1223,7 @@ export default function App() {
     setJadwalList(updated);
     localStorage.setItem('sim_jadwal', JSON.stringify(updated));
     saveMasterDataToFirestore('jadwal', updated);
+    broadcastScheduleUpdate(updated, 'Admin');
   };
 
   const handleDeleteJadwal = (targetJadwal: JadwalPelajaran) => {
@@ -1225,6 +1234,7 @@ export default function App() {
     setJadwalList(updated);
     localStorage.setItem('sim_jadwal', JSON.stringify(updated));
     saveMasterDataToFirestore('jadwal', updated);
+    broadcastScheduleUpdate(updated, 'Admin');
   };
 
   const handleSaveNadzhom = (rec: NadzhomRecord) => {

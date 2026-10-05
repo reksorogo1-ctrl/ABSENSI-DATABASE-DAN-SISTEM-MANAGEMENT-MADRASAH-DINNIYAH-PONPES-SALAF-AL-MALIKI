@@ -45,7 +45,8 @@ import {
 } from '../lib/videoStorage';
 import { 
   checkPresensiSchedule, getServerTime, subscribeAttendanceUpdates, 
-  RealtimeAttendancePayload, OFFICIAL_SCHEDULES 
+  RealtimeAttendancePayload, OFFICIAL_SCHEDULES,
+  getMalamDaySubtitle, getPesantrenDayInfo
 } from '../serverTime';
 import { INITIAL_KURIKULUM_LIST } from '../data';
 
@@ -6251,24 +6252,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 {/* 2. Filter Hari Aliyah (Malam) */}
-                <div className="space-y-1.5 pt-2 border-t border-amber-500/20">
-                  <span className="text-xs font-bold text-amber-300 uppercase tracking-wider block">
-                    Pilih Hari Malam (Malam Sabtu s/d Malam Kamis):
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {['SEMUA', 'MALAM SABTU', 'MALAM AHAD', 'MALAM SENIN', 'MALAM SELASA', 'MALAM RABU', 'MALAM KAMIS'].map(malam => (
-                      <button
-                        key={malam}
-                        onClick={() => setJadwalAlDay(malam)}
-                        className={`text-xs font-black transition shadow-md ${
-                          jadwalAlDay === malam
-                            ? 'btn-pill-gold-3d scale-102'
-                            : 'btn-pill-dark-3d'
-                        }`}
-                      >
-                        {malam === 'SEMUA' ? 'SEMUA HARI' : malam}
-                      </button>
-                    ))}
+                <div className="space-y-2 pt-2 border-t border-amber-500/20">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                    <span className="text-xs font-bold text-amber-300 uppercase tracking-wider block">
+                      Pilih Hari Malam (Malam Sabtu s/d Malam Kamis):
+                    </span>
+                    <span className="text-[11px] text-amber-200/90 font-mono">
+                      *Malam berganti ba&apos;da Maghrib (18:00 WIB)
+                    </span>
+                  </div>
+
+                  {/* Banner Penjelasan Logika Waktu Salaf */}
+                  <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-950/80 via-[#261504] to-amber-950/80 border border-amber-500/40 text-amber-200 text-xs flex items-center gap-2.5 shadow-inner">
+                    <span className="text-base shrink-0">🌙</span>
+                    <div className="leading-snug">
+                      <span className="font-extrabold text-[#fde047]">Aturan Waktu Malam Pesantren (WIB): </span>
+                      <span className="text-amber-100">
+                        <b>MALAM SABTU</b> = Jumat Malam (19:00 - 23:00 WIB) • <b>MALAM AHAD</b> = Sabtu Malam • <b>MALAM SENIN</b> = Minggu Malam • <b>MALAM SELASA</b> = Senin Malam • <b>MALAM RABU</b> = Selasa Malam • <b>MALAM KAMIS</b> = Rabu Malam.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {['SEMUA', 'MALAM SABTU', 'MALAM AHAD', 'MALAM SENIN', 'MALAM SELASA', 'MALAM RABU', 'MALAM KAMIS'].map(malam => {
+                      const subtitle = getMalamDaySubtitle(malam);
+                      return (
+                        <button
+                          key={malam}
+                          onClick={() => setJadwalAlDay(malam)}
+                          className={`text-xs font-black transition shadow-md px-3.5 py-2 rounded-xl text-center ${
+                            jadwalAlDay === malam
+                              ? 'btn-pill-gold-3d scale-102 ring-2 ring-amber-300'
+                              : 'btn-pill-dark-3d hover:border-amber-400'
+                          }`}
+                        >
+                          <span className="block leading-tight">{malam === 'SEMUA' ? 'SEMUA HARI' : malam}</span>
+                          {subtitle && (
+                            <span className={`block text-[10px] font-mono font-bold mt-0.5 ${
+                              jadwalAlDay === malam ? 'text-[#1a1202]' : 'text-amber-300'
+                            }`}>
+                              {subtitle}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -6279,7 +6307,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <thead className="bg-[#1f1103] text-[#d4af37] uppercase tracking-wider font-semibold border-b border-amber-500/30">
                     <tr>
                       <th className="p-3.5 w-12 text-center">NO</th>
-                      <th className="p-3.5 w-36">HARI (MALAM)</th>
+                      <th className="p-3.5 w-44">HARI (MALAM)</th>
                       <th className="p-3.5 w-20 text-center">JAM KE</th>
                       <th className="p-3.5 w-36">WAKTU (MALAM)</th>
                       <th className="p-3.5 w-36">ANGKATAN / KELAS</th>
@@ -6299,9 +6327,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       .map((item, idx) => (
                         <tr key={idx} className="hover:bg-amber-500/10 transition">
                           <td className="p-3.5 font-mono text-center text-amber-400 font-bold">{idx + 1}</td>
-                          <td className="p-3.5 font-bold text-amber-200 whitespace-nowrap flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-[#d4af37]"></span>
-                            <span>{item.hari}</span>
+                          <td className="p-3.5 font-bold text-amber-200 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-[#d4af37]"></span>
+                              <span>{item.hari}</span>
+                            </div>
+                            {getMalamDaySubtitle(item.hari) && (
+                              <span className="text-[10px] text-emerald-400 font-mono font-bold block ml-4">
+                                {getMalamDaySubtitle(item.hari)}
+                              </span>
+                            )}
                           </td>
                           <td className="p-3.5 text-center">
                             <span className="inline-block w-7 h-7 rounded-lg bg-[#3d2508] border border-amber-400/40 text-[#f5e298] font-bold leading-7">
@@ -6708,12 +6743,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </>
                           ) : (
                             <>
-                              <option value="MALAM SABTU">MALAM SABTU</option>
-                              <option value="MALAM AHAD">MALAM AHAD</option>
-                              <option value="MALAM SENIN">MALAM SENIN</option>
-                              <option value="MALAM SELASA">MALAM SELASA</option>
-                              <option value="MALAM RABU">MALAM RABU</option>
-                              <option value="MALAM KAMIS">MALAM KAMIS</option>
+                              <option value="MALAM SABTU">MALAM SABTU (Jumat Malam - Ba&apos;da Maghrib)</option>
+                              <option value="MALAM AHAD">MALAM AHAD (Sabtu Malam - Ba&apos;da Maghrib)</option>
+                              <option value="MALAM SENIN">MALAM SENIN (Minggu Malam - Ba&apos;da Maghrib)</option>
+                              <option value="MALAM SELASA">MALAM SELASA (Senin Malam - Ba&apos;da Maghrib)</option>
+                              <option value="MALAM RABU">MALAM RABU (Selasa Malam - Ba&apos;da Maghrib)</option>
+                              <option value="MALAM KAMIS">MALAM KAMIS (Rabu Malam - Ba&apos;da Maghrib)</option>
+                              <option value="MALAM JUMAT">MALAM JUMAT (Kamis Malam - Ba&apos;da Maghrib)</option>
                             </>
                           )}
                         </select>
@@ -13222,12 +13258,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <option value="SELASA">SELASA</option>
                           <option value="RABU">RABU</option>
                           <option value="KAMIS">KAMIS</option>
-                          <option value="MALAM SABTU">MALAM SABTU (Aliyah)</option>
-                          <option value="MALAM AHAD">MALAM AHAD (Aliyah)</option>
-                          <option value="MALAM SENIN">MALAM SENIN (Aliyah)</option>
-                          <option value="MALAM SELASA">MALAM SELASA (Aliyah)</option>
-                          <option value="MALAM RABU">MALAM RABU (Aliyah)</option>
-                          <option value="MALAM KAMIS">MALAM KAMIS (Aliyah)</option>
+                          <option value="MALAM SABTU">MALAM SABTU (Jumat Malam - Aliyah)</option>
+                          <option value="MALAM AHAD">MALAM AHAD (Sabtu Malam - Aliyah)</option>
+                          <option value="MALAM SENIN">MALAM SENIN (Minggu Malam - Aliyah)</option>
+                          <option value="MALAM SELASA">MALAM SELASA (Senin Malam - Aliyah)</option>
+                          <option value="MALAM RABU">MALAM RABU (Selasa Malam - Aliyah)</option>
+                          <option value="MALAM KAMIS">MALAM KAMIS (Rabu Malam - Aliyah)</option>
+                          <option value="MALAM JUMAT">MALAM JUMAT (Kamis Malam - Aliyah)</option>
                         </select>
                       </div>
 

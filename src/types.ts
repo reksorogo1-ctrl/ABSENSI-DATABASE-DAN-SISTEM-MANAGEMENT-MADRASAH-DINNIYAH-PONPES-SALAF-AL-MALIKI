@@ -288,6 +288,7 @@ export interface JadwalPelajaran {
   nama: string;
   tingkatan?: string;
   ustadz?: string; // alias for nama ustadz
+  ustadzId?: string;
   status?: string;
   keterangan?: string;
 }

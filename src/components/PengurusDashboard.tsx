@@ -18,7 +18,8 @@ import { GoogleMapsGeofence } from './GoogleMapsGeofence';
 import { validateGeofence, DEFAULT_GEOFENCE_ZONE } from '../lib/geofencing';
 import { 
   checkPresensiSchedule, getServerTime, setSimulatedServerTime, isSimulationActive,
-  PresensiCheckResult, OFFICIAL_SCHEDULES, broadcastAttendanceUpdate
+  PresensiCheckResult, OFFICIAL_SCHEDULES, broadcastAttendanceUpdate,
+  getPesantrenDayInfo, getMalamDaySubtitle, subscribeScheduleUpdates
 } from '../serverTime';
 import { PenggantiUstadzRequest } from '../types';
 
@@ -459,6 +460,27 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     return () => clearInterval(timer);
   }, []);
 
+  // State jadwal real-time yang tersinkronisasi langsung dengan Admin Dashboard
+  const [liveJadwalList, setLiveJadwalList] = useState<JadwalPelajaran[]>(() => {
+    return jadwalList || [];
+  });
+
+  useEffect(() => {
+    if (jadwalList) {
+      setLiveJadwalList(jadwalList);
+    }
+  }, [jadwalList]);
+
+  // Listener sinkronisasi jadwal real-time dari Admin Dashboard Tab Jadwal Pelajaran
+  useEffect(() => {
+    const unsub = subscribeScheduleUpdates((newSchedules) => {
+      if (Array.isArray(newSchedules) && newSchedules.length > 0) {
+        setLiveJadwalList(newSchedules);
+      }
+    });
+    return () => unsub();
+  }, []);
+
   // Logika Evaluasi Jam Server Real-Time:
   const activeSession: PresensiCheckResult = useMemo(() => {
     return checkPresensiSchedule(serverClock, {
@@ -466,7 +488,13 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     });
   }, [serverClock, settings.bypass_jam_presensi_testing]);
 
-  // JADWAL OTOMATIS AKTIF DARI DATABASE JADWAL PELAJARAN SESUAI HARI & KELAS REAL-TIME
+  // Evaluasi Hari & Sesi Pesantren (WIB):
+  // Siang (Tsanawiyah): Hari Kalender Masehi (SABTU, AHAD, SENIN, dst)
+  // Malam (Aliyah): Sesi Ba'da Maghrib 19:00 - 23:00 WIB (MALAM SABTU = Jumat Malam, MALAM AHAD = Sabtu Malam, dst)
+  const dayInfo = useMemo(() => {
+    return getPesantrenDayInfo(serverClock);
+  }, [serverClock]);
+
   const currentDayName = activeSession.currentDayName;
 
   // Helper pencocokan nama pengurus login dengan nama ustadz di jadwal pelajaran
@@ -497,19 +525,22 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
   // JADWAL PELAJARAN KHUSUS PENGURUS/USTADZ YANG SEDANG LOGIN (DATA PRIBADI)
   const myAllSchedules = useMemo(() => {
-    const list = (jadwalList || []).filter(j => isMatchMyTeacherName(j.nama || j.ustadz));
+    const list = (liveJadwalList || []).filter(j => 
+      (j.ustadzId && (j.ustadzId === pengurus.id || (pengurus as any).guruId === j.ustadzId)) ||
+      isMatchMyTeacherName(j.nama || j.ustadz)
+    );
     if (list.length > 0) return list;
     
     // Cadangan jika ustadz baru atau mapping mapel/kelas pribadi
     if (pengurus.mapel || pengurus.kelasBimbingan) {
-      return (jadwalList || []).filter(j => {
+      return (liveJadwalList || []).filter(j => {
         const matchMapel = pengurus.mapel && j.mapel && j.mapel.toLowerCase().includes(pengurus.mapel.toLowerCase().trim());
         const matchKelas = pengurus.kelasBimbingan && j.kelas === pengurus.kelasBimbingan;
         return matchMapel || (matchKelas && isMatchMyTeacherName(j.nama || j.ustadz));
       });
     }
     return [];
-  }, [jadwalList, isMatchMyTeacherName, pengurus.mapel, pengurus.kelasBimbingan]);
+  }, [liveJadwalList, isMatchMyTeacherName, pengurus.id, (pengurus as any).guruId, pengurus.mapel, pengurus.kelasBimbingan]);
 
   // Kelas-kelas yang diampu oleh ustadz yang sedang login
   const myTeachingClasses = useMemo(() => {
@@ -523,30 +554,40 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     return Array.from(clsSet);
   }, [myAllSchedules, pengurus.kelasBimbingan]);
 
-  // 1. Ambil jadwal mengajar pribadi ustadz pada hari ini
+  // 1. Ambil jadwal mengajar pribadi ustadz pada hari ini sesuai aturan pesantren
+  // - Aliyah (Malam) dicocokkan dengan dayInfo.malamDayName (Contoh: Jumat malam = MALAM SABTU)
+  // - Tsanawiyah (Siang) dicocokkan dengan dayInfo.calendarDayName (Contoh: SABTU, AHAD, dst)
   const myTodaySchedules = useMemo(() => {
-    const dayUpper = (currentDayName || '').toUpperCase();
     return myAllSchedules.filter(j => {
-      const jHari = (j.hari || '').toUpperCase();
-      return jHari === dayUpper || jHari === `MALAM ${dayUpper}` || jHari.includes(dayUpper);
+      const jHari = (j.hari || '').toUpperCase().trim();
+      const isAliyah = (j.kelas || '').includes('ALIYAH') || jHari.startsWith('MALAM');
+      if (isAliyah) {
+        return jHari === dayInfo.malamDayName;
+      } else {
+        return jHari === dayInfo.calendarDayName;
+      }
     });
-  }, [myAllSchedules, currentDayName]);
+  }, [myAllSchedules, dayInfo.malamDayName, dayInfo.calendarDayName]);
 
   // State filter kelas untuk jadwal presensi hari ini (hanya dari kelas yang diampu)
   const [selectedPresensiKelas, setSelectedPresensiKelas] = useState<string>('SEMUA');
 
   // 2. Filter jadwal hari ini berdasarkan kelas yang dipilih (khusus data pribadi)
+  // Jika kelas yang dipilih belum memiliki jadwal hari ini, tetap tampilkan jadwal kelas tersebut dari myAllSchedules agar button & div selalu cocok & sinkron
   const myTodaySchedulesByClass = useMemo(() => {
     if (selectedPresensiKelas === 'SEMUA' || !selectedPresensiKelas) {
-      return myTodaySchedules;
+      return myTodaySchedules.length > 0 ? myTodaySchedules : myAllSchedules;
     }
-    return myTodaySchedules.filter(j => j.kelas === selectedPresensiKelas);
-  }, [myTodaySchedules, selectedPresensiKelas]);
+    const todayFiltered = myTodaySchedules.filter(j => j.kelas === selectedPresensiKelas);
+    if (todayFiltered.length > 0) return todayFiltered;
+    return myAllSchedules.filter(j => j.kelas === selectedPresensiKelas);
+  }, [myTodaySchedules, myAllSchedules, selectedPresensiKelas]);
 
   // State jadwal yang dipilih oleh ustadz
   const [selectedJadwalId, setSelectedJadwalId] = useState<string>('');
 
   const myActiveSchedule = useMemo(() => {
+    // 1. Jika ada jadwal yang dipilih spesifik oleh tombol atau dropdown
     if (selectedJadwalId) {
       const found = myTodaySchedulesByClass.find(j => (j.id || `${j.kelas}_${j.hari}_${j.jamKe}`) === selectedJadwalId) ||
                     myTodaySchedules.find(j => (j.id || `${j.kelas}_${j.hari}_${j.jamKe}`) === selectedJadwalId) ||
@@ -554,8 +595,34 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       if (found) return found;
     }
 
-    return myTodaySchedulesByClass[0] || myTodaySchedules[0] || null;
-  }, [selectedJadwalId, myTodaySchedulesByClass, myTodaySchedules, myAllSchedules]);
+    // 2. Candidate pool strictly terikat pada kelas yang dipilih (jika bukan 'SEMUA')
+    const candidatePool = (selectedPresensiKelas && selectedPresensiKelas !== 'SEMUA')
+      ? myTodaySchedulesByClass
+      : (myTodaySchedules.length > 0 ? myTodaySchedules : myAllSchedules);
+
+    if (!candidatePool || candidatePool.length === 0) return null;
+
+    // 3. Jika dalam jam aktif (misal jam aktif Aliyah Jam Ke-1), cocokkan otomatis dalam pool kelas tersebut
+    if (activeSession.isActive) {
+      const matchSesi = candidatePool.find(j => {
+        const isAliyah = (j.kelas || '').includes('ALIYAH') || (j.hari || '').toUpperCase().startsWith('MALAM');
+        const correctTingkat = activeSession.tingkat === 'ALIYAH' ? isAliyah : !isAliyah;
+        return correctTingkat && Number(j.jamKe) === Number(activeSession.jamKe);
+      });
+      if (matchSesi) return matchSesi;
+    }
+
+    // 4. Cocokkan dengan hari ini
+    const matchToday = candidatePool.find(j => {
+      const jHari = (j.hari || '').toUpperCase().trim();
+      const isAliyah = (j.kelas || '').includes('ALIYAH') || jHari.startsWith('MALAM');
+      return isAliyah ? jHari === dayInfo.malamDayName : jHari === dayInfo.calendarDayName;
+    });
+    if (matchToday) return matchToday;
+
+    // 5. Fallback ke jadwal pertama dalam candidate pool (PASTI sesuai kelas pada button!)
+    return candidatePool[0] || null;
+  }, [selectedJadwalId, selectedPresensiKelas, myTodaySchedulesByClass, myTodaySchedules, myAllSchedules, activeSession, dayInfo]);
 
   // Cek apakah ustadz login ini sudah presensi hari ini pada sesi jadwal yang dipilih
   const isAlreadyCheckedIn = useMemo(() => {
@@ -718,9 +785,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       kelas: myActiveSchedule.kelas,
       status: finalStatus,
       catatan: finalStatus === 'Hadir'
-        ? `Presensi Hadir Tepat Waktu (${nowTime} WIB - Hari: ${currentDayName} - Sesuai Jadwal ${myActiveSchedule.kelas})`
-        : `Presensi Terlambat (${nowTime} WIB - Hari: ${currentDayName} - Sesuai Jadwal ${myActiveSchedule.kelas})`,
-      hari: currentDayName,
+        ? `Presensi Hadir Tepat Waktu (${nowTime} WIB - Hari: ${myActiveSchedule.hari || currentDayName} - Sesuai Jadwal ${myActiveSchedule.kelas} Jam ke-${myActiveSchedule.jamKe})`
+        : `Presensi Terlambat (${nowTime} WIB - Hari: ${myActiveSchedule.hari || currentDayName} - Sesuai Jadwal ${myActiveSchedule.kelas} Jam ke-${myActiveSchedule.jamKe})`,
+      hari: myActiveSchedule.hari || currentDayName,
       jamKe: myActiveSchedule.jamKe || activeSession.jamKe || 1,
       jamJadwal: myActiveSchedule.waktu || `${nowTime} WIB`,
       jamAbsen: `${nowTime} WIB`,
@@ -1493,70 +1560,102 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                       </div>
 
                       {myTeachingClasses.length > 0 ? (
-                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-                          {myTeachingClasses.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedPresensiKelas('SEMUA');
-                                setSelectedJadwalId('');
-                              }}
-                              className={`px-3 py-1 rounded-xl text-xs font-bold transition border whitespace-nowrap shrink-0 ${
-                                selectedPresensiKelas === 'SEMUA'
-                                  ? 'bg-[#d4af37] text-black border-amber-300 shadow-md font-extrabold'
-                                  : 'bg-[#031d13] text-emerald-200 border-[#d4af37]/30 hover:border-[#d4af37]'
-                              }`}
-                            >
-                              Semua Kelas Anda ({myTeachingClasses.length})
-                            </button>
-                          )}
-                          {myTeachingClasses.map((kls) => {
-                            const isSel = selectedPresensiKelas === kls || (myTeachingClasses.length === 1);
-                            return (
+                        <div className="space-y-2.5">
+                          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                            {myTeachingClasses.length > 1 && (
                               <button
-                                key={kls}
                                 type="button"
                                 onClick={() => {
-                                  setSelectedPresensiKelas(kls);
+                                  setSelectedPresensiKelas('SEMUA');
                                   setSelectedJadwalId('');
                                 }}
-                                className={`px-3 py-1 rounded-xl text-xs font-bold transition border whitespace-nowrap shrink-0 ${
-                                  isSel
-                                    ? 'bg-[#d4af37] text-black border-amber-300 shadow-md font-extrabold'
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border whitespace-nowrap shrink-0 ${
+                                  selectedPresensiKelas === 'SEMUA'
+                                    ? 'btn-3d-yellow text-[#1a1202] shadow-md font-extrabold scale-102 ring-2 ring-amber-300'
                                     : 'bg-[#031d13] text-emerald-200 border-[#d4af37]/30 hover:border-[#d4af37]'
                                 }`}
                               >
-                                {kls}
+                                Semua Kelas Anda ({myTeachingClasses.length})
                               </button>
-                            );
-                          })}
+                            )}
+                            {myTeachingClasses.map((kls) => {
+                              const isSel = selectedPresensiKelas === kls || (myTeachingClasses.length === 1 && selectedPresensiKelas === 'SEMUA');
+                              return (
+                                <button
+                                  key={kls}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedPresensiKelas(kls);
+                                    const pool = (myTodaySchedules.filter(j => j.kelas === kls).length > 0
+                                      ? myTodaySchedules.filter(j => j.kelas === kls)
+                                      : myAllSchedules.filter(j => j.kelas === kls));
+                                    if (pool.length > 0) {
+                                      setSelectedJadwalId(pool[0].id || `${pool[0].kelas}_${pool[0].hari}_${pool[0].jamKe}`);
+                                    } else {
+                                      setSelectedJadwalId('');
+                                    }
+                                  }}
+                                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition border whitespace-nowrap shrink-0 ${
+                                    isSel
+                                      ? 'btn-3d-yellow text-[#1a1202] shadow-md font-extrabold scale-102 ring-2 ring-amber-300'
+                                      : 'bg-[#031d13] text-emerald-200 border-[#d4af37]/30 hover:border-[#d4af37]'
+                                  }`}
+                                >
+                                  {kls}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Tombol Interaktif Jam Pelajaran / Sesi (Cocok Langsung dengan Div) */}
+                          {myTodaySchedulesByClass.length > 0 && (
+                            <div className="pt-2 border-t border-[#d4af37]/20 space-y-1.5">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                <label className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
+                                  <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                  <span>Pilih Jam Pelajaran / Sesi:</span>
+                                </label>
+                                <span className="text-[10px] text-emerald-400 font-mono">
+                                  Klik tombol sesi untuk mencocokkan jadwal
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {myTodaySchedulesByClass.map((j) => {
+                                  const jId = j.id || `${j.kelas}_${j.hari}_${j.jamKe}`;
+                                  const isScheduleActive = myActiveSchedule && (
+                                    (myActiveSchedule.id && myActiveSchedule.id === j.id) ||
+                                    (myActiveSchedule.kelas === j.kelas && myActiveSchedule.hari === j.hari && Number(myActiveSchedule.jamKe) === Number(j.jamKe))
+                                  );
+                                  return (
+                                    <button
+                                      key={jId}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedJadwalId(jId);
+                                        if (selectedPresensiKelas !== j.kelas && selectedPresensiKelas !== 'SEMUA') {
+                                          setSelectedPresensiKelas(j.kelas);
+                                        }
+                                      }}
+                                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border shadow-sm ${
+                                        isScheduleActive
+                                          ? 'btn-3d-yellow text-[#1a1202] shadow-md font-black scale-102 ring-2 ring-amber-300'
+                                          : 'bg-[#02180e] text-emerald-200 hover:text-white border-[#d4af37]/40 hover:border-[#d4af37]'
+                                      }`}
+                                    >
+                                      <span className={`w-2 h-2 rounded-full ${isScheduleActive ? 'bg-black animate-pulse' : 'bg-emerald-400'}`} />
+                                      <span className="font-mono">Jam Ke-{j.jamKe} ({j.waktu})</span>
+                                      <span className={isScheduleActive ? 'text-black font-black' : 'text-amber-300 font-bold'}>• {j.mapel}</span>
+                                      <span className="text-[10px] opacity-80">({j.kelas})</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="text-[11px] text-slate-400 italic">
                           Belum ada penetapan kelas mengajar khusus pada profil Anda.
-                        </div>
-                      )}
-
-                      {/* Dropdown Pilihan Jadwal Mata Pelajaran Pribadi */}
-                      {myTodaySchedulesByClass.length > 0 && (
-                        <div className="pt-1">
-                          <label className="text-[11px] text-stone-300 block mb-1">
-                            Pilih Jam Pelajaran / Jadwal yang Sedang Anda Ampu:
-                          </label>
-                          <select
-                            value={selectedJadwalId || (myActiveSchedule ? (myActiveSchedule.id || `${myActiveSchedule.kelas}_${myActiveSchedule.hari}_${myActiveSchedule.jamKe}`) : '')}
-                            onChange={(e) => setSelectedJadwalId(e.target.value)}
-                            className="w-full bg-[#010c06] border border-[#d4af37]/50 rounded-xl px-3 py-2 text-xs font-bold text-[#fef08a] focus:outline-none focus:border-[#d4af37] cursor-pointer"
-                          >
-                            {myTodaySchedulesByClass.map((j) => {
-                              const jId = j.id || `${j.kelas}_${j.hari}_${j.jamKe}`;
-                              return (
-                                <option key={jId} value={jId} className="bg-[#052216] text-white">
-                                  {j.kelas} • Jam Ke-{j.jamKe} ({j.waktu}) : {j.mapel}
-                                </option>
-                              );
-                            })}
-                          </select>
                         </div>
                       )}
                     </div>
@@ -1566,9 +1665,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                         <div className="bg-black/50 border border-[#d4af37]/25 rounded-2xl p-3.5 space-y-1">
                           <span className="text-[11px] text-slate-400 block font-medium">Ustadz Pengampu</span>
                           <span className="text-sm font-extrabold text-white block truncate">
-                            {pengurus.nama}
+                            {myActiveSchedule.nama || pengurus.nama}
                           </span>
-                          <span className="text-[10px] text-emerald-400 font-mono">Data Pribadi Anda ({pengurus.id})</span>
+                          <span className="text-[10px] text-emerald-400 font-mono">Data Terjadwal ({pengurus.id})</span>
                         </div>
 
                         <div className="bg-black/50 border border-[#d4af37]/25 rounded-2xl p-3.5 space-y-1">
@@ -1584,15 +1683,19 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                           <span className="text-sm font-extrabold text-white block">
                             {myActiveSchedule.kelas}
                           </span>
-                          <span className="text-[10px] text-slate-400">Kelas yang Diampu</span>
+                          <span className="text-[10px] text-emerald-300 font-bold block">
+                            {(myActiveSchedule.kelas || '').includes('ALIYAH') ? 'Jenjang Aliyah (Malam)' : 'Jenjang Tsanawiyah (Siang)'}
+                          </span>
                         </div>
 
                         <div className="bg-black/50 border border-[#d4af37]/25 rounded-2xl p-3.5 space-y-1">
-                          <span className="text-[11px] text-slate-400 block font-medium">Jam Pelajaran</span>
+                          <span className="text-[11px] text-slate-400 block font-medium">Jam Pelajaran & Hari</span>
                           <span className="text-sm font-black text-emerald-300 font-mono block">
                             {myActiveSchedule.waktu || '08:00 - 09:00'}
                           </span>
-                          <span className="text-[10px] text-slate-400">Jam Ke-{myActiveSchedule.jamKe || 1}</span>
+                          <span className="text-[10px] text-amber-300 font-bold block">
+                            Jam Ke-{myActiveSchedule.jamKe || 1} • {myActiveSchedule.hari} {getMalamDaySubtitle(myActiveSchedule.hari)}
+                          </span>
                         </div>
                       </div>
                     ) : (
