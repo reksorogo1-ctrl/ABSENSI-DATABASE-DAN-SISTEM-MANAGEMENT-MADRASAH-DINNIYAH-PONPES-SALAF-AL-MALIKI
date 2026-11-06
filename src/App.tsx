@@ -39,6 +39,10 @@ import {
   subscribeAttendanceUpdates,
   broadcastScheduleUpdate,
   subscribeScheduleUpdates,
+  broadcastIzinMengajarUpdate,
+  subscribeIzinMengajarUpdates,
+  broadcastNadzhomUpdate,
+  subscribeNadzhomUpdates,
   getServerTime,
   checkPresensiSchedule
 } from './serverTime';
@@ -645,6 +649,18 @@ export default function App() {
         localStorage.setItem('sim_jadwal', JSON.stringify(data));
       }
     });
+    const unsubIzinMengajar = subscribeMasterDataFromFirestore<IzinMengajarRequest[]>('izin_mengajar', (data) => {
+      if (data && Array.isArray(data)) {
+        setIzinMengajarList(data);
+        localStorage.setItem('sim_izin_mengajar', JSON.stringify(data));
+      }
+    });
+    const unsubNadzhom = subscribeMasterDataFromFirestore<NadzhomRecord[]>('nadzhom', (data) => {
+      if (data && Array.isArray(data)) {
+        setNadzhomList(data);
+        localStorage.setItem('sim_nadzhom', JSON.stringify(data));
+      }
+    });
 
     return () => {
       unsubscribe();
@@ -654,6 +670,8 @@ export default function App() {
       unsubAbsGuru();
       unsubPengurus();
       unsubJadwal();
+      unsubIzinMengajar();
+      unsubNadzhom();
     };
   }, []);
 
@@ -1027,6 +1045,13 @@ export default function App() {
         alert(`Presensi Ditolak: Saat ini berada di luar rentang jam absensi resmi (${currentCheck.wibTimeStr}). Presensi hanya dapat dilakukan pada jam yang ditentukan oleh Admin.`);
         return;
       }
+      // Validasi ketat kesesuaian jam mengajar: Jam ke-1 hanya boleh absen di Jam ke-1, Jam ke-2 hanya boleh absen di Jam ke-2
+      for (const rec of records) {
+        if (rec.tipeAbsensi === 'Normal' && rec.jamKe && Number(rec.jamKe) !== Number(currentCheck.jamKe)) {
+          alert(`Presensi Ditolak: Anda terjadwal pada Jam Ke-${rec.jamKe}. Sesi presensi aktif saat ini adalah Jam Ke-${currentCheck.jamKe} (${currentCheck.sesi}). Guru yang terjadwal jam ke-${rec.jamKe} hanya dapat melakukan presensi pada jam ke-${rec.jamKe}.`);
+          return;
+        }
+      }
     }
 
     setAbsensiGuruList(prev => {
@@ -1090,9 +1115,9 @@ export default function App() {
     } catch {}
   };
 
-  // Sinkronisasi data presensi real-time lintas tab & komponen
+  // Sinkronisasi data presensi, izin mengajar, dan nadzhom real-time lintas tab & komponen
   useEffect(() => {
-    const unsub = subscribeAttendanceUpdates((payload) => {
+    const unsubAtt = subscribeAttendanceUpdates((payload) => {
       if (payload.type === 'guru' && payload.records?.length) {
         setAbsensiGuruList(prev => {
           const keys = new Set(payload.records.map((r: any) => `${r.tanggal}_${r.nama}_${r.kelas}_${r.jamKe}`));
@@ -1107,7 +1132,24 @@ export default function App() {
         });
       }
     });
-    return () => unsub();
+
+    const unsubIzin = subscribeIzinMengajarUpdates((items) => {
+      if (Array.isArray(items)) {
+        setIzinMengajarList(items);
+      }
+    });
+
+    const unsubNadz = subscribeNadzhomUpdates((records) => {
+      if (Array.isArray(records)) {
+        setNadzhomList(records);
+      }
+    });
+
+    return () => {
+      unsubAtt();
+      unsubIzin();
+      unsubNadz();
+    };
   }, []);
 
   const handleSaveNewSantri = (newSantri: Santri) => {
@@ -1303,6 +1345,7 @@ export default function App() {
     setNadzhomList(updated);
     localStorage.setItem('sim_nadzhom', JSON.stringify(updated));
     saveMasterDataToFirestore('nadzhom', updated);
+    broadcastNadzhomUpdate(updated, 'Pengurus');
 
     // Sinkronisasi langsung ke profil santri agar wali santri melihat perubahan di dashboard secara real-time
     const target = santriList.find(s => s.id === rec.idSantri);
@@ -1331,6 +1374,7 @@ export default function App() {
     setNadzhomList(updated);
     localStorage.setItem('sim_nadzhom', JSON.stringify(updated));
     saveMasterDataToFirestore('nadzhom', updated);
+    broadcastNadzhomUpdate(updated, 'Admin');
 
     // Sinkronisasi ke profil santri agar wali santri melihat nilai muhafadzoh terbaru secara real-time
     records.forEach(r => {
@@ -1352,6 +1396,7 @@ export default function App() {
     setNadzhomList(updated);
     localStorage.setItem('sim_nadzhom', JSON.stringify(updated));
     saveMasterDataToFirestore('nadzhom', updated);
+    broadcastNadzhomUpdate(updated, 'Admin');
   };
 
   const handleSaveNilai = (rec: NilaiUjianRecord) => {
@@ -1565,9 +1610,11 @@ export default function App() {
 
   // Handlers Izin Tidak Mengajar Ustadz & Pengganti
   const handleAddIzinMengajar = (newReq: IzinMengajarRequest) => {
-    const updated = [newReq, ...izinMengajarList];
+    const updated = [newReq, ...izinMengajarList.filter(i => i.id !== newReq.id)];
     setIzinMengajarList(updated);
     localStorage.setItem('sim_izin_mengajar', JSON.stringify(updated));
+    saveMasterDataToFirestore('izin_mengajar', updated);
+    broadcastIzinMengajarUpdate(updated, 'Pengurus');
   };
 
   const handleApproveIzinMengajar = (
@@ -1595,6 +1642,8 @@ export default function App() {
 
     setIzinMengajarList(updatedIzinList);
     localStorage.setItem('sim_izin_mengajar', JSON.stringify(updatedIzinList));
+    saveMasterDataToFirestore('izin_mengajar', updatedIzinList);
+    broadcastIzinMengajarUpdate(updatedIzinList, 'Admin');
 
     // OTOMATISASI IZIN DAN PENGURUS PENGGANTI:
     // 1. Pengurus/Ustadz yang izin otomatis tercatat IZIN
@@ -1743,6 +1792,8 @@ export default function App() {
               onSaveAbsensiGuru={handleSaveAbsensiGuru}
               onSubmitIzinMengajar={handleAddIzinMengajar}
               onSaveSilabus={handleSaveSilabus}
+              onSaveNadzhom={handleSaveNadzhom}
+              onDeleteNadzhom={handleDeleteNadzhom}
             />
           </div>
           {showDoors && <DoorTransition onComplete={() => setShowDoors(false)} settings={settings} />}

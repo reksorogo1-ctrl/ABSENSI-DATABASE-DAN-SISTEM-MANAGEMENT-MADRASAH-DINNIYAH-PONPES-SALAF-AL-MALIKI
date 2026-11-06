@@ -10,7 +10,8 @@ import {
   CheckCircle2, AlertTriangle, Phone, MessageCircle, 
   Users, Newspaper, ShieldAlert, Sparkles, Sliders, CheckCheck,
   Send, FileText, UserX, ChevronRight, Check, X, Shield, PlusCircle, Plus,
-  BookmarkCheck, CheckSquare, RefreshCw, GraduationCap, MapPin, Compass, Crosshair, Navigation, Menu
+  BookmarkCheck, CheckSquare, RefreshCw, GraduationCap, MapPin, Compass, Crosshair, Navigation, Menu,
+  Search, Edit3
 } from 'lucide-react';
 import { BrandLogos } from './BrandLogos';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -19,7 +20,8 @@ import { validateGeofence, DEFAULT_GEOFENCE_ZONE } from '../lib/geofencing';
 import { 
   checkPresensiSchedule, getServerTime, setSimulatedServerTime, isSimulationActive,
   PresensiCheckResult, OFFICIAL_SCHEDULES, broadcastAttendanceUpdate,
-  getPesantrenDayInfo, getMalamDaySubtitle, subscribeScheduleUpdates
+  getPesantrenDayInfo, getMalamDaySubtitle, subscribeScheduleUpdates,
+  subscribeIzinMengajarUpdates, subscribeNadzhomUpdates
 } from '../serverTime';
 import { PenggantiUstadzRequest } from '../types';
 
@@ -48,6 +50,8 @@ interface PengurusDashboardProps {
   onSaveSilabus?: (rec: SilabusMemaknaiRecord) => void;
   onSubmitIzinMengajar?: (req: IzinMengajarRequest) => void;
   onDeleteKalenderEvent?: (id: string) => void;
+  onSaveNadzhom?: (rec: NadzhomRecord) => void;
+  onDeleteNadzhom?: (rec: NadzhomRecord) => void;
 }
 
 export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
@@ -74,7 +78,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   onSaveAbsensiGuru,
   onSaveSilabus,
   onSubmitIzinMengajar,
-  onDeleteKalenderEvent
+  onDeleteKalenderEvent,
+  onSaveNadzhom,
+  onDeleteNadzhom
 }) => {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
@@ -188,13 +194,152 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   const personalTotal = personalHadir + personalIzin + personalTerlambat + personalAlpha;
   const personalPercent = personalTotal > 0 ? Math.round(((personalHadir + personalTerlambat) / personalTotal) * 100) : 100;
 
+  const [liveIzinList, setLiveIzinList] = useState<IzinMengajarRequest[]>(() => {
+    return izinList && izinList.length > 0 ? izinList : (JSON.parse(localStorage.getItem('sim_izin_mengajar') || '[]'));
+  });
+
+  useEffect(() => {
+    if (izinList) {
+      setLiveIzinList(izinList);
+    }
+  }, [izinList]);
+
+  useEffect(() => {
+    const unsub = subscribeIzinMengajarUpdates((items) => {
+      if (Array.isArray(items)) {
+        setLiveIzinList(items);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const [liveNadzhomList, setLiveNadzhomList] = useState<NadzhomRecord[]>(() => {
+    return nadzhomList && nadzhomList.length > 0 ? nadzhomList : (JSON.parse(localStorage.getItem('sim_nadzhom') || '[]'));
+  });
+
+  useEffect(() => {
+    if (nadzhomList) {
+      setLiveNadzhomList(nadzhomList);
+    }
+  }, [nadzhomList]);
+
+  useEffect(() => {
+    const unsub = subscribeNadzhomUpdates((records) => {
+      if (Array.isArray(records)) {
+        setLiveNadzhomList(records);
+      }
+    });
+    return () => unsub();
+  }, []);
+
   // Filter pengajuan izin milik pengurus ini
   const myIzinList = useMemo(() => {
-    return izinList.filter(i => 
+    return liveIzinList.filter(i => 
       i.namaUstadz?.toLowerCase().trim() === pengurus.nama.toLowerCase().trim() ||
       i.idPengurus === pengurus.id
     );
-  }, [izinList, pengurus]);
+  }, [liveIzinList, pengurus]);
+
+  // State untuk Fitur Setoran Nadzhom Santri oleh Pengurus (Menyimak & Input Manual)
+  const [selectedNadzhomKelas, setSelectedNadzhomKelas] = useState<string>('SEMUA');
+  const [searchNadzhomSantri, setSearchNadzhomSantri] = useState<string>('');
+  const [showAddNadzhomModal, setShowAddNadzhomModal] = useState<boolean>(false);
+  const [editingNadzhom, setEditingNadzhom] = useState<NadzhomRecord | null>(null);
+  const [nadzhomForm, setNadzhomForm] = useState<{
+    idSantri: string;
+    nama: string;
+    kelas: string;
+    kitab: string;
+    bait: number;
+    tanggal: string;
+    nilai: string;
+    catatan: string;
+  }>({
+    idSantri: '',
+    nama: '',
+    kelas: '1 TSANAWIYAH',
+    kitab: 'Al-Fiyah Ibnu Malik',
+    bait: 0,
+    tanggal: new Date().toISOString().split('T')[0],
+    nilai: 'Mumtaz',
+    catatan: ''
+  });
+
+  const handleOpenAddNadzhom = (targetSantri?: Santri) => {
+    if (targetSantri) {
+      const last = liveNadzhomList.find(n => n.idSantri === targetSantri.id);
+      setNadzhomForm({
+        idSantri: targetSantri.id,
+        nama: targetSantri.nama,
+        kelas: targetSantri.kelas,
+        kitab: last?.kitab || 'Al-Fiyah Ibnu Malik',
+        bait: last ? Number(last.bait) : 0,
+        tanggal: activeSession.todayIso,
+        nilai: 'Mumtaz',
+        catatan: `Disimak oleh pengurus ${pengurus.nama}`
+      });
+    } else {
+      setNadzhomForm({
+        idSantri: '',
+        nama: '',
+        kelas: selectedNadzhomKelas !== 'SEMUA' ? selectedNadzhomKelas : '1 TSANAWIYAH',
+        kitab: 'Al-Fiyah Ibnu Malik',
+        bait: 0,
+        tanggal: activeSession.todayIso,
+        nilai: 'Mumtaz',
+        catatan: `Disimak oleh pengurus ${pengurus.nama}`
+      });
+    }
+    setEditingNadzhom(null);
+    setShowAddNadzhomModal(true);
+  };
+
+  const handleEditNadzhom = (rec: NadzhomRecord) => {
+    setEditingNadzhom(rec);
+    setNadzhomForm({
+      idSantri: rec.idSantri,
+      nama: rec.nama,
+      kelas: rec.kelas || '1 TSANAWIYAH',
+      kitab: rec.kitab,
+      bait: rec.bait,
+      tanggal: rec.tanggal,
+      nilai: rec.nilai,
+      catatan: rec.catatan || ''
+    });
+    setShowAddNadzhomModal(true);
+  };
+
+  const handleSaveNadzhomEntry = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nadzhomForm.idSantri || !nadzhomForm.nama) {
+      alert('Pilih santri terlebih dahulu!');
+      return;
+    }
+    if (!nadzhomForm.kitab.trim()) {
+      alert('Tentukan kitab nadzhom!');
+      return;
+    }
+
+    const rec: NadzhomRecord = {
+      idRow: editingNadzhom?.idRow || Date.now(),
+      idSantri: nadzhomForm.idSantri,
+      nama: nadzhomForm.nama,
+      kelas: nadzhomForm.kelas,
+      kitab: nadzhomForm.kitab.trim(),
+      bait: Number(nadzhomForm.bait) || 0,
+      tanggal: nadzhomForm.tanggal || activeSession.todayIso,
+      nilai: nadzhomForm.nilai || 'Mumtaz',
+      catatan: nadzhomForm.catatan.trim() || `Disimak oleh pengurus ${pengurus.nama}`
+    };
+
+    if (onSaveNadzhom) {
+      onSaveNadzhom(rec);
+    }
+
+    setShowAddNadzhomModal(false);
+    setEditingNadzhom(null);
+    alert(`Setoran nadzhom ${rec.nama} (${rec.kitab} - ${rec.bait} bait) berhasil disimpan dan disinkronkan secara real-time ke Dashboard Admin & Wali Santri!`);
+  };
 
   // Status presensi mandiri hari ini
   const todayIso = new Date().toISOString().split('T')[0];
@@ -310,14 +455,20 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       return;
     }
 
+    const tDate = izinForm.tanggal || activeSession.todayIso;
+    const hariName = new Date(tDate).toLocaleDateString('id-ID', { weekday: 'long' }).toUpperCase();
+
     const newRequest: IzinMengajarRequest = {
       id: `IZN-${Date.now()}`,
       idPengurus: pengurus.id,
       namaUstadz: pengurus.nama,
-      tanggal: izinForm.tanggal,
+      tanggal: tDate,
+      hari: hariName,
       mapel: izinForm.mapel,
       kelas: izinForm.kelas,
       jamKe: izinForm.jamKe,
+      jamJadwal: Number(izinForm.jamKe) === 2 ? '09:45 WIB' : '08:00 WIB',
+      jadwalId: `${izinForm.kelas}_${izinForm.mapel}_${izinForm.jamKe}`,
       alasan: izinForm.alasan,
       ustadzPengganti: izinForm.ustadzPengganti,
       status: 'Menunggu',
@@ -333,7 +484,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       ...izinForm,
       alasan: ''
     });
-    alert('Pengajuan izin tidak mengajar berhasil dikirim ke Dashboard Admin! Ketika Admin menyetujui, status kehadiran pada absensi ustadz/ustadzah langsung otomatis menjadi IZIN dan tercantum nama ustadz penggantinya.');
+    alert('Pengajuan izin tidak mengajar berhasil dikirim langsung ke Dashboard Admin secara real time! Ketika disetujui Admin, status absensi Anda langsung berubah menjadi Izin.');
   };
 
   // State Jam Server Real-Time (update setiap 1 detik)
@@ -586,6 +737,32 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   // State jadwal yang dipilih oleh ustadz
   const [selectedJadwalId, setSelectedJadwalId] = useState<string>('');
 
+  // Jadwal mengajar ustadz hari ini pada sesi jam yang sedang aktif
+  const myCurrentSessionSchedule = useMemo(() => {
+    if (!activeSession.isActive) return null;
+    return myTodaySchedules.find(j => {
+      const isAliyah = (j.kelas || '').includes('ALIYAH') || (j.hari || '').toUpperCase().startsWith('MALAM');
+      const correctTingkat = activeSession.tingkat === 'ALIYAH' ? isAliyah : !isAliyah;
+      const matchJam = Number(j.jamKe) === Number(activeSession.jamKe);
+      const matchKelas = selectedPresensiKelas === 'SEMUA' || !selectedPresensiKelas || j.kelas === selectedPresensiKelas;
+      return correctTingkat && matchJam && matchKelas;
+    }) || myTodaySchedules.find(j => {
+      const isAliyah = (j.kelas || '').includes('ALIYAH') || (j.hari || '').toUpperCase().startsWith('MALAM');
+      const correctTingkat = activeSession.tingkat === 'ALIYAH' ? isAliyah : !isAliyah;
+      return correctTingkat && Number(j.jamKe) === Number(activeSession.jamKe);
+    }) || null;
+  }, [activeSession, myTodaySchedules, selectedPresensiKelas]);
+
+  // Jadwal mengajar ustadz hari ini pada sesi jam yang LAIN (misal terjadwal Jam 2 saat jam aktif masih Jam 1, atau sebaliknya)
+  const myOtherSessionSchedule = useMemo(() => {
+    return myTodaySchedules.find(j => {
+      const isAliyah = (j.kelas || '').includes('ALIYAH') || (j.hari || '').toUpperCase().startsWith('MALAM');
+      const correctTingkat = activeSession.tingkat === 'ALIYAH' ? isAliyah : !isAliyah;
+      return correctTingkat && Number(j.jamKe) !== Number(activeSession.jamKe);
+    }) || null;
+  }, [activeSession, myTodaySchedules]);
+
+  // Evaluasi jadwal yang aktif untuk ditampilkan dan diverifikasi
   const myActiveSchedule = useMemo(() => {
     // 1. Jika ada jadwal yang dipilih spesifik oleh tombol atau dropdown
     if (selectedJadwalId) {
@@ -595,24 +772,24 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       if (found) return found;
     }
 
-    // 2. Candidate pool strictly terikat pada kelas yang dipilih (jika bukan 'SEMUA')
+    // 2. Jika sesi aktif dan ustadz punya jadwal di sesi ini, utamakan sesi ini!
+    if (activeSession.isActive && myCurrentSessionSchedule) {
+      return myCurrentSessionSchedule;
+    }
+
+    // 3. Jika sesi aktif dan ustadz punya jadwal di jam lain hari ini, tampilkan untuk konteks
+    if (activeSession.isActive && myOtherSessionSchedule) {
+      return myOtherSessionSchedule;
+    }
+
+    // 4. Candidate pool strictly terikat pada kelas yang dipilih (jika bukan 'SEMUA')
     const candidatePool = (selectedPresensiKelas && selectedPresensiKelas !== 'SEMUA')
       ? myTodaySchedulesByClass
       : (myTodaySchedules.length > 0 ? myTodaySchedules : myAllSchedules);
 
     if (!candidatePool || candidatePool.length === 0) return null;
 
-    // 3. Jika dalam jam aktif (misal jam aktif Aliyah Jam Ke-1), cocokkan otomatis dalam pool kelas tersebut
-    if (activeSession.isActive) {
-      const matchSesi = candidatePool.find(j => {
-        const isAliyah = (j.kelas || '').includes('ALIYAH') || (j.hari || '').toUpperCase().startsWith('MALAM');
-        const correctTingkat = activeSession.tingkat === 'ALIYAH' ? isAliyah : !isAliyah;
-        return correctTingkat && Number(j.jamKe) === Number(activeSession.jamKe);
-      });
-      if (matchSesi) return matchSesi;
-    }
-
-    // 4. Cocokkan dengan hari ini
+    // 5. Cocokkan dengan hari ini
     const matchToday = candidatePool.find(j => {
       const jHari = (j.hari || '').toUpperCase().trim();
       const isAliyah = (j.kelas || '').includes('ALIYAH') || jHari.startsWith('MALAM');
@@ -620,9 +797,51 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     });
     if (matchToday) return matchToday;
 
-    // 5. Fallback ke jadwal pertama dalam candidate pool (PASTI sesuai kelas pada button!)
+    // 6. Fallback ke jadwal pertama dalam candidate pool
     return candidatePool[0] || null;
-  }, [selectedJadwalId, selectedPresensiKelas, myTodaySchedulesByClass, myTodaySchedules, myAllSchedules, activeSession, dayInfo]);
+  }, [selectedJadwalId, activeSession, myCurrentSessionSchedule, myOtherSessionSchedule, selectedPresensiKelas, myTodaySchedulesByClass, myTodaySchedules, myAllSchedules, dayInfo]);
+
+  // Validasi Ketidaksesuaian Sesi Jam Mengajar Guru (Jam Ke-1 vs Jam Ke-2)
+  const sessionMismatchInfo = useMemo(() => {
+    if (!activeSession.isActive || settings.bypass_jam_presensi_testing) {
+      return { isMismatch: false, title: '', message: '', targetJam: 0 };
+    }
+
+    // 1. Jika ustadz memiliki jadwal pada sesi yang sedang aktif saat ini
+    if (myCurrentSessionSchedule) {
+      if (selectedJadwalId && myActiveSchedule && Number(myActiveSchedule.jamKe) !== Number(activeSession.jamKe)) {
+        const jamTarget = Number(myActiveSchedule.jamKe);
+        return {
+          isMismatch: true,
+          targetJam: jamTarget,
+          title: jamTarget === 2
+            ? '⛔ Belum Waktunya Presensi (Jadwal Jam Ke-2)'
+            : '⛔ Sesi Jam Ke-1 Telah Selesai',
+          message: jamTarget === 2
+            ? `Jadwal pilihan Anda (${myActiveSchedule.mapel} - ${myActiveSchedule.kelas}) terjadwal pada Jam Ke-2. Anda hanya dapat melakukan presensi saat sesi Jam Ke-2 dimulai.`
+            : `Jadwal pilihan Anda (${myActiveSchedule.mapel} - ${myActiveSchedule.kelas}) adalah Jam Ke-1. Sesi Jam Ke-1 telah berakhir dan Anda tidak boleh absen pada Jam Ke-2.`
+        };
+      }
+      return { isMismatch: false, title: '', message: '', targetJam: 0 };
+    }
+
+    // 2. Jika ustadz TIDAK memiliki jadwal pada sesi aktif saat ini, tetapi memiliki jadwal hari ini di jam lain
+    if (myOtherSessionSchedule) {
+      const jamTarget = Number(myOtherSessionSchedule.jamKe);
+      return {
+        isMismatch: true,
+        targetJam: jamTarget,
+        title: jamTarget === 2
+          ? '⛔ Belum Waktunya Presensi (Jadwal Anda: Jam Ke-2)'
+          : '⛔ Sesi Jam Ke-1 Telah Selesai',
+        message: jamTarget === 2
+          ? `Sesi presensi yang aktif saat ini adalah Jam Ke-1 (${activeSession.sesi}). Anda terjadwal mengajar pada Jam Ke-2 (${myOtherSessionSchedule.mapel} - ${myOtherSessionSchedule.kelas}). Sesuai aturan madrasah, guru yang terjadwal Jam Ke-2 hanya dapat melakukan absensi pada Jam Ke-2 dan dilarang absen pada Jam Ke-1.`
+          : `Sesi presensi yang aktif saat ini adalah Jam Ke-2 (${activeSession.sesi}). Jadwal mengajar Anda hari ini (${myOtherSessionSchedule.mapel} - ${myOtherSessionSchedule.kelas}) adalah Jam Ke-1. Sesi Jam Ke-1 telah berakhir dan guru Jam Ke-1 dilarang absen pada Jam Ke-2.`
+      };
+    }
+
+    return { isMismatch: false, title: '', message: '', targetJam: 0 };
+  }, [activeSession, settings.bypass_jam_presensi_testing, myCurrentSessionSchedule, myOtherSessionSchedule, selectedJadwalId, myActiveSchedule]);
 
   // Cek apakah ustadz login ini sudah presensi hari ini pada sesi jadwal yang dipilih
   const isAlreadyCheckedIn = useMemo(() => {
@@ -722,6 +941,33 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
         title: '⏰ Jam Presensi Ditutup / Di Luar Jadwal',
         message: `Waktu server Asia/Jakarta (WIB) saat ini adalah ${activeSession.wibTimeStr}. Presensi hanya dapat dilakukan pada rentang jam yang ditentukan oleh Administrator.`,
         submessage: activeSession.keterangan || 'Presensi otomatis ditolak di luar rentang jam operasional resmi madrasah.'
+      });
+      return;
+    }
+
+    // Validasi 0.5: Sesi Jam Mengajar Guru Wajib Cocok (Jam Ke-1 vs Jam Ke-2)
+    if (!settings.bypass_jam_presensi_testing && sessionMismatchInfo.isMismatch) {
+      setValidationAlertModal({
+        isOpen: true,
+        type: 'outside_hours',
+        title: sessionMismatchInfo.title,
+        message: sessionMismatchInfo.message,
+        submessage: `Waktu Server Asia/Jakarta (WIB): ${activeSession.wibTimeStr}. Sesi aktif: Jam Ke-${activeSession.jamKe} (${activeSession.sesi}). Sesuai aturan madrasah, guru yang terjadwal jam ke-2 hanya dapat presensi pada jam ke-2, dan guru jam ke-1 hanya pada jam ke-1.`
+      });
+      return;
+    }
+
+    // Validasi 0.6: Jam Ke Jadwal vs Jam Ke Sesi Aktif
+    if (!settings.bypass_jam_presensi_testing && myActiveSchedule && Number(myActiveSchedule.jamKe) !== Number(activeSession.jamKe)) {
+      const jamTarget = Number(myActiveSchedule.jamKe);
+      setValidationAlertModal({
+        isOpen: true,
+        type: 'outside_hours',
+        title: jamTarget === 2 ? '⛔ Belum Waktunya Presensi (Jadwal Jam Ke-2)' : '⛔ Sesi Jam Ke-1 Telah Selesai',
+        message: jamTarget === 2
+          ? `Guru yang terjadwal Jam Ke-2 hanya dapat melakukan absensi pada Jam Ke-2, tidak boleh absen pada Jam Ke-1.`
+          : `Guru yang terjadwal Jam Ke-1 hanya dapat melakukan absensi pada Jam Ke-1, tidak boleh absen pada Jam Ke-2.`,
+        submessage: `Jadwal Anda (${myActiveSchedule.mapel} - ${myActiveSchedule.kelas}) adalah Jam Ke-${myActiveSchedule.jamKe}, sedangkan sesi aktif saat ini adalah Jam Ke-${activeSession.jamKe} (${activeSession.sesi}).`
       });
       return;
     }
@@ -1058,6 +1304,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             {[
               { id: 'dashboard', label: 'Dasbor Utama', icon: Sparkles },
               { id: 'izin-mengajar', label: 'Izin Mengajar', icon: FileText, badge: myIzinList.filter(i => i.status === 'Menunggu').length || undefined },
+              { id: 'nadzhom', label: 'Setoran Nadzhom', icon: BookOpen, badge: liveNadzhomList.length || undefined },
               { id: 'wali-kelas', label: `Wali Kelas (${waliKelasKelas})`, icon: GraduationCap },
               { id: 'kalender', label: 'Kalender & Agenda', icon: Calendar, badge: urgentEvents.length || undefined },
               { id: 'absensi-santri', label: 'Presensi Santri', icon: UserCheck },
@@ -1266,6 +1513,22 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   ⚡ {unreadSilabusUpdates.length}
                 </span>
               )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('nadzhom')}
+              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
+                activeTab === 'nadzhom'
+                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
+                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Setoran Nadzhom</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-emerald-900 border border-emerald-500/40 text-[9px] text-emerald-300 font-bold">
+                {liveNadzhomList.length}
+              </span>
             </button>
 
             <button
@@ -1759,6 +2022,24 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                             Waktu server: <span className="font-mono font-bold text-amber-300">{activeSession.wibTimeStr}</span>.<br />
                             {activeSession.jadwalBerikutnya ? `Sesi berikutnya: ${activeSession.jadwalBerikutnya.label} (${activeSession.jadwalBerikutnya.jamMulai} - ${activeSession.jadwalBerikutnya.sisaWaktuText})` : 'Presensi otomatis aktif sesuai jam pelajaran resmi madrasah.'}
                           </p>
+                        </div>
+                      ) : (sessionMismatchInfo.isMismatch && !settings.bypass_jam_presensi_testing) ? (
+                        <div className="w-full max-w-lg text-center p-4 rounded-2xl bg-amber-950/80 border-2 border-amber-500/70 text-amber-100 text-xs font-semibold space-y-2 shadow-2xl backdrop-blur-md">
+                          <div className="flex items-center justify-center gap-2 font-black text-amber-300 text-sm uppercase tracking-wide">
+                            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 animate-pulse" />
+                            <span>{sessionMismatchInfo.title}</span>
+                          </div>
+                          <p className="text-xs text-amber-200/90 leading-relaxed font-normal">
+                            {sessionMismatchInfo.message}
+                          </p>
+                          <div className="pt-2 border-t border-amber-500/30 flex flex-wrap items-center justify-center gap-2 text-[10px]">
+                            <span className="px-2 py-0.5 rounded-lg bg-black/60 text-amber-300 font-mono font-bold">
+                              Waktu Server: {activeSession.wibTimeStr}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-lg bg-black/60 text-emerald-300 font-bold">
+                              Sesi Aktif: Jam Ke-{activeSession.jamKe} ({activeSession.sesi})
+                            </span>
+                          </div>
                         </div>
                       ) : (
                         <button
@@ -3401,6 +3682,424 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ===================== TAB: SETORAN NADZHOM & MUHAFADZOH SANTRI ===================== */}
+        {activeTab === 'nadzhom' && (
+          <div className="space-y-6">
+            {/* Header & Status Card */}
+            <div className="card-3d-glass rounded-3xl p-6 border border-[#d4af37]/40 shadow-2xl relative overflow-hidden">
+              <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#f5e298]/80 to-transparent pointer-events-none" />
+
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 pb-4 border-b border-[#d4af37]/20">
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-[#093d25] border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow-xl">
+                    <BookOpen className="w-7 h-7 text-[#d4af37]" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold font-serif text-[#d4af37] text-gold-3d flex items-center gap-2">
+                      Setoran Nadzhom & Hafalan Santri
+                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-sans font-bold">
+                        Simakan Pengurus
+                      </span>
+                    </h3>
+                    <p className="text-xs text-emerald-200/90 mt-1">
+                      Catat setoran nadzhom santri secara langsung. Setiap data setoran otomatis tersimpan dan tersinkronisasi secara real-time ke Dashboard Admin dan Portal Wali Santri.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Actions & Badges */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    Santri: <b className="text-white">{santriList.length}</b>
+                  </span>
+                  <span className="px-3 py-1.5 rounded-xl bg-amber-950/80 border border-[#d4af37]/40 text-[#d4af37] text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+                    <Award className="w-3.5 h-3.5 text-amber-400" />
+                    Total Setoran: <b className="text-white">{liveNadzhomList.length}</b> Catatan
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenAddNadzhom()}
+                    className="btn-3d-gold px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center gap-1.5 shadow-lg transition-all"
+                  >
+                    <Plus className="w-4 h-4 stroke-[3]" />
+                    <span>+ Input Setoran Santri</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Class Filter Bar & Search */}
+              <div className="pt-4 space-y-4">
+                <div>
+                  <label className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider mb-2 block flex items-center gap-1.5">
+                    <GraduationCap className="w-3.5 h-3.5 text-[#d4af37]" />
+                    Filter Kelas Santri:
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+                    {['SEMUA', '1 TSANAWIYAH', '2 TSANAWIYAH', '3 TSANAWIYAH', '1 ALIYAH', '2 ALIYAH', '3 ALIYAH'].map((kelasName) => {
+                      const countSantri = kelasName === 'SEMUA' 
+                        ? santriList.length 
+                        : santriList.filter(s => s.kelas === kelasName).length;
+                      const isSelected = selectedNadzhomKelas === kelasName;
+                      return (
+                        <button
+                          key={kelasName}
+                          onClick={() => setSelectedNadzhomKelas(kelasName)}
+                          className={`px-3 py-2 rounded-2xl text-xs font-bold transition flex flex-col items-center justify-center gap-0.5 border ${
+                            isSelected
+                              ? 'bg-gradient-to-r from-[#d4af37] via-[#f3e5ab] to-[#c59b27] text-black border-amber-300 shadow-lg scale-[1.02]'
+                              : 'bg-[#041a0f]/90 text-emerald-200 hover:bg-[#08351e] border-[#d4af37]/30 hover:border-[#d4af37]'
+                          }`}
+                        >
+                          <span className="text-xs uppercase tracking-tight">{kelasName}</span>
+                          <span className={`text-[10px] ${isSelected ? 'text-black/80 font-bold' : 'text-emerald-400 font-medium'}`}>
+                            {countSantri} santri
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={searchNadzhomSantri}
+                      onChange={(e) => setSearchNadzhomSantri(e.target.value)}
+                      placeholder="Cari nama santri atau NIS..."
+                      className="w-full bg-[#03150d] border border-[#d4af37]/40 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#d4af37]"
+                    />
+                  </div>
+                  <span className="text-xs text-slate-400 self-center">
+                    Menampilkan <b>{
+                      liveNadzhomList.filter(n => {
+                        const matchKelas = selectedNadzhomKelas === 'SEMUA' || n.kelas === selectedNadzhomKelas;
+                        const matchSearch = !searchNadzhomSantri || n.nama.toLowerCase().includes(searchNadzhomSantri.toLowerCase()) || (n.idSantri && n.idSantri.toLowerCase().includes(searchNadzhomSantri.toLowerCase()));
+                        return matchKelas && matchSearch;
+                      }).length
+                    }</b> riwayat setoran
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabel Catatan Setoran Nadzhom */}
+            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <h3 className="text-sm font-bold text-white text-gold-3d flex items-center gap-2">
+                  <Award className="w-4 h-4 text-[#d4af37]" />
+                  <span>Daftar Setoran Nadzhom Santri Terkini</span>
+                </h3>
+                <span className="text-[11px] text-emerald-300 font-mono">
+                  Sinkronisasi Real-Time Admin & Wali Santri
+                </span>
+              </div>
+
+              <div className="table-container-3d overflow-x-auto rounded-2xl border border-[#d4af37]/30">
+                <table className="w-full text-xs text-left min-w-[850px] table-luxury-3d">
+                  <thead className="bg-[#03140c] text-[#d4af37] border-b border-[#d4af37]/30">
+                    <tr>
+                      <th className="p-3">Tanggal Setor</th>
+                      <th className="p-3">Nama Santri & NIS</th>
+                      <th className="p-3">Kelas</th>
+                      <th className="p-3">Kitab Nadzhom</th>
+                      <th className="p-3 text-center">Jumlah Bait</th>
+                      <th className="p-3 text-center">Predikat / Nilai</th>
+                      <th className="p-3">Keterangan / Evaluasi Menyimak</th>
+                      <th className="p-3 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#d4af37]/10 bg-[#020e08]/70">
+                    {(() => {
+                      const filtered = liveNadzhomList.filter(n => {
+                        const matchKelas = selectedNadzhomKelas === 'SEMUA' || n.kelas === selectedNadzhomKelas;
+                        const matchSearch = !searchNadzhomSantri || n.nama.toLowerCase().includes(searchNadzhomSantri.toLowerCase()) || (n.idSantri && n.idSantri.toLowerCase().includes(searchNadzhomSantri.toLowerCase()));
+                        return matchKelas && matchSearch;
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={8} className="p-8 text-center text-slate-400">
+                              <BookOpen className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-50" />
+                              <p className="font-semibold">Belum ada catatan setoran nadzhom untuk kriteria ini.</p>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenAddNadzhom()}
+                                className="mt-3 px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold hover:bg-amber-500/30 transition"
+                              >
+                                + Input Setoran Pertama
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return filtered.map((n, idx) => (
+                        <tr key={`p-ndz-${n.idSantri}-${idx}`} className="hover:bg-[#d4af37]/5 transition">
+                          <td className="p-3 font-mono text-emerald-300 font-bold whitespace-nowrap">
+                            {n.tanggal || activeSession.todayIso}
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-white block">{n.nama}</span>
+                            <span className="text-[10px] text-[#d4af37] font-mono">NIS: {n.idSantri}</span>
+                          </td>
+                          <td className="p-3 text-emerald-200">{n.kelas || '-'}</td>
+                          <td className="p-3 font-semibold text-[#fef08a]">{n.kitab}</td>
+                          <td className="p-3 text-center">
+                            <span className="px-2.5 py-1 rounded-xl bg-[#d4af37]/20 border border-[#d4af37]/40 text-[#fef08a] font-mono font-black text-xs">
+                              {n.bait} Bait
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              n.nilai === 'Mumtaz' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
+                              n.nilai === 'Jayyid Jiddan' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40' :
+                              n.nilai === 'Jayyid' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
+                              'bg-slate-700/50 text-slate-300 border border-slate-600'
+                            }`}>
+                              {n.nilai || 'Mumtaz'}
+                            </span>
+                          </td>
+                          <td className="p-3 text-slate-300 max-w-xs leading-relaxed text-[11px]">
+                            {n.catatan || '-'}
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleEditNadzhom(n)}
+                              className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold inline-flex items-center gap-1 transition"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>Edit</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Quick action: Simak Santri dari Kelas Terpilih */}
+            <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-300 flex items-center gap-2">
+                <Users className="w-4 h-4 text-[#d4af37]" />
+                <span>Input Cepat Setoran per Santri ({selectedNadzhomKelas})</span>
+              </h4>
+              <p className="text-[11px] text-slate-300">
+                Klik tombol <b>Simak Setoran</b> pada baris santri untuk otomatis mengisi data santri dan melanjutkan hafalan bait berikutnya.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 pt-2">
+                {(selectedNadzhomKelas === 'SEMUA' ? santriList : santriList.filter(s => s.kelas === selectedNadzhomKelas))
+                  .slice(0, 16)
+                  .map(s => {
+                    const lastSetor = liveNadzhomList.find(n => n.idSantri === s.id);
+                    return (
+                      <div key={s.id} className="p-3 rounded-2xl bg-black/50 border border-[#d4af37]/25 flex items-center justify-between gap-2 hover:border-[#d4af37]/60 transition">
+                        <div className="truncate">
+                          <span className="font-bold text-white text-xs block truncate">{s.nama}</span>
+                          <span className="text-[10px] text-emerald-400 font-mono block">
+                            {lastSetor ? `${lastSetor.kitab} (${lastSetor.bait} bait)` : 'Belum ada setoran'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenAddNadzhom(s)}
+                          className="px-2.5 py-1 rounded-xl btn-3d-gold text-black font-extrabold text-[10px] shrink-0"
+                        >
+                          + Simak
+                        </button>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {/* Modal Form Input Setoran Nadzhom Santri */}
+            {showAddNadzhomModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+                <div className="card-3d rounded-3xl p-6 border-2 border-amber-500/60 max-w-lg w-full space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                  <div className="flex items-center justify-between pb-3 border-b border-amber-500/30">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-300">
+                        <BookOpen className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm sm:text-base font-extrabold text-white text-gold-3d">
+                          {editingNadzhom ? 'Edit Setoran Nadzhom Santri' : 'Input Setoran Nadzhom Santri'}
+                        </h3>
+                        <p className="text-[10px] text-amber-200">
+                          Tersimpan dan tersinkronisasi langsung ke Dashboard Admin & Wali Santri.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddNadzhomModal(false)}
+                      className="text-slate-400 hover:text-white transition"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSaveNadzhomEntry} className="space-y-3.5 text-xs">
+                    {/* Pilih Santri */}
+                    <div>
+                      <label className="block text-[#d4af37] font-bold mb-1">
+                        Pilih Santri yang Menyetor:
+                      </label>
+                      <select
+                        value={nadzhomForm.idSantri}
+                        onChange={(e) => {
+                          const chosenId = e.target.value;
+                          const found = santriList.find(s => s.id === chosenId);
+                          if (found) {
+                            const last = liveNadzhomList.find(n => n.idSantri === found.id);
+                            setNadzhomForm({
+                              ...nadzhomForm,
+                              idSantri: found.id,
+                              nama: found.nama,
+                              kelas: found.kelas,
+                              kitab: last?.kitab || nadzhomForm.kitab || 'Al-Fiyah Ibnu Malik',
+                              bait: last ? Number(last.bait) : nadzhomForm.bait
+                            });
+                          }
+                        }}
+                        className="w-full bg-[#03140c] border border-[#d4af37]/40 rounded-xl p-2.5 text-white focus:outline-none focus:border-[#d4af37]"
+                        required
+                      >
+                        <option value="">-- Pilih Nama Santri --</option>
+                        {santriList
+                          .filter(s => selectedNadzhomKelas === 'SEMUA' || s.kelas === selectedNadzhomKelas)
+                          .map(s => (
+                            <option key={s.id} value={s.id}>
+                              {s.nama} ({s.kelas} - NIS: {s.id})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[#d4af37] font-bold mb-1">Kelas Santri</label>
+                        <select
+                          value={nadzhomForm.kelas}
+                          onChange={(e) => setNadzhomForm({ ...nadzhomForm, kelas: e.target.value })}
+                          className="w-full bg-[#03140c] border border-[#d4af37]/40 rounded-xl p-2.5 text-white focus:outline-none focus:border-[#d4af37]"
+                        >
+                          {['1 TSANAWIYAH', '2 TSANAWIYAH', '3 TSANAWIYAH', '1 ALIYAH', '2 ALIYAH', '3 ALIYAH'].map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[#d4af37] font-bold mb-1">Tanggal Setor</label>
+                        <input
+                          type="date"
+                          value={nadzhomForm.tanggal}
+                          onChange={(e) => setNadzhomForm({ ...nadzhomForm, tanggal: e.target.value })}
+                          className="w-full bg-[#03140c] border border-[#d4af37]/40 rounded-xl p-2.5 text-white focus:outline-none focus:border-[#d4af37]"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[#d4af37] font-bold mb-1">Kitab Nadzhom</label>
+                        <input
+                          type="text"
+                          list="nadzhom-kitab-options"
+                          value={nadzhomForm.kitab}
+                          onChange={(e) => setNadzhomForm({ ...nadzhomForm, kitab: e.target.value })}
+                          placeholder="Contoh: Al-Fiyah Ibnu Malik"
+                          className="w-full bg-[#03140c] border border-[#d4af37]/40 rounded-xl p-2.5 text-white focus:outline-none focus:border-[#d4af37]"
+                          required
+                        />
+                        <datalist id="nadzhom-kitab-options">
+                          {(settings.daftar_nadzhom && settings.daftar_nadzhom.length > 0 ? settings.daftar_nadzhom : [
+                            'Al-Fiyah Ibnu Malik',
+                            'Nadzhom Al-Imrithi',
+                            'Matan Al-Jurumiyyah',
+                            'Nadzhom Al-Maqsud',
+                            'Hidayatus Sibyan',
+                            'Tuhfatul Athfal',
+                            'Mandzumah Jazariyyah',
+                            'Aqidatul Awam',
+                            'Jauharatut Tauhid'
+                          ]).map((kit, idx) => (
+                            <option key={idx} value={kit} />
+                          ))}
+                        </datalist>
+                      </div>
+
+                      <div>
+                        <label className="block text-[#d4af37] font-bold mb-1">Jumlah Setoran (Bait)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="2000"
+                          value={nadzhomForm.bait}
+                          onChange={(e) => setNadzhomForm({ ...nadzhomForm, bait: parseInt(e.target.value) || 0 })}
+                          placeholder="Contoh: 50"
+                          className="w-full bg-[#03140c] border border-[#d4af37]/40 rounded-xl p-2.5 text-white font-mono font-bold focus:outline-none focus:border-[#d4af37]"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[#d4af37] font-bold mb-1">Nilai / Predikat Hafalan</label>
+                      <select
+                        value={nadzhomForm.nilai}
+                        onChange={(e) => setNadzhomForm({ ...nadzhomForm, nilai: e.target.value })}
+                        className="w-full bg-[#03140c] border border-[#d4af37]/40 rounded-xl p-2.5 text-white focus:outline-none focus:border-[#d4af37]"
+                      >
+                        <option value="Mumtaz">Mumtaz (Sangat Lancar / Sempurna)</option>
+                        <option value="Jayyid Jiddan">Jayyid Jiddan (Lancar Baik Sekali)</option>
+                        <option value="Jayyid">Jayyid (Lancar / Cukup)</option>
+                        <option value="Makbul">Makbul (Kurang Lancar / Perlu Muraja&apos;ah)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[#d4af37] font-bold mb-1">Keterangan / Catatan Menyimak</label>
+                      <textarea
+                        rows={2}
+                        value={nadzhomForm.catatan}
+                        onChange={(e) => setNadzhomForm({ ...nadzhomForm, catatan: e.target.value })}
+                        placeholder={`Contoh: Bait 1 - 50 lancar, makhraj huruf fashih. Disimak oleh pengurus ${pengurus.nama}`}
+                        className="w-full bg-[#03140c] border border-[#d4af37]/40 rounded-xl p-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-[#d4af37]"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap justify-end gap-2 pt-3 border-t border-[#d4af37]/20 w-full">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddNadzhomModal(false)}
+                        className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 transition"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn-3d-gold px-5 py-2 rounded-xl text-black font-extrabold shadow-lg transition"
+                      >
+                        💾 Simpan Setoran Santri
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

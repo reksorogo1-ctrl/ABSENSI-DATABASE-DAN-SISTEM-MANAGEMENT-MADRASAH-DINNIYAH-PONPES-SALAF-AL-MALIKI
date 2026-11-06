@@ -732,3 +732,129 @@ export function subscribeScheduleUpdates(callback: (schedules: any[]) => void): 
     }
   };
 }
+
+/**
+ * Broadcast & Subscribe untuk sinkronisasi Pengajuan Izin Guru Real-Time
+ * Menghubungkan Pengajuan Izin di Pengurus Dashboard langsung ke Admin Dashboard
+ */
+export function broadcastIzinMengajarUpdate(items: any[] | any, sender = 'Pengurus') {
+  const records = Array.isArray(items) ? items : [items];
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('sim_izin_mengajar', JSON.stringify(records));
+    } catch {}
+    window.dispatchEvent(new CustomEvent('sim_izin_mengajar_realtime_event', { detail: { items: records, sender } }));
+  }
+  if (broadcastChannel) {
+    try {
+      broadcastChannel.postMessage({ type: 'izin_mengajar_sync', items: records, sender });
+    } catch {}
+  }
+}
+
+export function subscribeIzinMengajarUpdates(callback: (items: any[], sender: string) => void): () => void {
+  const handleCustomEvent = (e: Event) => {
+    const custom = e as CustomEvent<{ items: any[]; sender: string }>;
+    if (custom.detail && custom.detail.items) {
+      callback(custom.detail.items, custom.detail.sender || 'Broadcast');
+    }
+  };
+
+  const handleBroadcastMessage = (ev: MessageEvent) => {
+    if (ev.data && ev.data.type === 'izin_mengajar_sync' && ev.data.items) {
+      callback(ev.data.items, ev.data.sender || 'BroadcastChannel');
+    }
+  };
+
+  const handleStorage = (ev: StorageEvent) => {
+    if (ev.key === 'sim_izin_mengajar' && ev.newValue) {
+      try {
+        const parsed = JSON.parse(ev.newValue);
+        if (Array.isArray(parsed)) {
+          callback(parsed, 'Storage Sync');
+        }
+      } catch {}
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('sim_izin_mengajar_realtime_event', handleCustomEvent);
+    window.addEventListener('storage', handleStorage);
+    if (broadcastChannel) {
+      broadcastChannel.addEventListener('message', handleBroadcastMessage);
+    }
+  }
+
+  return () => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('sim_izin_mengajar_realtime_event', handleCustomEvent);
+      window.removeEventListener('storage', handleStorage);
+      if (broadcastChannel) {
+        broadcastChannel.removeEventListener('message', handleBroadcastMessage);
+      }
+    }
+  };
+}
+
+/**
+ * Broadcast & Subscribe untuk sinkronisasi Setoran Nadzhom Real-Time
+ * Menghubungkan input setoran nadzhom Pengurus langsung ke Tab Nadzhom Admin
+ */
+export function broadcastNadzhomUpdate(records: any[] | any, sender = 'Pengurus') {
+  const list = Array.isArray(records) ? records : [records];
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('sim_nadzhom', JSON.stringify(list));
+    } catch {}
+    window.dispatchEvent(new CustomEvent('sim_nadzhom_realtime_event', { detail: { records: list, sender } }));
+  }
+  if (broadcastChannel) {
+    try {
+      broadcastChannel.postMessage({ type: 'nadzhom_sync', records: list, sender });
+    } catch {}
+  }
+}
+
+export function subscribeNadzhomUpdates(callback: (records: any[], sender: string) => void): () => void {
+  const handleCustomEvent = (e: Event) => {
+    const custom = e as CustomEvent<{ records: any[]; sender: string }>;
+    if (custom.detail && custom.detail.records) {
+      callback(custom.detail.records, custom.detail.sender || 'Broadcast');
+    }
+  };
+
+  const handleBroadcastMessage = (ev: MessageEvent) => {
+    if (ev.data && ev.data.type === 'nadzhom_sync' && ev.data.records) {
+      callback(ev.data.records, ev.data.sender || 'BroadcastChannel');
+    }
+  };
+
+  const handleStorage = (ev: StorageEvent) => {
+    if (ev.key === 'sim_nadzhom' && ev.newValue) {
+      try {
+        const parsed = JSON.parse(ev.newValue);
+        if (Array.isArray(parsed)) {
+          callback(parsed, 'Storage Sync');
+        }
+      } catch {}
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('sim_nadzhom_realtime_event', handleCustomEvent);
+    window.addEventListener('storage', handleStorage);
+    if (broadcastChannel) {
+      broadcastChannel.addEventListener('message', handleBroadcastMessage);
+    }
+  }
+
+  return () => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('sim_nadzhom_realtime_event', handleCustomEvent);
+      window.removeEventListener('storage', handleStorage);
+      if (broadcastChannel) {
+        broadcastChannel.removeEventListener('message', handleBroadcastMessage);
+      }
+    }
+  };
+}

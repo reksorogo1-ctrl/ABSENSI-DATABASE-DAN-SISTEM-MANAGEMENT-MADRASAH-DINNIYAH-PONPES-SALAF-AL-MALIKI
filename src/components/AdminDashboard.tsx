@@ -47,7 +47,8 @@ import {
 import { 
   checkPresensiSchedule, getServerTime, subscribeAttendanceUpdates, 
   RealtimeAttendancePayload, OFFICIAL_SCHEDULES,
-  getMalamDaySubtitle, getPesantrenDayInfo
+  getMalamDaySubtitle, getPesantrenDayInfo,
+  subscribeIzinMengajarUpdates
 } from '../serverTime';
 import { INITIAL_KURIKULUM_LIST } from '../data';
 
@@ -745,10 +746,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   });
 
   useEffect(() => {
-    if (izinList && izinList.length > 0) {
+    if (izinList) {
       setLocalIzinList(izinList);
     }
   }, [izinList]);
+
+  useEffect(() => {
+    const unsub = subscribeIzinMengajarUpdates((items) => {
+      if (Array.isArray(items)) {
+        setLocalIzinList(items);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // Gabungkan izin dari izinList dengan semua data guru yang berstatus Izin di absensi guru
   const allGuruIzinList = useMemo(() => {
