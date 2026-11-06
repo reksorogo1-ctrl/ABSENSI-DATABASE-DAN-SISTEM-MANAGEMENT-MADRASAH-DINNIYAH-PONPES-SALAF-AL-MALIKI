@@ -1,8 +1,30 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Default deny catch-all
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
+    }
+
+    // Connection test document
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // App settings configuration
+    match /sim_app_settings/{configId} {
+      allow read: if isValidId(configId);
+      allow write: if isValidId(configId);
+    }
+
+    // Master data documents (santri, guru, jadwal, absensi, nilai, etc.)
+    match /sim_master_data/{collectionKey} {
+      allow read: if isValidId(collectionKey);
+      allow write: if isValidId(collectionKey);
     }
   }
 }

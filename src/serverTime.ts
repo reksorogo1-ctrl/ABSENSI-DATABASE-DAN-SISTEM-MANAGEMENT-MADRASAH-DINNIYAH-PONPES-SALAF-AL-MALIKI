@@ -371,13 +371,13 @@ export function checkPresensiSchedule(
   const ts1Batas = cfg.jam_tsanawiyah_1_batas_hadir || '08:30';
   const ts2Mulai = cfg.jam_tsanawiyah_2_mulai || '09:45';
   const ts2Batas = cfg.jam_tsanawiyah_2_batas_hadir || '10:15';
-  const tsSelesai = cfg.jam_tsanawiyah_selesai || '12:30';
+  const tsSelesai = cfg.jam_tsanawiyah_selesai || cfg.jam_tsanawiyah_2_selesai || cfg.jam_tsanawiyah_1_selesai || '12:30';
 
   const al1Mulai = cfg.jam_aliyah_1_mulai || '19:00';
   const al1Batas = cfg.jam_aliyah_1_batas_hadir || '19:30';
   const al2Mulai = cfg.jam_aliyah_2_mulai || '21:00';
   const al2Batas = cfg.jam_aliyah_2_batas_hadir || '21:30';
-  const alSelesai = cfg.jam_aliyah_selesai || '23:00';
+  const alSelesai = cfg.jam_aliyah_selesai || cfg.jam_aliyah_2_selesai || cfg.jam_aliyah_1_selesai || '23:00';
 
   const ts1StartSec = timeStringToSeconds(ts1Mulai);
   const ts1BatasSec = timeStringToSeconds(ts1Batas);

@@ -8,7 +8,7 @@ import {
   CreditCard, Wallet, AlertTriangle, Phone, MessageCircle, ArrowDownLeft, ArrowUpRight, Trash2, GraduationCap,
   Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload, Play,
   ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine, MapPin, Compass, Crosshair, Shield, Navigation,
-  Instagram, Youtube, Music2, Globe, Unlock, Menu,
+  Instagram, Youtube, Music2, Globe, Unlock, Menu, Mail,
   Folder, FolderPlus, FolderCheck, CheckSquare, Square, Layers, FileUp, Camera,
   HardDrive, Search, ChevronLeft, History
 } from 'lucide-react';
@@ -19,6 +19,7 @@ import { EditSantriModal } from './EditSantriModal';
 import { TabUjianMuhafadzoh } from './TabUjianMuhafadzoh';
 import { TabUjianBacaKitab } from './TabUjianBacaKitab';
 import { TabUjianKoreksianKitab } from './TabUjianKoreksianKitab';
+import { TabGmail } from './TabGmail';
 import { ModalInputNilaiUjian } from './ModalInputNilaiUjian';
 import { getOrCreateSantriHistory } from '../lib/kenaikanKelasService';
 import { queryPaginatedData } from '../lib/scalableDatabase';
@@ -1761,12 +1762,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleSaveJamPresensi = (e: React.FormEvent) => {
     e.preventDefault();
+    const tsSelesai = jamPresensiForm.jam_tsanawiyah_2_selesai || jamPresensiForm.jam_tsanawiyah_1_selesai || '12:30';
+    const alSelesai = jamPresensiForm.jam_aliyah_2_selesai || jamPresensiForm.jam_aliyah_1_selesai || '23:00';
     const updated = {
       ...settings,
-      ...jamPresensiForm
+      ...jamPresensiForm,
+      jam_tsanawiyah_selesai: tsSelesai,
+      jam_aliyah_selesai: alSelesai
     };
     onSaveSettings(updated);
-    setJamPresensiMsg('Pengaturan jam presensi Tsanawiyah & Aliyah berhasil disimpan!');
+    setJamPresensiMsg('Pengaturan rentang jam presensi Tsanawiyah & Aliyah (WIB) berhasil disimpan dan aktif secara realtime!');
     setTimeout(() => setJamPresensiMsg(''), 4500);
   };
 
@@ -2081,6 +2086,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     intro_video_name: settings.intro_video_name || 'The Journey of Knowledge — Salaf Al-Maliki (Bawaan)',
     password_admin: settings.password_admin || 'salaf123',
     password_option_panel: settings.password_option_panel || 'admin123',
+    email_admin: settings.email_admin || settings.email_pesantren || 'reksorogo1@gmail.com',
 
     // Pengaturan Teks Menyeluruh
     header_title: settings.header_title || settings.judul_aplikasi || 'SIM Pondok Pesantren Salaf Al-Maliki',
@@ -2119,6 +2125,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     link_tiktok: settings.link_tiktok || 'https://tiktok.com/@pesantrensalafalmaliki',
     link_youtube: settings.link_youtube || 'https://youtube.com/@salafalmaliki',
     link_wa: settings.link_wa || 'https://wa.me/6281234567890',
+    email_pesantren: settings.email_pesantren || 'reksorogo1@gmail.com',
     geofencing_locked: settings.geofencing_locked !== false
   });
 
@@ -2132,6 +2139,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       intro_video_url: settings.intro_video_url || localStorage.getItem('sim_intro_video') || 'Camera_moving_through_Islamic_li…_20260925184519.mp4',
       password_admin: settings.password_admin || 'salaf123',
       password_option_panel: settings.password_option_panel || 'admin123',
+      email_admin: settings.email_admin || settings.email_pesantren || 'reksorogo1@gmail.com',
 
       header_title: settings.header_title || settings.judul_aplikasi || 'SIM Pondok Pesantren Salaf Al-Maliki',
       header_subtitle: settings.header_subtitle || settings.login_subtitle || 'Sistem Informasi & Manajemen Santri Madrasah Diniyah Salafiyah',
@@ -2167,6 +2175,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       link_tiktok: settings.link_tiktok || 'https://tiktok.com/@pesantrensalafalmaliki',
       link_youtube: settings.link_youtube || 'https://youtube.com/@salafalmaliki',
       link_wa: settings.link_wa || 'https://wa.me/6281234567890',
+      email_pesantren: settings.email_pesantren || 'reksorogo1@gmail.com',
       geofencing_locked: settings.geofencing_locked !== false
     });
   }, [settings]);
@@ -2686,6 +2695,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               { id: 'nadzhom', label: 'Setoran Nadzhom', icon: BookOpen },
               { id: 'nilai', label: 'Nilai Ujian', icon: Award },
               { id: 'google-sheets', label: 'Google Sheets & Drive', icon: FileSpreadsheet, badge: isGoogleConnected ? 'Sync' : 'Cloud' },
+              { id: 'gmail', label: 'Gmail & Surat Menyurat', icon: Mail, badge: isGoogleConnected ? 'Gmail' : 'Workspace' },
               { id: 'pengaturan', label: 'Option Panel (Pusat Kontrol)', icon: Sliders, badge: 'Password' }
             ].map(tab => {
               const Icon = tab.icon;
@@ -9932,6 +9942,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
+        {/* TAB 8.7: INTEGRASI GMAIL & PUSAT SURAT MENYURAT RESMI */}
+        {activeTab === 'gmail' && (
+          <TabGmail
+            settings={settings}
+            santriList={santriList}
+            guruList={guruList}
+            syahriyahList={syahriyahList}
+            absensiSantriList={absensiSantriList}
+            nilaiList={nilaiList}
+            isGoogleConnected={!!isGoogleConnected}
+            setIsGoogleConnected={setIsGoogleConnected || (() => {})}
+          />
+        )}
+
         {/* TAB 9: OPTION PANEL (PUSAT KONTROL SELURUH FITUR & VISUAL APLIKASI DENGAN PASSWORD KHUSUS) */}
         {activeTab === 'pengaturan' && (
           <div className="card-3d rounded-3xl p-5 sm:p-7 backdrop-blur-md space-y-6">
@@ -14297,6 +14321,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           Nomor atau tautan direct chat WhatsApp untuk layanan bantuan santri dan wali santri.
                         </p>
                       </div>
+
+                      {/* 5. Email Resmi Pesantren (Gmail Workspace) */}
+                      <div className="card-3d-deep p-4 rounded-xl space-y-2 border border-amber-500/40 bg-[#031d13]">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs font-bold text-[#fde047]">
+                            <Mail className="w-4 h-4 text-[#fde047]" />
+                            <span>5. Email Resmi Pesantren (Gmail & Google Workspace)</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('gmail')}
+                            className="px-2.5 py-0.5 rounded-lg bg-[#d4af37]/20 text-[#fef08a] hover:bg-[#d4af37] hover:text-black text-[10px] font-bold flex items-center gap-1 transition border border-[#d4af37]/40"
+                          >
+                            <span>Buka Tab Gmail</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <input
+                          type="email"
+                          value={visualForm.email_pesantren || ''}
+                          onChange={(e) => setVisualForm({ ...visualForm, email_pesantren: e.target.value })}
+                          className="w-full bg-[#052216] border border-amber-500/40 rounded-xl p-2.5 text-xs text-white placeholder:text-emerald-400/30"
+                          placeholder="reksorogo1@gmail.com atau sekretariat@pesantrensalaf.id"
+                        />
+                        <p className="text-[10px] text-emerald-300/80">
+                          Alamat email pengirim resmi untuk notifikasi syahriyah, presensi santri, surat pengumuman, dan raport.
+                        </p>
+                      </div>
                     </div>
 
                     {/* Live Preview Box */}
@@ -14547,6 +14599,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-mono shadow-inner"
                           placeholder="Password proteksi Option Panel..."
                         />
+                      </div>
+
+                      {/* 3. EMAIL GOOGLE ADMIN TERDAFTAR */}
+                      <div className="card-3d-deep p-4 rounded-xl space-y-3 md:col-span-2 border border-emerald-500/40 bg-[#031d12]">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs font-bold text-[#d4af37]">
+                            <Mail className="w-4 h-4 text-[#d4af37]" />
+                            <span>3. Email Google Administrator yang Diizinkan Login</span>
+                          </div>
+                          <span className="text-[10px] text-emerald-300 font-mono px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40">Filter Khusus Admin</span>
+                        </div>
+                        <p className="text-[11px] text-emerald-200/90 leading-relaxed">
+                          Hanya akun Google dengan email yang didaftarkan di sini yang diizinkan masuk melalui tombol <b>"Masuk dengan Google (Khusus Admin)"</b> di halaman login. Akun Google yang tidak terdaftar otomatis ditolak oleh sistem demi keamanan. (Bisa mendaftarkan lebih dari 1 email, pisahkan dengan koma).
+                        </p>
+                        <input
+                          type="text"
+                          value={visualForm.email_admin || ''}
+                          onChange={(e) => setVisualForm({ ...visualForm, email_admin: e.target.value })}
+                          className="w-full bg-[#052216] border border-amber-500/50 rounded-xl p-2.5 text-xs text-white font-mono shadow-inner placeholder:text-emerald-500/30"
+                          placeholder="contoh: reksorogo1@gmail.com, admin@pesantrensalaf.id"
+                        />
+                        <span className="text-[10px] text-emerald-400/80 block">
+                          *Email bawaan terdaftar: reksorogo1@gmail.com. Pengurus dan Wali Santri tetap menggunakan akun login masing-masing.
+                        </span>
                       </div>
                     </div>
 

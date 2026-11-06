@@ -220,7 +220,7 @@ export interface AbsensiGuruRecord {
   ustadzTerjadwalNama?: string;
   ustadzAktualId?: string;
   ustadzAktualNama?: string;
-  tipeAbsensi?: 'Normal' | 'Pengganti';
+  tipeAbsensi?: 'Normal' | 'Pengganti' | 'Izin';
   tanggal: string;
   nama: string; // compatibility with ustadzAktualNama or ustadzTerjadwalNama
   mapel: string;
@@ -268,9 +268,12 @@ export interface IzinMengajarRequest {
   idPengurus?: string;
   namaUstadz: string;
   tanggal: string; // YYYY-MM-DD
+  hari?: string;
   mapel: string;
   kelas: string;
   jamKe?: number | string;
+  jamJadwal?: string;
+  jadwalId?: string;
   alasan: string;
   ustadzPengganti?: string;
   status: 'Menunggu' | 'Disetujui' | 'Ditolak';
@@ -360,6 +363,7 @@ export interface AppSettings {
   background_url?: string;
   password_admin?: string;
   email_admin?: string;
+  email_pesantren?: string;
   password_option_panel?: string;
   tahun_ajaran?: string; // Tahun ajaran aktif, contoh: "2026/2027" atau "1447/1448 H"
   daftar_tahun_ajaran?: string[]; // Daftar tahun ajaran yang dapat diedit di Option Panel

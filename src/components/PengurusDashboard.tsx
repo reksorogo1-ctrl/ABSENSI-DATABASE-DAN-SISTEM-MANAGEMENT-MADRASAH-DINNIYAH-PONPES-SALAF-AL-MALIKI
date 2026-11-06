@@ -714,6 +714,18 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
   // Eksekusi Tombol HADIR NORMAL
   const handleHadirNormal = () => {
+    // Validasi 0: Batasan Jam Presensi Waktu Server Asia/Jakarta (WIB)
+    if (!activeSession.isActive && !settings.bypass_jam_presensi_testing) {
+      setValidationAlertModal({
+        isOpen: true,
+        type: 'outside_hours',
+        title: '⏰ Jam Presensi Ditutup / Di Luar Jadwal',
+        message: `Waktu server Asia/Jakarta (WIB) saat ini adalah ${activeSession.wibTimeStr}. Presensi hanya dapat dilakukan pada rentang jam yang ditentukan oleh Administrator.`,
+        submessage: activeSession.keterangan || 'Presensi otomatis ditolak di luar rentang jam operasional resmi madrasah.'
+      });
+      return;
+    }
+
     // Validasi 1: Geofencing & Lokasi
     if (settings.geofencing_enabled && !geofenceCheck.isValid) {
       setValidationAlertModal({
@@ -826,14 +838,14 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
   // Eksekusi Tombol HADIR SEBAGAI PENGGANTI
   const handleHadirPengganti = () => {
-    // Validasi 1: Waktu Server
-    if (!activeSession.isActive) {
+    // Validasi 1: Waktu Server Asia/Jakarta (WIB)
+    if (!activeSession.isActive && !settings.bypass_jam_presensi_testing) {
       setValidationAlertModal({
         isOpen: true,
         type: 'outside_hours',
         title: '⏰ Di Luar Jam Absensi Pelajaran',
-        message: `Waktu server saat ini adalah ${activeSession.wibTimeStr} WIB. Presensi ustadz pengganti tidak dapat dilakukan di luar jam pelajaran aktif.`,
-        submessage: 'Presensi hanya dibuka pada jendela jam pelajaran yang ditentukan.'
+        message: `Waktu server Asia/Jakarta (WIB) saat ini adalah ${activeSession.wibTimeStr}. Presensi ustadz pengganti tidak dapat dilakukan di luar jam pelajaran aktif.`,
+        submessage: activeSession.keterangan || 'Presensi hanya dibuka pada rentang jam pelajaran yang ditentukan oleh Admin di Option Panel.'
       });
       return;
     }
@@ -1736,6 +1748,17 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                       ) : !myActiveSchedule ? (
                         <div className="w-full max-w-sm text-center p-3 rounded-xl bg-black/40 border border-slate-700/50 text-slate-400 text-xs font-semibold">
                           Tombol Presensi Dinonaktifkan (Tidak Ada Jadwal Mengajar Anda Hari Ini)
+                        </div>
+                      ) : (!activeSession.isActive && !settings.bypass_jam_presensi_testing) ? (
+                        <div className="w-full max-w-md text-center p-3.5 rounded-2xl bg-amber-950/50 border border-amber-500/50 text-amber-200 text-xs font-semibold space-y-1.5 shadow-xl">
+                          <div className="flex items-center justify-center gap-2 font-black text-amber-300 uppercase tracking-wide">
+                            <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                            <span>Presensi Nonaktif (Di Luar Jam Resmi)</span>
+                          </div>
+                          <p className="text-[11px] text-amber-200/90 leading-tight">
+                            Waktu server: <span className="font-mono font-bold text-amber-300">{activeSession.wibTimeStr}</span>.<br />
+                            {activeSession.jadwalBerikutnya ? `Sesi berikutnya: ${activeSession.jadwalBerikutnya.label} (${activeSession.jadwalBerikutnya.jamMulai} - ${activeSession.jadwalBerikutnya.sisaWaktuText})` : 'Presensi otomatis aktif sesuai jam pelajaran resmi madrasah.'}
+                          </p>
                         </div>
                       ) : (
                         <button

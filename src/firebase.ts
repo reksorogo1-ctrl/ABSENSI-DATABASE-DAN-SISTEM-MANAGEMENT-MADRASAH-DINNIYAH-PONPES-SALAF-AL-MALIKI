@@ -12,26 +12,30 @@ import {
   doc, 
   setDoc, 
   getDoc, 
-  onSnapshot 
+  onSnapshot,
+  getDocFromServer 
 } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import firebaseConfig from '../firebase-applet-config.json';
 
-export const safeFirebaseConfig = {
-  apiKey: "AIzaSyAsM1VRXNPExGNW75N9yl76z4qfY-cB748",
-  authDomain: "absensi-data-santri.firebaseapp.com",
-  projectId: "absensi-data-santri",
-  storageBucket: "absensi-data-santri.firebasestorage.app",
-  messagingSenderId: "220606876180",
-  appId: "1:220606876180:web:e6287820b325ed51e6b501",
-  firestoreDatabaseId: "ai-studio-absensidatabased-62fd9012-6580-4225-a96d-30d9ad0cca06"
-};
-
-export const firebaseConfig = safeFirebaseConfig;
-
+export const safeFirebaseConfig = firebaseConfig;
+export { firebaseConfig };
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const storage = getStorage(app, firebaseConfig.storageBucket ? `gs://${firebaseConfig.storageBucket}` : undefined);
+
+// Validate Connection to Firestore on startup
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error("Please check your Firebase configuration.");
+    }
+  }
+}
+testConnection();
 
 export function isMobileDevice(): boolean {
   if (typeof window === 'undefined') return false;

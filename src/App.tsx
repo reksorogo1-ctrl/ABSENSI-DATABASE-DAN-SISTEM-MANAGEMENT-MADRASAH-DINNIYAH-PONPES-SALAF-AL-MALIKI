@@ -38,7 +38,9 @@ import {
   broadcastAttendanceUpdate,
   subscribeAttendanceUpdates,
   broadcastScheduleUpdate,
-  subscribeScheduleUpdates
+  subscribeScheduleUpdates,
+  getServerTime,
+  checkPresensiSchedule
 } from './serverTime';
 import { AdminDashboard } from './components/AdminDashboard';
 import { WaliSantriPortal } from './components/WaliSantriPortal';
@@ -127,6 +129,31 @@ export function syncPengurusWithGuru(currentPengurus: Pengurus[], currentGuruLis
       tugasUtama: `Pengajar Fan ${guru.mapel || 'Kitab'} & Pembina Santri`
     };
   });
+}
+
+export function isAuthorizedAdminEmail(candidateEmail: string | undefined | null, currentSettings: AppSettings): boolean {
+  if (!candidateEmail) return false;
+  const cleanCandidate = candidateEmail.trim().toLowerCase();
+
+  const allowedSet = new Set<string>();
+  const rawList = [
+    currentSettings.email_admin,
+    currentSettings.email_pesantren,
+    'reksorogo1@gmail.com'
+  ];
+
+  rawList.forEach(item => {
+    if (typeof item === 'string') {
+      item.split(/[,;\s]+/).forEach(part => {
+        const c = part.trim().toLowerCase();
+        if (c && c.includes('@')) {
+          allowedSet.add(c);
+        }
+      });
+    }
+  });
+
+  return allowedSet.has(cleanCandidate);
 }
 
 export default function App() {
@@ -432,6 +459,13 @@ export default function App() {
         const email = res?.user?.email || '';
 
         if (email || res?.user) {
+          if (!isAuthorizedAdminEmail(email, settings)) {
+            console.warn('Redirect login ditolak: Akun Google bukan admin terdaftar:', email);
+            await logoutGoogle();
+            setLoginError(`Akses Ditolak: Akun Google "${email}" belum didaftarkan sebagai Admin di Option Panel.`);
+            return;
+          }
+
           console.info('Login redirect sukses di HP, memulihkan sesi admin:', email);
           setIsGoogleConnected(true);
           setShowDoors(true);
@@ -808,30 +842,19 @@ export default function App() {
 
   const handleGoogleLoginFlow = async () => {
     try {
-      // Jika dibuka di dalam Web App PWA (Layar Utama HP), cegah redirect keluar agar PWA tidak restart
-      if (isStandaloneApp()) {
-        console.info('Lingkungan PWA Web App terdeteksi: Masuk langsung sebagai Admin tanpa redirect');
-        setShowDoors(true);
-        const newSession: AuthSession = {
-          role: 'admin',
-          identifier: 'admin_webapp'
-        };
-        setSession(newSession);
-        localStorage.setItem('sim_auth_session', JSON.stringify(newSession));
-        return;
-      }
+      setLoginError('');
 
-      if (isMobileDevice()) {
-        console.info('Lingkungan browser HP terdeteksi: menjalankan signInWithRedirect agar popup tidak diblokir/restart...');
+      if (isMobileDevice() && !isStandaloneApp()) {
+        console.info('Lingkungan browser HP terdeteksi: menjalankan signInWithRedirect...');
         await signInWithGoogleFirebase(true);
         return;
       }
 
-      // Pada Laptop/Desktop, coba Popup dengan fallback Redirect jika popup terblokir
-      let fbEmail = '';
+      // Pada Laptop/Desktop atau PWA standalone, coba Popup
+      let candidateEmail = '';
       try {
         const fbUser = await signInWithGoogleFirebase();
-        if (fbUser) fbEmail = fbUser.email || '';
+        if (fbUser) candidateEmail = fbUser.email || '';
       } catch (fbErr: any) {
         if (fbErr?.code === 'auth/popup-blocked') {
           console.warn('Popup terblokir, mengalihkan ke signInWithRedirect...');
@@ -842,19 +865,38 @@ export default function App() {
       }
 
       const res = await googleSignIn();
-      if (res?.user || fbEmail) {
-        setIsGoogleConnected(true);
-        setShowDoors(true);
-        const newSession: AuthSession = {
-          role: 'admin',
-          identifier: fbEmail || res?.user?.email || res?.user?.displayName || 'admin_google'
-        };
-        setSession(newSession);
-        localStorage.setItem('sim_auth_session', JSON.stringify(newSession));
+      if (!candidateEmail && res?.user?.email) {
+        candidateEmail = res.user.email;
       }
+
+      if (!candidateEmail) {
+        throw new Error('Tidak dapat mendeteksi email dari akun Google yang dipilih.');
+      }
+
+      // Validasi Khusus Admin: Hanya email Admin yang didaftarkan melalui Option Panel yang boleh login
+      if (!isAuthorizedAdminEmail(candidateEmail, settings)) {
+        await logoutGoogle();
+        const errNotice = `Akses Ditolak: Akun Google "${candidateEmail}" belum didaftarkan sebagai Admin di Option Panel. Hanya email Admin terdaftar yang diizinkan masuk.`;
+        setLoginError(errNotice);
+        alert(errNotice);
+        return;
+      }
+
+      setIsGoogleConnected(true);
+      setShowDoors(true);
+      const newSession: AuthSession = {
+        role: 'admin',
+        identifier: candidateEmail
+      };
+      setSession(newSession);
+      localStorage.setItem('sim_auth_session', JSON.stringify(newSession));
     } catch (e: any) {
       console.error('Google sign in error:', e);
-      alert(e?.message || 'Gagal login dengan akun Google.');
+      if (e?.code !== 'auth/popup-closed-by-user' && e?.code !== 'auth/cancelled-popup-request') {
+        const msg = e?.message || 'Gagal login dengan akun Google.';
+        setLoginError(msg);
+        alert(msg);
+      }
     }
   };
 
@@ -978,9 +1020,18 @@ export default function App() {
   };
 
   const handleSaveAbsensiGuru = async (records: AbsensiGuruRecord[]) => {
+    // Validasi Pembatasan Jam Presensi Waktu Server Asia/Jakarta (WIB) untuk Pengurus
+    if (session?.role === 'pengurus' && !settings.bypass_jam_presensi_testing) {
+      const currentCheck = checkPresensiSchedule(getServerTime(), { settings });
+      if (!currentCheck.isActive) {
+        alert(`Presensi Ditolak: Saat ini berada di luar rentang jam absensi resmi (${currentCheck.wibTimeStr}). Presensi hanya dapat dilakukan pada jam yang ditentukan oleh Admin.`);
+        return;
+      }
+    }
+
     setAbsensiGuruList(prev => {
-      const keys = new Set(records.map(r => `${r.tanggal}_${r.nama}_${r.kelas}_${r.jamKe}`));
-      const filtered = prev.filter(p => !keys.has(`${p.tanggal}_${p.nama}_${p.kelas}_${p.jamKe}`));
+      const keys = new Set(records.map(r => `${r.tanggal}_${r.nama.toLowerCase().trim()}_${r.kelas}_${r.jamKe}`));
+      const filtered = prev.filter(p => !keys.has(`${p.tanggal}_${p.nama.toLowerCase().trim()}_${p.kelas}_${p.jamKe}`));
       const updated = [...records, ...filtered];
       try {
         localStorage.setItem('sim_absensi_guru', JSON.stringify(updated));
@@ -1528,15 +1579,15 @@ export default function App() {
     const target = izinMengajarList.find(i => i.id === requestId);
     if (!target) return;
 
-    const finalPengganti = ustadzPengganti || target.ustadzPengganti || 'Ust. Pengganti';
+    const finalPengganti = (ustadzPengganti || target.ustadzPengganti || '').trim();
 
     const updatedIzinList = izinMengajarList.map(item => {
       if (item.id === requestId) {
         return {
           ...item,
           status,
-          ustadzPengganti: finalPengganti,
-          catatanAdmin: catatanAdmin || (status === 'Disetujui' ? `Disetujui Admin. Pengganti: ${finalPengganti}` : 'Permohonan ditolak oleh Admin.')
+          ustadzPengganti: finalPengganti || undefined,
+          catatanAdmin: catatanAdmin || (status === 'Disetujui' ? `Disetujui Admin. Pengganti: ${finalPengganti || 'Tidak ada'}` : 'Permohonan ditolak oleh Admin.')
         };
       }
       return item;
@@ -1545,42 +1596,92 @@ export default function App() {
     setIzinMengajarList(updatedIzinList);
     localStorage.setItem('sim_izin_mengajar', JSON.stringify(updatedIzinList));
 
-    // KETIKA ADMIN MENYETUJUI STATUS KEHADIRAN PADA ABSENSI USTADZ USTADZAH LANGSUNG MENJADI IZIN DAN SEBELAHNYA ADA NAMA USTAD PENGANTINYA!
+    // OTOMATISASI IZIN DAN PENGURUS PENGGANTI:
+    // 1. Pengurus/Ustadz yang izin otomatis tercatat IZIN
+    // 2. Pengurus yang menggantikan otomatis tercatat HADIR
+    // 3. Masuk ke rekapan absensi guru dashboard Admin secara instan tanpa duplikasi
     if (status === 'Disetujui') {
-      const existingIdx = absensiGuruList.findIndex(a => 
-        a.nama.toLowerCase().trim() === target.namaUstadz.toLowerCase().trim() &&
-        a.tanggal === target.tanggal
+      const recordsToSave: AbsensiGuruRecord[] = [];
+      const hariName = target.hari || (target.tanggal ? new Date(target.tanggal).toLocaleDateString('id-ID', { weekday: 'long' }).toUpperCase() : 'HARI INI');
+
+      // 1. Catat Pengurus/Ustadz Izin
+      const izinRecord: AbsensiGuruRecord = {
+        id: `ABS-G-IZIN-${target.id}`,
+        absensiId: `ABS-G-IZIN-${target.id}`,
+        jadwalId: target.jadwalId || `${target.kelas}_${target.mapel}_${target.jamKe || 1}`,
+        ustadzTerjadwalNama: target.namaUstadz,
+        ustadzAktualNama: finalPengganti || target.namaUstadz,
+        ustadzPengganti: finalPengganti || undefined,
+        tipeAbsensi: 'Izin',
+        tanggal: target.tanggal,
+        nama: target.namaUstadz,
+        mapel: target.mapel,
+        kelas: target.kelas,
+        status: 'Izin',
+        alasanIzin: target.alasan,
+        catatan: `Izin resmi disetujui Admin: ${target.alasan}${finalPengganti ? `. Digantikan oleh: ${finalPengganti}` : ''}`,
+        hari: hariName,
+        jamKe: target.jamKe || 1,
+        jamJadwal: target.jamJadwal || '08:00 WIB',
+        waktu: target.jamJadwal || '08:00 WIB',
+        statusPersetujuan: 'Disetujui'
+      };
+      recordsToSave.push(izinRecord);
+
+      // 2. Catat Pengurus Pengganti HADIR
+      const hasValidPengganti = Boolean(
+        finalPengganti && 
+        !['-', 'tidak ada', 'belum ada', 'none', 'nihil', 'tidak'].includes(finalPengganti.toLowerCase())
       );
 
-      let updatedAbsensi: AbsensiGuruRecord[];
-      if (existingIdx >= 0) {
-        updatedAbsensi = [...absensiGuruList];
-        updatedAbsensi[existingIdx] = {
-          ...updatedAbsensi[existingIdx],
-          status: 'Izin',
+      if (hasValidPengganti) {
+        const penggantiRecord: AbsensiGuruRecord = {
+          id: `ABS-G-SUB-${target.id}`,
+          absensiId: `ABS-G-SUB-${target.id}`,
+          jadwalId: target.jadwalId || `${target.kelas}_${target.mapel}_${target.jamKe || 1}`,
+          ustadzTerjadwalNama: target.namaUstadz,
+          ustadzAktualNama: finalPengganti,
           ustadzPengganti: finalPengganti,
-          alasanIzin: target.alasan,
-          catatan: `Izin tidak mengajar disetujui: ${target.alasan}. Pengganti: ${finalPengganti}`
-        };
-      } else {
-        const newRec: AbsensiGuruRecord = {
+          tipeAbsensi: 'Pengganti',
           tanggal: target.tanggal,
-          nama: target.namaUstadz,
+          nama: finalPengganti,
           mapel: target.mapel,
           kelas: target.kelas,
-          status: 'Izin',
-          catatan: `Izin tidak mengajar disetujui: ${target.alasan}. Pengganti: ${finalPengganti}`,
-          hari: new Date(target.tanggal).toLocaleDateString('id-ID', { weekday: 'long' }).toUpperCase(),
+          status: 'Hadir',
+          alasanPenggantian: target.alasan,
+          catatan: `Hadir Sebagai Pengganti Resmi: ${target.namaUstadz} (Mapel: ${target.mapel} - ${target.kelas})`,
+          hari: hariName,
           jamKe: target.jamKe || 1,
-          waktu: '08:00 - Selesai',
-          ustadzPengganti: finalPengganti,
-          alasanIzin: target.alasan
+          jamJadwal: target.jamJadwal || '08:00 WIB',
+          waktu: target.jamJadwal || '08:00 WIB',
+          statusPersetujuan: 'Disetujui'
         };
-        updatedAbsensi = [newRec, ...absensiGuruList];
+        recordsToSave.push(penggantiRecord);
       }
 
-      setAbsensiGuruList(updatedAbsensi);
-      localStorage.setItem('sim_absensi_guru', JSON.stringify(updatedAbsensi));
+      setAbsensiGuruList(prev => {
+        const keysToReplace = new Set(recordsToSave.map(r => `${r.tanggal}_${r.nama.toLowerCase().trim()}_${r.kelas}_${r.jamKe}`));
+        const filtered = prev.filter(p => !keysToReplace.has(`${p.tanggal}_${p.nama.toLowerCase().trim()}_${p.kelas}_${p.jamKe}`));
+        const merged = [...recordsToSave, ...filtered];
+        try {
+          localStorage.setItem('sim_absensi_guru', JSON.stringify(merged));
+          saveMasterDataToFirestore('absensi_guru', merged);
+        } catch (e) {
+          console.warn('Gagal simpan absensi guru Firestore:', e);
+        }
+        return merged;
+      });
+
+      // Broadcast update secara real-time ke Dashboard Admin & Tab Jadwal
+      broadcastAttendanceUpdate('guru', recordsToSave, 'Admin');
+
+      if (isGoogleConnected) {
+        try {
+          sheetsService.saveAbsensiGuruToSheet(recordsToSave);
+        } catch (err) {
+          console.warn('Could not write directly to sheets:', err);
+        }
+      }
     }
   };
 
