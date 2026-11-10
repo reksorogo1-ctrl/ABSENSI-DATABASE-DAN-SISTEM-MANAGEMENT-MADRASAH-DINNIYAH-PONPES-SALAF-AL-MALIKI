@@ -3,7 +3,7 @@ import {
   Users, UserCheck, Calendar, BookOpen, Award, Sliders, LogOut, RefreshCw, 
   Clock, Database, Save, CheckCircle2, ChevronRight, BarChart3, TrendingUp, Filter,
   Lock, KeyRound, ShieldAlert, PlusCircle, Image, Palette, Eye, ArrowRight,
-  Settings2, ToggleLeft, ToggleRight, Sparkles, Check, PieChart as PieChartIcon,
+  Settings, Settings2, ToggleLeft, ToggleRight, Sparkles, Check, PieChart as PieChartIcon,
   Type, Megaphone, Copy, FileSpreadsheet, Newspaper, CheckCheck, RotateCcw,
   CreditCard, Wallet, AlertTriangle, Phone, MessageCircle, ArrowDownLeft, ArrowUpRight, Trash2, GraduationCap,
   Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload, Play,
@@ -94,7 +94,7 @@ interface AdminDashboardProps {
   onSaveNilai: (nilai: NilaiUjianRecord) => void;
   onSaveBatchNilai?: (records: NilaiUjianRecord[]) => void;
   onSaveSettings: (settings: AppSettings) => void;
-  onSaveDashboardAndReset: () => void;
+  onSaveDashboardAndReset: (resetAllLogs?: boolean) => void;
   onUpdateSantriProfile?: (updatedSantri: Santri, oldId?: string) => void;
   onBatchUpdateSantri?: (updatedList: Santri[], updatedSettings?: Partial<AppSettings>) => void;
   onSaveSyahriyah?: (record: SyahriyahRecord) => void;
@@ -110,6 +110,7 @@ interface AdminDashboardProps {
   onSaveUjianSantri?: (record: UjianSantriRecord) => void;
   onApproveIzinMengajar?: (id: string, ustadzPengganti: string, status: 'Disetujui' | 'Ditolak', catatan?: string) => void;
   onSubmitIzinMengajar?: (req: IzinMengajarRequest) => void;
+  onDeleteIzinMengajar?: (id: string) => void;
   onDeleteSantri?: (id: string) => void;
   sheetsService?: any;
   isGoogleConnected?: boolean;
@@ -179,6 +180,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onSaveUjianSantri,
   onApproveIzinMengajar,
   onSubmitIzinMengajar,
+  onDeleteIzinMengajar,
   onDeleteSantri,
   onTestIntro
 }) => {
@@ -447,6 +449,240 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       } catch {}
       return updated;
     });
+  };
+
+  // State Dialog Konfirmasi Reset Rekapan ke Nol (0)
+  const [showResetConfirmModal, setShowResetConfirmModal] = useState<boolean>(false);
+
+  // State Modal Revisi Rekap Bulanan (Santri & Guru)
+  const [editingRevisiSantri, setEditingRevisiSantri] = useState<{
+    id: string;
+    nama: string;
+    kelas: string;
+    bulan: string;
+    hadir: number;
+    izin: number;
+    sakit: number;
+    alpha: number;
+  } | null>(null);
+
+  const [editingRevisiGuru, setEditingRevisiGuru] = useState<{
+    nama: string;
+    mapel: string;
+    kelas: string;
+    bulan: string;
+    hadir: number;
+    izin: number;
+    sakitTelat: number;
+    alpha: number;
+  } | null>(null);
+
+  // Handler Reset Rekapan ke Nol
+  const handleExecuteReset = (resetAllLogs: boolean = false) => {
+    if (resetAllLogs) {
+      setRekapSantriLog([]);
+      setRekapGuruLog([]);
+      try {
+        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify([]));
+        localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify([]));
+      } catch {}
+    }
+    if (onSaveDashboardAndReset) {
+      onSaveDashboardAndReset(resetAllLogs);
+    }
+    setShowResetConfirmModal(false);
+  };
+
+  // Handler Revisi Rekap Santri (Simpan jumlah Hadir, Izin, Sakit, Alpha)
+  const handleSaveRevisiSantri = (rev: {
+    id: string;
+    nama: string;
+    kelas: string;
+    bulan: string;
+    hadir: number;
+    izin: number;
+    sakit: number;
+    alpha: number;
+  }) => {
+    const parts = rev.bulan.trim().split(/\s+/);
+    const monthNames = [
+      'januari', 'februari', 'maret', 'april', 'mei', 'juni',
+      'juli', 'agustus', 'september', 'oktober', 'november', 'desember'
+    ];
+    const monthIdx = monthNames.findIndex(m => parts[0].toLowerCase().startsWith(m.slice(0, 3)));
+    const targetYear = parseInt(parts[1], 10) || new Date().getFullYear();
+    const targetMonth = monthIdx !== -1 ? monthIdx + 1 : (new Date().getMonth() + 1);
+    const mm = String(targetMonth).padStart(2, '0');
+
+    const newRecords: AbsensiSantriRecord[] = [];
+    let day = 1;
+    const makeDate = (d: number) => `${targetYear}-${mm}-${String(Math.min(28, d)).padStart(2, '0')}`;
+
+    for (let i = 0; i < rev.hadir; i++) {
+      newRecords.push({
+        tanggal: makeDate(day++),
+        idSantri: rev.id,
+        nama: rev.nama,
+        kelas: rev.kelas,
+        status: 'Hadir',
+        keterangan: 'Revisi Rekap Kehadiran (Admin)'
+      });
+    }
+    for (let i = 0; i < rev.izin; i++) {
+      newRecords.push({
+        tanggal: makeDate(day++),
+        idSantri: rev.id,
+        nama: rev.nama,
+        kelas: rev.kelas,
+        status: 'Izin',
+        keterangan: 'Revisi Rekap Izin (Admin)'
+      });
+    }
+    for (let i = 0; i < rev.sakit; i++) {
+      newRecords.push({
+        tanggal: makeDate(day++),
+        idSantri: rev.id,
+        nama: rev.nama,
+        kelas: rev.kelas,
+        status: 'Sakit',
+        keterangan: 'Revisi Rekap Sakit (Admin)'
+      });
+    }
+    for (let i = 0; i < rev.alpha; i++) {
+      newRecords.push({
+        tanggal: makeDate(day++),
+        idSantri: rev.id,
+        nama: rev.nama,
+        kelas: rev.kelas,
+        status: 'Alpha',
+        keterangan: 'Revisi Rekap Alpha (Admin)'
+      });
+    }
+
+    const updatedRekap = rekapSantriLog.filter(r => {
+      const isThisSantri = (r.idSantri && r.idSantri === rev.id) || r.nama.trim().toLowerCase() === rev.nama.trim().toLowerCase();
+      const inMonth = isDateInSelectedMonth(r.tanggal, rev.bulan);
+      return !(isThisSantri && inMonth);
+    });
+
+    const finalRekap = [...newRecords, ...updatedRekap];
+    setRekapSantriLog(finalRekap);
+    try {
+      localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(finalRekap));
+    } catch {}
+
+    if (onSaveAbsensiSantri) {
+      const updatedLive = absensiSantriList.filter(r => {
+        const isThisSantri = (r.idSantri && r.idSantri === rev.id) || r.nama.trim().toLowerCase() === rev.nama.trim().toLowerCase();
+        const inMonth = isDateInSelectedMonth(r.tanggal, rev.bulan);
+        return !(isThisSantri && inMonth);
+      });
+      onSaveAbsensiSantri(updatedLive);
+    }
+
+    setEditingRevisiSantri(null);
+  };
+
+  // Handler Revisi Rekap Guru (Simpan jumlah Hadir, Izin, SakitTelat, Alpha)
+  const handleSaveRevisiGuru = (rev: {
+    nama: string;
+    mapel: string;
+    kelas: string;
+    bulan: string;
+    hadir: number;
+    izin: number;
+    sakitTelat: number;
+    alpha: number;
+  }) => {
+    const parts = rev.bulan.trim().split(/\s+/);
+    const monthNames = [
+      'januari', 'februari', 'maret', 'april', 'mei', 'juni',
+      'juli', 'agustus', 'september', 'oktober', 'november', 'desember'
+    ];
+    const monthIdx = monthNames.findIndex(m => parts[0].toLowerCase().startsWith(m.slice(0, 3)));
+    const targetYear = parseInt(parts[1], 10) || new Date().getFullYear();
+    const targetMonth = monthIdx !== -1 ? monthIdx + 1 : (new Date().getMonth() + 1);
+    const mm = String(targetMonth).padStart(2, '0');
+
+    const newRecords: AbsensiGuruRecord[] = [];
+    let day = 1;
+    const makeDate = (d: number) => `${targetYear}-${mm}-${String(Math.min(28, d)).padStart(2, '0')}`;
+
+    for (let i = 0; i < rev.hadir; i++) {
+      newRecords.push({
+        tanggal: makeDate(day++),
+        nama: rev.nama,
+        mapel: rev.mapel,
+        kelas: rev.kelas,
+        status: 'Hadir',
+        catatan: 'Revisi Rekap Mengajar (Admin)',
+        hari: 'SENIN',
+        jamKe: 1,
+        waktu: '08:00 - 09:00'
+      });
+    }
+    for (let i = 0; i < rev.izin; i++) {
+      newRecords.push({
+        tanggal: makeDate(day++),
+        nama: rev.nama,
+        mapel: rev.mapel,
+        kelas: rev.kelas,
+        status: 'Izin',
+        catatan: 'Revisi Rekap Izin (Admin)',
+        hari: 'SENIN',
+        jamKe: 1,
+        waktu: '08:00 - 09:00'
+      });
+    }
+    for (let i = 0; i < rev.sakitTelat; i++) {
+      newRecords.push({
+        tanggal: makeDate(day++),
+        nama: rev.nama,
+        mapel: rev.mapel,
+        kelas: rev.kelas,
+        status: 'Terlambat',
+        catatan: 'Revisi Rekap Sakit/Telat (Admin)',
+        hari: 'SENIN',
+        jamKe: 1,
+        waktu: '08:00 - 09:00'
+      });
+    }
+    for (let i = 0; i < rev.alpha; i++) {
+      newRecords.push({
+        tanggal: makeDate(day++),
+        nama: rev.nama,
+        mapel: rev.mapel,
+        kelas: rev.kelas,
+        status: 'Alpha',
+        catatan: 'Revisi Rekap Alpha (Admin)',
+        hari: 'SENIN',
+        jamKe: 1,
+        waktu: '08:00 - 09:00'
+      });
+    }
+
+    const updatedRekap = rekapGuruLog.filter(r => {
+      const isThisGuru = r.nama.trim().toLowerCase() === rev.nama.trim().toLowerCase();
+      const inMonth = isDateInSelectedMonth(r.tanggal, rev.bulan);
+      return !(isThisGuru && inMonth);
+    });
+
+    const finalRekap = [...newRecords, ...updatedRekap];
+    setRekapGuruLog(finalRekap);
+    try {
+      localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(finalRekap));
+    } catch {}
+
+    if (onSaveAbsensiGuru) {
+      const updatedLive = absensiGuruList.filter(r => {
+        const isThisGuru = r.nama.trim().toLowerCase() === rev.nama.trim().toLowerCase();
+        const inMonth = isDateInSelectedMonth(r.tanggal, rev.bulan);
+        return !(isThisGuru && inMonth);
+      });
+      onSaveAbsensiGuru(updatedLive);
+    }
+
+    setEditingRevisiGuru(null);
   };
 
   // Filter Tipe Kehadiran Ustadz: SEMUA | NORMAL | PENGGANTI | TERLAMBAT | BELUM HADIR | BERHALANGAN
@@ -2840,6 +3076,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <Sliders className="w-3.5 h-3.5 text-black" />
               <span>Buka Option Panel</span>
             </button>
+
+            <button
+              onClick={() => setShowResetConfirmModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-950/90 via-rose-950/90 to-amber-950/90 border border-red-500/70 hover:border-red-400 text-red-200 hover:text-white font-extrabold text-xs flex items-center gap-1.5 shadow-lg transition hover:scale-[1.02] active:scale-[0.98]"
+              title="Reset seluruh rekapan dan kembalikan angka ke nol (0)"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-amber-300" />
+              <span>Reset Rekapan (0)</span>
+            </button>
           </div>
         </header>
 
@@ -3494,9 +3739,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   </button>
                                 </div>
                               ) : (
-                                <span className="text-[11px] text-slate-400 font-mono">
-                                  {item.catatanAdmin || 'Selesai diproses'}
-                                </span>
+                                <div className="flex items-center justify-center gap-2">
+                                  <span className="text-[11px] text-slate-400 font-mono">
+                                    {item.catatanAdmin || 'Selesai diproses'}
+                                  </span>
+                                  {item.status === 'Disetujui' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (window.confirm(`Hapus permohonan izin untuk ${item.namaUstadz} (${item.tanggal}) yang telah disetujui? Data izin dan absensi pengganti terkait akan dibatalkan.`)) {
+                                          if (onDeleteIzinMengajar) {
+                                            onDeleteIzinMengajar(item.id);
+                                          }
+                                          setLocalIzinList(prev => prev.filter(i => i.id !== item.id));
+                                          alert(`Izin ${item.namaUstadz} berhasil dihapus.`);
+                                        }
+                                      }}
+                                      className="px-2 py-1 bg-red-950/90 hover:bg-red-800 border border-red-500/60 text-red-200 hover:text-white font-bold text-[10px] rounded-lg transition shadow flex items-center gap-1 shrink-0"
+                                      title="Hapus data izin yang telah disetujui"
+                                    >
+                                      <Trash2 className="w-3 h-3 text-red-400" />
+                                      <span>Hapus Izin</span>
+                                    </button>
+                                  )}
+                                </div>
                               )}
                             </td>
                           </tr>
@@ -3825,22 +4091,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </button>
 
                     <button
-                      onClick={() => {
-                        if (dashboardRekapTab === 'santri') {
-                          const headers = ['NO', 'NIS', 'NAMA SANTRI', 'KELAS', `HADIR (${selectedBulanSantri})`, 'IZIN', 'SAKIT', 'ALPHA', 'PERSENTASE', 'KETERANGAN'];
-                          const rows = rekapBulananSantri.map((s, idx) => [idx + 1, s.id, s.nama, s.kelas, `${s.hadir} kali`, `${s.izin} kali`, `${s.sakit} kali`, `${s.alpha} kali`, `${s.persentase}%`, s.keterangan]);
-                          downloadWord(`Rekap_Bulanan_Santri_${selectedBulanSantri.replace(' ', '_')}`, `REKAPITULASI KEHADIRAN SANTRI BULANAN (${selectedBulanSantri.toUpperCase()})`, headers, rows);
-                        } else {
-                          const headers = ['NO', 'NAMA USTADZ', 'MAPEL', 'KELAS', 'TOTAL SESI', `HADIR (${selectedBulanGuru})`, 'IZIN', 'SAKIT/TELAT', 'ALPHA', 'PERSENTASE', 'PREDIKAT'];
-                          const rows = rekapBulananGuru.map((g, idx) => [idx + 1, g.nama, g.mapel, g.kelas, `${g.totalSesi} sesi`, `${g.hadir} kali`, `${g.izin} kali`, `${g.sakitTelat} kali`, `${g.alpha} kali`, `${g.persentase}%`, g.predikat]);
-                          downloadWord(`Rekap_Bulanan_Guru_${selectedBulanGuru.replace(' ', '_')}`, `REKAPITULASI KEHADIRAN USTADZ/GURU BULANAN (${selectedBulanGuru.toUpperCase()})`, headers, rows);
-                        }
-                      }}
-                      className="px-3 py-2 rounded-xl bg-blue-950/80 border border-blue-500/50 text-blue-200 font-bold text-xs flex items-center gap-1 hover:bg-blue-900 transition shadow"
-                      title="Unduh Dokumen Microsoft Word"
+                      onClick={() => setShowResetConfirmModal(true)}
+                      className="px-3 py-2 rounded-xl bg-red-950/90 border border-red-500/60 hover:bg-red-900 text-red-200 hover:text-white font-extrabold text-xs flex items-center gap-1.5 transition shadow"
+                      title="Reset seluruh rekapan presensi ke nol (0)"
                     >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Word (.doc)</span>
+                      <RotateCcw className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Reset Rekapan (0)</span>
                     </button>
                   </div>
                 </div>
@@ -3909,7 +4165,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {/* Tampilan Tabel Rekap Santri */}
               {dashboardRekapTab === 'santri' && (
                 <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
-                  <table className="w-full text-xs text-left min-w-[760px]">
+                  <table className="w-full text-xs text-left min-w-[820px]">
                     <thead className="bg-[#042013] text-[#d4af37]">
                       <tr>
                         <th className="p-3 w-12 text-center">NO</th>
@@ -3922,6 +4178,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <th className="p-3 w-20 text-center text-red-300 bg-red-950/30">ALPHA</th>
                         <th className="p-3 w-28 text-center text-[#d4af37]">PERSENTASE</th>
                         <th className="p-3 w-28 text-center">EVALUASI</th>
+                        <th className="p-3 w-28 text-center text-amber-300">AKSI / SETTING</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#d4af37]/10 bg-[#02130b]">
@@ -3946,6 +4203,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               {s.keterangan}
                             </span>
                           </td>
+                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setEditingRevisiSantri({
+                                id: s.id,
+                                nama: s.nama,
+                                kelas: s.kelas,
+                                bulan: selectedBulanSantri,
+                                hadir: s.hadir,
+                                izin: s.izin,
+                                sakit: s.sakit,
+                                alpha: s.alpha
+                              })}
+                              className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 mx-auto transition shadow hover:scale-105"
+                              title={`Atur / Revisi Rekap Kehadiran ${s.nama}`}
+                            >
+                              <Settings className="w-3.5 h-3.5" />
+                              <span>Setting</span>
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -3956,7 +4233,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {/* Tampilan Tabel Rekap Guru */}
               {dashboardRekapTab === 'guru' && (
                 <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/25">
-                  <table className="w-full text-xs text-left min-w-[780px]">
+                  <table className="w-full text-xs text-left min-w-[840px]">
                     <thead className="bg-[#042013] text-[#d4af37]">
                       <tr>
                         <th className="p-3 w-12 text-center">NO</th>
@@ -3969,6 +4246,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <th className="p-3 w-20 text-center text-red-300 bg-red-950/30">ALPHA</th>
                         <th className="p-3 w-28 text-center text-[#d4af37]">PERSENTASE</th>
                         <th className="p-3 w-28 text-center">PREDIKAT</th>
+                        <th className="p-3 w-28 text-center text-amber-300">AKSI / SETTING</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#d4af37]/10 bg-[#02130b]">
@@ -3992,6 +4270,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             }`}>
                               {g.predikat}
                             </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setEditingRevisiGuru({
+                                nama: g.nama,
+                                mapel: g.mapel,
+                                kelas: g.kelas,
+                                bulan: selectedBulanGuru,
+                                hadir: g.hadir,
+                                izin: g.izin,
+                                sakitTelat: g.sakitTelat,
+                                alpha: g.alpha
+                              })}
+                              className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 mx-auto transition shadow hover:scale-105"
+                              title={`Atur / Revisi Rekap Mengajar ${g.nama}`}
+                            >
+                              <Settings className="w-3.5 h-3.5" />
+                              <span>Setting</span>
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -4304,6 +4602,389 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
             )}
+
+            {/* MODAL KONFIRMASI RESET REKAPAN KE NOL (0) */}
+            {showResetConfirmModal && (
+              <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+                <div className="card-3d rounded-3xl p-6 sm:p-7 max-w-lg w-full border-2 border-red-500/70 bg-gradient-to-b from-[#1c0808] via-[#120505] to-[#080202] space-y-5 shadow-2xl">
+                  <div className="flex items-center justify-between pb-3 border-b border-red-500/30">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-11 h-11 rounded-2xl bg-red-500/20 border border-red-500/60 flex items-center justify-center text-red-300 shadow">
+                        <RotateCcw className="w-6 h-6 text-red-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-extrabold text-white text-gold-3d">
+                          Reset Rekapan & Statistik ke Nol (0)
+                        </h4>
+                        <p className="text-xs text-red-200/80">
+                          Kembalikan seluruh perhitungan kehadiran menjadi 0 awal mula
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowResetConfirmModal(false)}
+                      className="p-1.5 rounded-xl bg-red-950/80 border border-red-500/40 text-red-300 hover:bg-red-900 transition"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3 text-xs text-slate-300">
+                    <p>
+                      Pilih metode reset rekapan presensi yang Anda inginkan:
+                    </p>
+
+                    <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/40 space-y-1.5">
+                      <span className="font-extrabold text-[#f3e5ab] text-xs flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                        1. Simpan & Reset Presensi Berjalan ke Nol (Rekomendasi)
+                      </span>
+                      <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                        Data absensi santri & ustadz yang ada saat ini akan diamankan ke arsip riwayat rekapan. Seluruh angka di kartu dashboard (Hadir, Izin, Sakit, Alpha, dan Persentase) seketika kembali ke <b>0</b> untuk sesi perhitungan berikutnya.
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-red-950/40 border border-red-500/40 space-y-1.5">
+                      <span className="font-extrabold text-red-300 text-xs flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-red-400" />
+                        2. Reset Total Seluruh Rekapan & Arsip ke Nol
+                      </span>
+                      <p className="text-[11px] text-red-200/80 leading-relaxed">
+                        Mengosongkan data presensi berjalan DAN menghapus seluruh riwayat log rekapan bulanan. Semua perhitungan santri & guru benar-benar kembali bersih bernilai <b>0 total</b>.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5 pt-3 border-t border-red-500/30">
+                    <button
+                      type="button"
+                      onClick={() => setShowResetConfirmModal(false)}
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-white text-xs font-bold transition"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleExecuteReset(false)}
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-800 to-amber-700 hover:from-emerald-700 hover:to-amber-600 border border-emerald-400/60 text-white font-extrabold text-xs shadow-lg flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Save className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Simpan & Reset ke 0</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm('PERINGATAN: Seluruh data riwayat arsip rekapan bulanan dan presensi berjalan akan dihapus bersih ke 0. Lanjutkan?')) {
+                          handleExecuteReset(true);
+                        }
+                      }}
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-800 to-rose-950 hover:from-red-700 hover:to-rose-900 border border-red-500/70 text-white font-extrabold text-xs shadow-lg flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-red-300" />
+                      <span>Reset Total ke 0</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* MODAL SETTING / REVISI REKAP BULANAN SANTRI */}
+            {editingRevisiSantri && (
+              <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+                <div className="card-3d rounded-3xl p-6 sm:p-7 max-w-lg w-full border-2 border-amber-500/80 bg-gradient-to-b from-[#18251b] via-[#0d1a10] to-[#051108] space-y-4 shadow-2xl">
+                  <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/30">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/50 flex items-center justify-center text-amber-300 shadow">
+                        <Settings className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-extrabold text-white text-gold-3d">
+                          Setting & Revisi Rekap Santri
+                        </h4>
+                        <p className="text-xs text-emerald-300">
+                          Revisi kesalahan data presensi bulan {editingRevisiSantri.bulan}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingRevisiSantri(null)}
+                      className="p-1.5 rounded-xl bg-red-950/80 border border-red-500/40 text-red-300 hover:bg-red-900 transition"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-[#03150d] border border-[#d4af37]/30 text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-emerald-300">Nama Santri:</span>
+                      <b className="text-white">{editingRevisiSantri.nama}</b>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-emerald-300">NIS:</span>
+                      <b className="text-[#d4af37] font-mono">{editingRevisiSantri.id}</b>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-emerald-300">Kelas / Angkatan:</span>
+                      <b className="text-emerald-200">{editingRevisiSantri.kelas}</b>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-emerald-300">Target Bulan:</span>
+                      <b className="text-[#f3e5ab] font-bold">{editingRevisiSantri.bulan}</b>
+                    </div>
+                  </div>
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSaveRevisiSantri(editingRevisiSantri);
+                    }}
+                    className="space-y-4"
+                  >
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded-xl bg-[#042013] border border-emerald-500/40 space-y-1.5">
+                        <label className="text-[11px] font-bold text-emerald-300 block">
+                          JUMLAH HADIR (KALI)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="31"
+                          value={editingRevisiSantri.hadir}
+                          onChange={(e) => setEditingRevisiSantri({ ...editingRevisiSantri, hadir: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                          className="w-full bg-[#02130b] border border-emerald-500/50 rounded-lg px-3 py-2 text-sm text-emerald-300 font-mono font-bold focus:outline-none focus:border-emerald-400"
+                          required
+                        />
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-[#042013] border border-amber-500/40 space-y-1.5">
+                        <label className="text-[11px] font-bold text-amber-300 block">
+                          JUMLAH IZIN (KALI)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="31"
+                          value={editingRevisiSantri.izin}
+                          onChange={(e) => setEditingRevisiSantri({ ...editingRevisiSantri, izin: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                          className="w-full bg-[#02130b] border border-amber-500/50 rounded-lg px-3 py-2 text-sm text-amber-300 font-mono font-bold focus:outline-none focus:border-amber-400"
+                          required
+                        />
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-[#042013] border border-blue-500/40 space-y-1.5">
+                        <label className="text-[11px] font-bold text-blue-300 block">
+                          JUMLAH SAKIT (KALI)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="31"
+                          value={editingRevisiSantri.sakit}
+                          onChange={(e) => setEditingRevisiSantri({ ...editingRevisiSantri, sakit: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                          className="w-full bg-[#02130b] border border-blue-500/50 rounded-lg px-3 py-2 text-sm text-blue-300 font-mono font-bold focus:outline-none focus:border-blue-400"
+                          required
+                        />
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-[#042013] border border-red-500/40 space-y-1.5">
+                        <label className="text-[11px] font-bold text-red-300 block">
+                          JUMLAH ALPHA (KALI)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="31"
+                          value={editingRevisiSantri.alpha}
+                          onChange={(e) => setEditingRevisiSantri({ ...editingRevisiSantri, alpha: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                          className="w-full bg-[#02130b] border border-red-500/50 rounded-lg px-3 py-2 text-sm text-red-300 font-mono font-bold focus:outline-none focus:border-red-400"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Preview Persentase */}
+                    {(() => {
+                      const tot = editingRevisiSantri.hadir + editingRevisiSantri.izin + editingRevisiSantri.sakit + editingRevisiSantri.alpha;
+                      const pct = tot > 0 ? Math.min(100, Math.round((editingRevisiSantri.hadir / tot) * 100)) : 0;
+                      return (
+                        <div className="p-2.5 rounded-xl bg-[#020e07] border border-[#d4af37]/30 flex items-center justify-between text-xs font-mono">
+                          <span className="text-emerald-300">Total Sesi: <b>{tot} kali</b></span>
+                          <span className="text-[#f3e5ab]">Kalkulasi Persentase: <b className="text-gold-3d font-extrabold text-sm text-emerald-400">{pct}%</b></span>
+                        </div>
+                      );
+                    })()}
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#d4af37]/20">
+                      <button
+                        type="button"
+                        onClick={() => setEditingRevisiSantri(null)}
+                        className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-white text-xs font-bold transition"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn-3d-gold px-5 py-2 rounded-xl text-black font-extrabold text-xs shadow-lg flex items-center gap-1.5"
+                      >
+                        <Check className="w-4 h-4 text-black" />
+                        <span>Simpan Revisi Santri</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* MODAL SETTING / REVISI REKAP BULANAN GURU */}
+            {editingRevisiGuru && (
+              <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+                <div className="card-3d rounded-3xl p-6 sm:p-7 max-w-lg w-full border-2 border-amber-500/80 bg-gradient-to-b from-[#18251b] via-[#0d1a10] to-[#051108] space-y-4 shadow-2xl">
+                  <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/30">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/50 flex items-center justify-center text-amber-300 shadow">
+                        <Settings className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-extrabold text-white text-gold-3d">
+                          Setting & Revisi Rekap Ustadz / Ustadzah
+                        </h4>
+                        <p className="text-xs text-emerald-300">
+                          Revisi kesalahan data mengajar bulan {editingRevisiGuru.bulan}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingRevisiGuru(null)}
+                      className="p-1.5 rounded-xl bg-red-950/80 border border-red-500/40 text-red-300 hover:bg-red-900 transition"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-[#03150d] border border-[#d4af37]/30 text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-emerald-300">Nama Ustadz/ah:</span>
+                      <b className="text-white">{editingRevisiGuru.nama}</b>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-emerald-300">Mata Pelajaran:</span>
+                      <b className="text-emerald-200">{editingRevisiGuru.mapel}</b>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-emerald-300">Kelas:</span>
+                      <b className="text-[#d4af37] font-semibold">{editingRevisiGuru.kelas}</b>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-emerald-300">Target Bulan:</span>
+                      <b className="text-[#f3e5ab] font-bold">{editingRevisiGuru.bulan}</b>
+                    </div>
+                  </div>
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleSaveRevisiGuru(editingRevisiGuru);
+                    }}
+                    className="space-y-4"
+                  >
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded-xl bg-[#042013] border border-emerald-500/40 space-y-1.5">
+                        <label className="text-[11px] font-bold text-emerald-300 block">
+                          JUMLAH HADIR / MENGAJAR
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="31"
+                          value={editingRevisiGuru.hadir}
+                          onChange={(e) => setEditingRevisiGuru({ ...editingRevisiGuru, hadir: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                          className="w-full bg-[#02130b] border border-emerald-500/50 rounded-lg px-3 py-2 text-sm text-emerald-300 font-mono font-bold focus:outline-none focus:border-emerald-400"
+                          required
+                        />
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-[#042013] border border-amber-500/40 space-y-1.5">
+                        <label className="text-[11px] font-bold text-amber-300 block">
+                          JUMLAH IZIN (KALI)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="31"
+                          value={editingRevisiGuru.izin}
+                          onChange={(e) => setEditingRevisiGuru({ ...editingRevisiGuru, izin: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                          className="w-full bg-[#02130b] border border-amber-500/50 rounded-lg px-3 py-2 text-sm text-amber-300 font-mono font-bold focus:outline-none focus:border-amber-400"
+                          required
+                        />
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-[#042013] border border-orange-500/40 space-y-1.5">
+                        <label className="text-[11px] font-bold text-orange-300 block">
+                          SAKIT / TERLAMBAT (KALI)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="31"
+                          value={editingRevisiGuru.sakitTelat}
+                          onChange={(e) => setEditingRevisiGuru({ ...editingRevisiGuru, sakitTelat: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                          className="w-full bg-[#02130b] border border-orange-500/50 rounded-lg px-3 py-2 text-sm text-orange-300 font-mono font-bold focus:outline-none focus:border-orange-400"
+                          required
+                        />
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-[#042013] border border-red-500/40 space-y-1.5">
+                        <label className="text-[11px] font-bold text-red-300 block">
+                          JUMLAH ALPHA (KALI)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="31"
+                          value={editingRevisiGuru.alpha}
+                          onChange={(e) => setEditingRevisiGuru({ ...editingRevisiGuru, alpha: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                          className="w-full bg-[#02130b] border border-red-500/50 rounded-lg px-3 py-2 text-sm text-red-300 font-mono font-bold focus:outline-none focus:border-red-400"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Preview Persentase */}
+                    {(() => {
+                      const tot = editingRevisiGuru.hadir + editingRevisiGuru.izin + editingRevisiGuru.sakitTelat + editingRevisiGuru.alpha;
+                      const pct = tot > 0 ? Math.min(100, Math.round(((editingRevisiGuru.hadir + editingRevisiGuru.sakitTelat) / tot) * 100)) : 0;
+                      return (
+                        <div className="p-2.5 rounded-xl bg-[#020e07] border border-[#d4af37]/30 flex items-center justify-between text-xs font-mono">
+                          <span className="text-emerald-300">Total Sesi: <b>{tot} kali</b></span>
+                          <span className="text-[#f3e5ab]">Kalkulasi Kehadiran: <b className="text-gold-3d font-extrabold text-sm text-emerald-400">{pct}%</b></span>
+                        </div>
+                      );
+                    })()}
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#d4af37]/20">
+                      <button
+                        type="button"
+                        onClick={() => setEditingRevisiGuru(null)}
+                        className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-white text-xs font-bold transition"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn-3d-gold px-5 py-2 rounded-xl text-black font-extrabold text-xs shadow-lg flex items-center gap-1.5"
+                      >
+                        <Check className="w-4 h-4 text-black" />
+                        <span>Simpan Revisi Guru</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
             {/* ========================================================================= */}
             <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 space-y-4 bg-[#03150d]">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[#d4af37]/20">
@@ -5383,6 +6064,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3 w-20 text-center text-red-300 font-bold bg-red-950/30">ALPHA</th>
                       <th className="p-3 w-28 text-center text-[#d4af37] font-bold">PERSENTASE</th>
                       <th className="p-3 w-28 text-center">EVALUASI</th>
+                      <th className="p-3 w-28 text-center text-amber-300 font-bold">AKSI / SETTING</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10">
@@ -5419,6 +6101,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           }`}>
                             {s.keterangan}
                           </span>
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setEditingRevisiSantri({
+                              id: s.id,
+                              nama: s.nama,
+                              kelas: s.kelas,
+                              bulan: selectedBulanSantri,
+                              hadir: s.hadir,
+                              izin: s.izin,
+                              sakit: s.sakit,
+                              alpha: s.alpha
+                            })}
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 mx-auto transition shadow hover:scale-105"
+                            title={`Atur / Revisi Rekap Kehadiran ${s.nama}`}
+                          >
+                            <Settings className="w-3.5 h-3.5" />
+                            <span>Setting</span>
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -5858,6 +6560,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3 w-20 text-center text-red-300 font-bold bg-red-950/30">ALPHA</th>
                       <th className="p-3 w-28 text-center text-[#d4af37] font-bold">KEHADIRAN</th>
                       <th className="p-3 w-28 text-center">PREDIKAT</th>
+                      <th className="p-3 w-28 text-center text-amber-300 font-bold">AKSI / SETTING</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#d4af37]/10">
@@ -5894,6 +6597,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           }`}>
                             {g.predikat}
                           </span>
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setEditingRevisiGuru({
+                              nama: g.nama,
+                              mapel: g.mapel,
+                              kelas: g.kelas,
+                              bulan: selectedBulanGuru,
+                              hadir: g.hadir,
+                              izin: g.izin,
+                              sakitTelat: g.sakitTelat,
+                              alpha: g.alpha
+                            })}
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 mx-auto transition shadow hover:scale-105"
+                            title={`Atur / Revisi Rekap Mengajar ${g.nama}`}
+                          >
+                            <Settings className="w-3.5 h-3.5" />
+                            <span>Setting</span>
+                          </button>
                         </td>
                       </tr>
                     ))}

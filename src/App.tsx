@@ -1585,19 +1585,20 @@ export default function App() {
     }
   };
 
-  const handleSaveDashboardAndReset = () => {
-    const confirmed = window.confirm(
-      'Simpan rekapitulasi kehadiran hari ini dan reset formulir serta dashboard ke nol?'
-    );
-    if (!confirmed) return;
+  const handleSaveDashboardAndReset = (resetAllLogs: boolean = false) => {
     try {
-      if (absensiGuruList.length > 0) {
-        const prevH = JSON.parse(localStorage.getItem('sim_rekap_guru_harian_history') || '[]');
-        localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify([...absensiGuruList, ...prevH]));
-      }
-      if (absensiSantriList.length > 0) {
-        const prevHS = JSON.parse(localStorage.getItem('sim_rekap_santri_harian_history') || '[]');
-        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify([...absensiSantriList, ...prevHS]));
+      if (!resetAllLogs) {
+        if (absensiGuruList.length > 0) {
+          const prevH = JSON.parse(localStorage.getItem('sim_rekap_guru_harian_history') || '[]');
+          localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify([...absensiGuruList, ...prevH]));
+        }
+        if (absensiSantriList.length > 0) {
+          const prevHS = JSON.parse(localStorage.getItem('sim_rekap_santri_harian_history') || '[]');
+          localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify([...absensiSantriList, ...prevHS]));
+        }
+      } else {
+        localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify([]));
+        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify([]));
       }
     } catch {}
 
@@ -1605,7 +1606,41 @@ export default function App() {
     setAbsensiGuruList([]);
     localStorage.setItem('sim_absensi_santri', JSON.stringify([]));
     localStorage.setItem('sim_absensi_guru', JSON.stringify([]));
-    alert('Rekap dashboard telah disimpan ke riwayat rekapan dan seluruh sesi absensi harian berhasil direset ke nol (0).');
+    
+    // Sync to Firestore & broadcast
+    saveMasterDataToFirestore('absensi_santri', []);
+    saveMasterDataToFirestore('absensi_guru', []);
+    broadcastAttendanceUpdate('santri', [], 'Admin');
+    broadcastAttendanceUpdate('guru', [], 'Admin');
+    
+    window.dispatchEvent(new Event('storage'));
+  };
+
+  // Handler Hapus Izin Tidak Mengajar Ustadz yang telah disetujui / diproses
+  const handleDeleteIzinMengajar = (requestId: string) => {
+    const target = izinMengajarList.find(i => i.id === requestId);
+    const updated = izinMengajarList.filter(i => i.id !== requestId);
+    setIzinMengajarList(updated);
+    localStorage.setItem('sim_izin_mengajar', JSON.stringify(updated));
+    saveMasterDataToFirestore('izin_mengajar', updated);
+    broadcastIzinMengajarUpdate(updated, 'Admin');
+
+    // Hapus juga catatan absensi otomatis izin & pengganti jika ada
+    if (target) {
+      setAbsensiGuruList(prev => {
+        const filtered = prev.filter(
+          a => a.id !== `ABS-G-IZIN-${target.id}` && 
+               a.absensiId !== `ABS-G-IZIN-${target.id}` &&
+               a.id !== `ABS-G-SUB-${target.id}` &&
+               a.absensiId !== `ABS-G-SUB-${target.id}` &&
+               !(a.tanggal === target.tanggal && a.nama.trim().toLowerCase() === target.namaUstadz.trim().toLowerCase() && a.status === 'Izin')
+        );
+        localStorage.setItem('sim_absensi_guru', JSON.stringify(filtered));
+        saveMasterDataToFirestore('absensi_guru', filtered);
+        broadcastAttendanceUpdate('guru', filtered, 'Admin');
+        return filtered;
+      });
+    }
   };
 
   // Handlers Izin Tidak Mengajar Ustadz & Pengganti
@@ -1868,6 +1903,7 @@ export default function App() {
             onSaveUjianSantri={handleSaveUjianSantri}
             onApproveIzinMengajar={handleApproveIzinMengajar}
             onSubmitIzinMengajar={handleAddIzinMengajar}
+            onDeleteIzinMengajar={handleDeleteIzinMengajar}
             onDeleteSantri={handleDeleteSantri}
             onTestIntro={() => setShowIntro(true)}
           />
