@@ -43,7 +43,6 @@ interface PengurusDashboardProps {
   kalenderList: KalenderAkademikEvent[];
   ujianList?: UjianSantriRecord[];
   izinList?: IzinMengajarRequest[];
-  rekapGuruHistoryList?: AbsensiGuruRecord[];
   onLogout: () => void;
   onUpdatePengurusProfile?: (updated: Pengurus) => void;
   onSaveAbsensiSantri?: (records: AbsensiSantriRecord[]) => void;
@@ -73,7 +72,6 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   kalenderList = [],
   ujianList = [],
   izinList = [],
-  rekapGuruHistoryList = [],
   onLogout,
   onUpdatePengurusProfile,
   onSaveAbsensiSantri,
@@ -166,25 +164,20 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     ustadzPengampu: pengurus.nama || ''
   });
 
-  // Filter personal attendance for this pengurus (real-time dari absensiGuruList & riwayat rekapan Firestore)
+  // Filter personal attendance for this pengurus (real-time dari absensiGuruList & riwayat rekapan)
   const personalAbsensi = useMemo(() => {
     const list: AbsensiGuruRecord[] = [...(absensiGuruList || [])];
-    const historySource: AbsensiGuruRecord[] = (rekapGuruHistoryList && rekapGuruHistoryList.length > 0)
-      ? rekapGuruHistoryList
-      : (() => {
-          try {
-            const historyStr = localStorage.getItem('sim_rekap_guru_harian_history');
-            return historyStr ? JSON.parse(historyStr) : [];
-          } catch {
-            return [];
+    try {
+      const historyStr = localStorage.getItem('sim_rekap_guru_harian_history');
+      if (historyStr) {
+        const hist: AbsensiGuruRecord[] = JSON.parse(historyStr);
+        hist.forEach(h => {
+          if (!list.some(l => l.tanggal === h.tanggal && l.nama === h.nama && l.kelas === h.kelas && l.jamKe === h.jamKe)) {
+            list.push(h);
           }
-        })();
-
-    historySource.forEach((h: AbsensiGuruRecord) => {
-      if (!list.some(l => l.tanggal === h.tanggal && l.nama === h.nama && l.kelas === h.kelas && l.jamKe === h.jamKe)) {
-        list.push(h);
+        });
       }
-    });
+    } catch {}
 
     const cleanName = (pengurus.nama || '').toLowerCase().trim();
     return list.filter(a => {
@@ -192,7 +185,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       const aPengganti = (a.ustadzPengganti || '').toLowerCase().trim();
       return aName === cleanName || aPengganti === cleanName || (cleanName && aName.includes(cleanName));
     }).sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
-  }, [absensiGuruList, rekapGuruHistoryList, pengurus.nama]);
+  }, [absensiGuruList, pengurus.nama]);
 
   const personalHadir = personalAbsensi.filter(a => a.status === 'Hadir').length;
   const personalIzin = personalAbsensi.filter(a => a.status === 'Izin').length;

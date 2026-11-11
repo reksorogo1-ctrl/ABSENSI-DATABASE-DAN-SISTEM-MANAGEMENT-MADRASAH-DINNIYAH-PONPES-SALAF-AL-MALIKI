@@ -251,21 +251,32 @@ export default function App() {
   });
   const [absensiSantriList, setAbsensiSantriList] = useState<AbsensiSantriRecord[]>(() => {
     const saved = localStorage.getItem('sim_absensi_santri');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) return JSON.parse(saved);
+    // Simpan data bawaan ke riwayat arsip lokal agar rekapan bulan sebelumnya tetap aman
+    try {
+      const prevHS = JSON.parse(localStorage.getItem('sim_rekap_santri_harian_history') || '[]');
+      if (prevHS.length === 0 && INITIAL_ABSENSI_SANTRI.length > 0) {
+        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(INITIAL_ABSENSI_SANTRI));
+      }
+    } catch {}
+    // Hanya ambil absensi jika sesuai dengan bulan yang sedang aktif saat ini
+    const today = new Date();
+    const currentYearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    return INITIAL_ABSENSI_SANTRI.filter(a => a.tanggal.startsWith(currentYearMonth));
   });
   const [absensiGuruList, setAbsensiGuruList] = useState<AbsensiGuruRecord[]>(() => {
     const saved = localStorage.getItem('sim_absensi_guru');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) return JSON.parse(saved);
+    try {
+      const prevHG = JSON.parse(localStorage.getItem('sim_rekap_guru_harian_history') || '[]');
+      if (prevHG.length === 0 && INITIAL_ABSENSI_GURU.length > 0) {
+        localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(INITIAL_ABSENSI_GURU));
+      }
+    } catch {}
+    const today = new Date();
+    const currentYearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    return INITIAL_ABSENSI_GURU.filter(g => g.tanggal.startsWith(currentYearMonth));
   });
-  const [rekapSantriHistoryList, setRekapSantriHistoryList] = useState<AbsensiSantriRecord[]>(() => {
-    const saved = localStorage.getItem('sim_rekap_santri_harian_history');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [rekapGuruHistoryList, setRekapGuruHistoryList] = useState<AbsensiGuruRecord[]>(() => {
-    const saved = localStorage.getItem('sim_rekap_guru_harian_history');
-    return saved ? JSON.parse(saved) : [];
-  });
-
 
   // New features data states (Syahriyah, Uang Saku, Kurikulum)
   const [syahriyahList, setSyahriyahList] = useState<SyahriyahRecord[]>(() => {
@@ -584,20 +595,6 @@ export default function App() {
       }
     });
 
-    loadMasterDataFromFirestore<AbsensiSantriRecord[]>('rekap_santri_history').then((data) => {
-      if (data && Array.isArray(data) && data.length > 0) {
-        setRekapSantriHistoryList(data);
-        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(data));
-      }
-    });
-
-    loadMasterDataFromFirestore<AbsensiGuruRecord[]>('rekap_guru_history').then((data) => {
-      if (data && Array.isArray(data) && data.length > 0) {
-        setRekapGuruHistoryList(data);
-        localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(data));
-      }
-    });
-
     // 10. Metadata Sinkronisasi (Spreadsheet ID & Email)
     loadMasterDataFromFirestore<{ spreadsheetId?: string; email?: string }>('sync_meta').then((meta) => {
       if (meta?.spreadsheetId) {
@@ -631,18 +628,6 @@ export default function App() {
         localStorage.setItem('sim_absensi_guru', JSON.stringify(data));
       }
     });
-    const unsubRekapSantri = subscribeMasterDataFromFirestore<AbsensiSantriRecord[]>('rekap_santri_history', (data) => {
-      if (data && Array.isArray(data)) {
-        setRekapSantriHistoryList(data);
-        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(data));
-      }
-    });
-    const unsubRekapGuru = subscribeMasterDataFromFirestore<AbsensiGuruRecord[]>('rekap_guru_history', (data) => {
-      if (data && Array.isArray(data)) {
-        setRekapGuruHistoryList(data);
-        localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(data));
-      }
-    });
     const unsubPengurus = subscribeMasterDataFromFirestore<Pengurus[]>('pengurus', (data) => {
       if (data && Array.isArray(data)) {
         setPengurusList(prev => syncPengurusWithGuru(data, guruList));
@@ -674,8 +659,6 @@ export default function App() {
       unsubGuru();
       unsubAbsSantri();
       unsubAbsGuru();
-      unsubRekapSantri();
-      unsubRekapGuru();
       unsubPengurus();
       unsubJadwal();
       unsubIzinMengajar();
@@ -1094,15 +1077,14 @@ export default function App() {
       } catch {}
       return updated;
     });
-
-    setRekapSantriHistoryList(prev => {
-      const updatedH = prev.filter(p => !(p.tanggal === target.tanggal && (p.idSantri === target.idSantri || p.nama === target.nama)));
-      try {
-        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(updatedH));
-        saveMasterDataToFirestore('rekap_santri_history', updatedH);
-      } catch {}
-      return updatedH;
-    });
+    try {
+      const savedH = localStorage.getItem('sim_rekap_santri_harian_history');
+      if (savedH) {
+        const parsed = JSON.parse(savedH);
+        const filteredH = parsed.filter((p: any) => !(p.tanggal === target.tanggal && (p.idSantri === target.idSantri || p.nama === target.nama)));
+        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(filteredH));
+      }
+    } catch {}
   };
 
   const handleDeleteAbsensiGuru = (target: AbsensiGuruRecord) => {
@@ -1114,15 +1096,14 @@ export default function App() {
       } catch {}
       return updated;
     });
-
-    setRekapGuruHistoryList(prev => {
-      const updatedH = prev.filter(p => !(p.tanggal === target.tanggal && p.nama === target.nama && p.kelas === target.kelas && String(p.jamKe) === String(target.jamKe)));
-      try {
-        localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(updatedH));
-        saveMasterDataToFirestore('rekap_guru_history', updatedH);
-      } catch {}
-      return updatedH;
-    });
+    try {
+      const savedH = localStorage.getItem('sim_rekap_guru_harian_history');
+      if (savedH) {
+        const parsed = JSON.parse(savedH);
+        const filteredH = parsed.filter((p: any) => !(p.tanggal === target.tanggal && p.nama === target.nama && p.kelas === target.kelas && String(p.jamKe) === String(target.jamKe)));
+        localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(filteredH));
+      }
+    } catch {}
   };
 
   // Sinkronisasi data presensi, izin mengajar, dan nadzhom real-time lintas tab & komponen
@@ -1595,115 +1576,35 @@ export default function App() {
     }
   };
 
-  const handleSaveRekapSantriHistory = async (records: AbsensiSantriRecord[]) => {
-    setRekapSantriHistoryList(records);
-    localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(records));
-    await saveMasterDataToFirestore('rekap_santri_history', records);
-  };
-
-  const handleSaveRekapGuruHistory = async (records: AbsensiGuruRecord[]) => {
-    setRekapGuruHistoryList(records);
-    localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(records));
-    await saveMasterDataToFirestore('rekap_guru_history', records);
-  };
-
-  const handleSaveDashboardAndReset = async (resetAllLogs: boolean = false) => {
+  const handleSaveDashboardAndReset = (resetAllLogs: boolean = false) => {
     try {
-      if (resetAllLogs) {
-        // Reset Total: Bersihkan riwayat Firestore & lokal
-        await saveMasterDataToFirestore('rekap_santri_history', []);
-        await saveMasterDataToFirestore('rekap_guru_history', []);
-        await saveMasterDataToFirestore('absensi_santri', []);
-        await saveMasterDataToFirestore('absensi_guru', []);
-
-        setRekapSantriHistoryList([]);
-        setRekapGuruHistoryList([]);
-        setAbsensiSantriList([]);
-        setAbsensiGuruList([]);
-
-        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify([]));
+      if (!resetAllLogs) {
+        if (absensiGuruList.length > 0) {
+          const prevH = JSON.parse(localStorage.getItem('sim_rekap_guru_harian_history') || '[]');
+          localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify([...absensiGuruList, ...prevH]));
+        }
+        if (absensiSantriList.length > 0) {
+          const prevHS = JSON.parse(localStorage.getItem('sim_rekap_santri_harian_history') || '[]');
+          localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify([...absensiSantriList, ...prevHS]));
+        }
+      } else {
         localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify([]));
-        localStorage.setItem('sim_absensi_santri', JSON.stringify([]));
-        localStorage.setItem('sim_absensi_guru', JSON.stringify([]));
-
-        broadcastAttendanceUpdate('santri', [], 'Admin');
-        broadcastAttendanceUpdate('guru', [], 'Admin');
-        window.dispatchEvent(new Event('storage'));
-        return { success: true, message: 'Seluruh riwayat dan data aktif berhasil dibersihkan ke nol.' };
+        localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify([]));
       }
+    } catch {}
 
-      // Step 1: Ambil data absensi aktif yang akan diarsipkan
-      const activeSantri = [...absensiSantriList];
-      const activeGuru = [...absensiGuruList];
-
-      // Step 2: Ambil riwayat arsip yang sudah ada di Firestore
-      const existingSantriHistory = (await loadMasterDataFromFirestore<AbsensiSantriRecord[]>('rekap_santri_history')) || rekapSantriHistoryList || [];
-      const existingGuruHistory = (await loadMasterDataFromFirestore<AbsensiGuruRecord[]>('rekap_guru_history')) || rekapGuruHistoryList || [];
-
-      // Step 3: Gabungkan secara idempotent
-      const mapSantri = new Map<string, AbsensiSantriRecord>();
-      existingSantriHistory.forEach(item => {
-        const key = `${item.tanggal}_${item.idSantri || item.nama}`;
-        mapSantri.set(key, item);
-      });
-      activeSantri.forEach(item => {
-        const key = `${item.tanggal}_${item.idSantri || item.nama}`;
-        mapSantri.set(key, item);
-      });
-      const mergedSantri = Array.from(mapSantri.values());
-
-      const mapGuru = new Map<string, AbsensiGuruRecord>();
-      existingGuruHistory.forEach(item => {
-        const key = `${item.tanggal}_${item.nama.toLowerCase().trim()}_${item.kelas}_${item.jamKe}`;
-        mapGuru.set(key, item);
-      });
-      activeGuru.forEach(item => {
-        const key = `${item.tanggal}_${item.nama.toLowerCase().trim()}_${item.kelas}_${item.jamKe}`;
-        mapGuru.set(key, item);
-      });
-      const mergedGuru = Array.from(mapGuru.values());
-
-      // Step 4: Tulis arsip permanen ke Firestore
-      await saveMasterDataToFirestore('rekap_santri_history', mergedSantri);
-      await saveMasterDataToFirestore('rekap_guru_history', mergedGuru);
-
-      // Step 5 & 6: Verifikasi server berhasil sebelum mengosongkan aktif
-      const checkSantri = await loadMasterDataFromFirestore<AbsensiSantriRecord[]>('rekap_santri_history');
-      const checkGuru = await loadMasterDataFromFirestore<AbsensiGuruRecord[]>('rekap_guru_history');
-
-      if (!checkSantri || checkSantri.length < mergedSantri.length || !checkGuru || checkGuru.length < mergedGuru.length) {
-        throw new Error('Verifikasi penyimpanan arsip Firestore gagal. Pembatalan reset dilakukan untuk mencegah kehilangan data.');
-      }
-
-      // Step 7: Setelah terverifikasi, kosongkan data berjalan di Firestore & state
-      setRekapSantriHistoryList(mergedSantri);
-      setRekapGuruHistoryList(mergedGuru);
-      setAbsensiSantriList([]);
-      setAbsensiGuruList([]);
-
-      localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(mergedSantri));
-      localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(mergedGuru));
-      localStorage.setItem('sim_absensi_santri', JSON.stringify([]));
-      localStorage.setItem('sim_absensi_guru', JSON.stringify([]));
-
-      await saveMasterDataToFirestore('absensi_santri', []);
-      await saveMasterDataToFirestore('absensi_guru', []);
-
-      broadcastAttendanceUpdate('santri', [], 'Admin');
-      broadcastAttendanceUpdate('guru', [], 'Admin');
-      window.dispatchEvent(new Event('storage'));
-
-      return {
-        success: true,
-        archivedSantri: activeSantri.length,
-        archivedGuru: activeGuru.length,
-        totalSantriHistory: mergedSantri.length,
-        totalGuruHistory: mergedGuru.length
-      };
-    } catch (err: any) {
-      console.error('Gagal mengarsipkan dan reset:', err);
-      throw err;
-    }
+    setAbsensiSantriList([]);
+    setAbsensiGuruList([]);
+    localStorage.setItem('sim_absensi_santri', JSON.stringify([]));
+    localStorage.setItem('sim_absensi_guru', JSON.stringify([]));
+    
+    // Sync to Firestore & broadcast
+    saveMasterDataToFirestore('absensi_santri', []);
+    saveMasterDataToFirestore('absensi_guru', []);
+    broadcastAttendanceUpdate('santri', [], 'Admin');
+    broadcastAttendanceUpdate('guru', [], 'Admin');
+    
+    window.dispatchEvent(new Event('storage'));
   };
 
   // Handler Hapus Izin Tidak Mengajar Ustadz yang telah disetujui / diproses
@@ -1911,7 +1812,6 @@ export default function App() {
               kalenderList={kalenderList}
               ujianList={ujianList}
               izinList={izinMengajarList}
-              rekapGuruHistoryList={rekapGuruHistoryList}
               onLogout={handleLogout}
               onUpdatePengurusProfile={handleUpdatePengurus}
               onSaveAbsensiSantri={handleSaveAbsensiSantri}
@@ -1943,10 +1843,6 @@ export default function App() {
             nilaiList={nilaiList}
             absensiSantriList={absensiSantriList}
             absensiGuruList={absensiGuruList}
-            rekapSantriHistoryList={rekapSantriHistoryList}
-            rekapGuruHistoryList={rekapGuruHistoryList}
-            onSaveRekapSantriHistory={handleSaveRekapSantriHistory}
-            onSaveRekapGuruHistory={handleSaveRekapGuruHistory}
             syahriyahList={syahriyahList}
             uangSakuList={uangSakuList}
             kurikulumList={kurikulumList}

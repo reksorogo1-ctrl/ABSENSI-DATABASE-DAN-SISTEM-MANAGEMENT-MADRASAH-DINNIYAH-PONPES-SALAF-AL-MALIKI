@@ -203,7 +203,6 @@ export interface KurikulumKitabRecord {
 }
 
 export interface AbsensiSantriRecord {
-  recordId?: string;
   tanggal: string;
   idSantri: string;
   nama: string;
@@ -211,15 +210,10 @@ export interface AbsensiSantriRecord {
   status: 'Hadir' | 'Izin' | 'Sakit' | 'Alpha';
   keterangan: string;
   waktu?: string;
-  waktuPencatatan?: string;
-  waktuRevisi?: string;
-  revisiBy?: string;
-  sumber?: string;
 }
 
 export interface AbsensiGuruRecord {
   id?: string;
-  recordId?: string;
   absensiId?: string;
   jadwalId?: string;
   ustadzTerjadwalId?: string;
@@ -248,10 +242,6 @@ export interface AbsensiGuruRecord {
   timestampServer?: string;
   ustadzPengganti?: string;
   alasanIzin?: string;
-  waktuPencatatan?: string;
-  waktuRevisi?: string;
-  revisiBy?: string;
-  sumber?: string;
 }
 
 export interface PenggantiUstadzRequest {

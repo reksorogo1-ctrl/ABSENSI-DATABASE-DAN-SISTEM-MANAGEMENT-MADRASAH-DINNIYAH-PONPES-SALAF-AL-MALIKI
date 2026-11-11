@@ -174,8 +174,6 @@ export const MASTER_COLLECTION_KEYS = [
   'jadwal',
   'absensi_santri',
   'absensi_guru',
-  'rekap_santri_history',
-  'rekap_guru_history',
   'nilai',
   'nadzhom',
   'syahriyah',
