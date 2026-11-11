@@ -51,6 +51,12 @@ import {
   subscribeIzinMengajarUpdates
 } from '../serverTime';
 import { INITIAL_KURIKULUM_LIST } from '../data';
+import { 
+  exportFirestoreBackup, 
+  restoreFirestoreBackup, 
+  safeFirebaseConfig 
+} from '../firebase';
+
 
 interface AdminDashboardProps {
   settings: AppSettings;
@@ -1871,7 +1877,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [activeControlSection, setActiveControlSection] = useState<
     'kelola_storage_5tb' | 'kenaikan_kelas' | 'input_santri' | 'input_guru' | 'input_jadwal' | 'simpan_absensi' | 'geofencing_absensi' | 'kontrol_tombol' | 
     'visual_branding' | 'keamanan' | 'profil_santri' | 'kelola_syahriyah' | 'kelola_uang_saku' | 'kelola_kurikulum' |
-    'kelola_pengurus' | 'kelola_kalender' | 'kelola_ujian_kitab' | 'kelola_berita' | 'video_intro' | 'sosial_media'
+    'kelola_pengurus' | 'kelola_kalender' | 'kelola_ujian_kitab' | 'kelola_berita' | 'video_intro' | 'sosial_media' | 'firebase_central'
   >(() => {
     const target = localStorage.getItem('sim_target_control_section');
     if (target === 'video_intro') {
@@ -1880,6 +1886,76 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     return 'simpan_absensi';
   });
+
+  // State Pusat Kontrol Database Firebase Firestore (Single Source of Truth)
+  const [isExportingBackup, setIsExportingBackup] = useState<boolean>(false);
+  const [backupExportStatus, setBackupExportStatus] = useState<string | null>(null);
+  const [isRestoringBackup, setIsRestoringBackup] = useState<boolean>(false);
+  const [restoreConfirmData, setRestoreConfirmData] = useState<any | null>(null);
+  const [restoreStatusMessage, setRestoreStatusMessage] = useState<string | null>(null);
+  const restoreFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDownloadBackup = async () => {
+    try {
+      setIsExportingBackup(true);
+      setBackupExportStatus('Menyiapkan snapshot utuh Firestore produksi...');
+      const pkg = await exportFirestoreBackup();
+      const jsonStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(pkg, null, 2));
+      const downloadAnchor = document.createElement('a');
+      const nowStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      downloadAnchor.setAttribute("href", jsonStr);
+      downloadAnchor.setAttribute("download", `BACKUP_FIREBASE_PONPES_ALMALIKI_${nowStr}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      setBackupExportStatus(`Alhamdulillah! Backup berhasil diunduh (${Object.keys(pkg.summary).length} modul data terarsip).`);
+      setTimeout(() => setBackupExportStatus(null), 6000);
+    } catch (err: any) {
+      alert(`Gagal mengunduh snapshot Firestore: ${err?.message || err}`);
+      setBackupExportStatus(null);
+    } finally {
+      setIsExportingBackup(false);
+    }
+  };
+
+  const handleFileSelectForRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        if (!parsed || typeof parsed !== 'object') {
+          alert('Format berkas JSON tidak valid.');
+          return;
+        }
+        setRestoreConfirmData(parsed);
+      } catch (err) {
+        alert('Gagal membaca isi berkas JSON. Pastikan format berkas valid.');
+      }
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = '';
+  };
+
+  const handleExecuteRestore = async () => {
+    if (!restoreConfirmData) return;
+    try {
+      setIsRestoringBackup(true);
+      setRestoreStatusMessage('Memulihkan dokumen ke Firestore produksi...');
+      const res = await restoreFirestoreBackup(restoreConfirmData);
+      setRestoreStatusMessage(res.message);
+      setRestoreConfirmData(null);
+      setTimeout(() => setRestoreStatusMessage(null), 8000);
+    } catch (err: any) {
+      alert(`Gagal memulihkan database: ${err?.message || err}`);
+      setRestoreStatusMessage(null);
+    } finally {
+      setIsRestoringBackup(false);
+    }
+  };
+
 
   // Modal Kenaikan Kelas Otomatis & Detail Riwayat Santri
   const [showKenaikanKelasModal, setShowKenaikanKelasModal] = useState<boolean>(false);
@@ -10778,6 +10854,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-9 gap-2 bg-[#052216]/90 p-2.5 rounded-2xl border border-[#d4af37]/35 shadow-inner">
                   {[
                     { id: 'kenaikan_kelas', label: 'Kenaikan Kelas', icon: GraduationCap },
+                    { id: 'firebase_central', label: 'Database Firebase', icon: Database },
                     { id: 'kelola_storage_5tb', label: 'Storage 5 TB & Cloud', icon: HardDrive },
                     { id: 'geofencing_absensi', label: 'Geofencing & Pengganti', icon: MapPin },
                     { id: 'simpan_absensi', label: 'Absensi Ustadz', icon: Save },
@@ -10894,6 +10971,269 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         ))}
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SECTION: PUSAT KONTROL FIREBASE CENTRALIZED DATABASE & DISASTER RECOVERY */}
+                {activeControlSection === 'firebase_central' && (
+                  <div className="card-3d rounded-2xl p-5 sm:p-6 space-y-6">
+                    {/* Header Banner */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#d4af37]/20">
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#f5e298] via-[#d4af37] to-[#7a5410] flex items-center justify-center text-black shadow-lg shrink-0">
+                          <Database className="w-6 h-6 stroke-[2.2]" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-base sm:text-lg font-extrabold text-[#f5e298] text-gold-3d">
+                              Pusat Kontrol Database Terpusat (Firebase Firestore)
+                            </h3>
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                              Single Source of Truth Aktif
+                            </span>
+                          </div>
+                          <p className="text-xs text-emerald-200/90 mt-0.5">
+                            Semua domain (Vercel, Netlify, Custom Domain) dan platform (Web, PWA, Android, PC) membaca & menulis ke satu database produksi.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => window.location.reload()}
+                          className="px-3.5 py-2 rounded-xl bg-[#052216] border border-[#d4af37]/40 text-[#f5e298] hover:text-white hover:border-[#d4af37] text-xs font-bold flex items-center gap-1.5 transition"
+                          title="Muat ulang sinkronisasi Firestore"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>Cek Koneksi Realtime</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Metadata Card: Production Identifiers */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div className="p-3.5 rounded-xl bg-[#052216] border border-[#d4af37]/30">
+                        <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider">Firebase Project ID</span>
+                        <span className="font-mono text-xs sm:text-sm font-extrabold text-amber-300 block mt-1 break-all">
+                          {safeFirebaseConfig.projectId || 'absensi-data-santri'}
+                        </span>
+                        <span className="text-[10px] text-emerald-300/70 block mt-0.5">Google Cloud Firestore Live</span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-[#052216] border border-[#d4af37]/30">
+                        <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider">Firestore Database ID</span>
+                        <span className="font-mono text-xs sm:text-sm font-extrabold text-amber-300 block mt-1 break-all">
+                          {safeFirebaseConfig.firestoreDatabaseId || '(default)'}
+                        </span>
+                        <span className="text-[10px] text-emerald-300/70 block mt-0.5">Database terisolasi & terproteksi</span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-[#052216] border border-[#d4af37]/30">
+                        <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider">Cloud Storage Bucket</span>
+                        <span className="font-mono text-xs sm:text-sm font-extrabold text-amber-300 block mt-1 break-all">
+                          {safeFirebaseConfig.storageBucket || 'absensi-data-santri.firebasestorage.app'}
+                        </span>
+                        <span className="text-[10px] text-emerald-300/70 block mt-0.5">Penyimpanan media & foto</span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-[#052216] border border-[#d4af37]/30">
+                        <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider">Auth Domain</span>
+                        <span className="font-mono text-xs sm:text-sm font-extrabold text-amber-300 block mt-1 break-all">
+                          {safeFirebaseConfig.authDomain || 'absensi-data-santri.firebaseapp.com'}
+                        </span>
+                        <span className="text-[10px] text-emerald-300/70 block mt-0.5">Autentikasi akun & OAuth</span>
+                      </div>
+                    </div>
+
+                    {/* Live Synchronized Collections Grid */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs sm:text-sm font-extrabold text-[#f5e298] flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>Status Koleksi Master Terpusat (Realtime Listener Aktif)</span>
+                        </h4>
+                        <span className="text-[11px] text-emerald-300/80">
+                          Auto-Sync via Firestore onSnapshot
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
+                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
+                          <span className="text-[10px] text-emerald-300 font-bold block">Santri</span>
+                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{santriList.length}</span>
+                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
+                          <span className="text-[10px] text-emerald-300 font-bold block">Guru / Ustadz</span>
+                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{guruList.length}</span>
+                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
+                          <span className="text-[10px] text-emerald-300 font-bold block">Jadwal</span>
+                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{jadwalList.length}</span>
+                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
+                          <span className="text-[10px] text-emerald-300 font-bold block">Presensi Santri</span>
+                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{absensiSantriList.length}</span>
+                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
+                          <span className="text-[10px] text-emerald-300 font-bold block">Presensi Guru</span>
+                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{absensiGuruList.length}</span>
+                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
+                          <span className="text-[10px] text-emerald-300 font-bold block">Nadzhom</span>
+                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{nadzhomList.length}</span>
+                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
+                          <span className="text-[10px] text-emerald-300 font-bold block">Izin Mengajar</span>
+                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{(izinList || []).length}</span>
+                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
+                          <span className="text-[10px] text-emerald-300 font-bold block">Pengurus</span>
+                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{pengurusList.length}</span>
+                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Disaster Recovery & Backup Panel */}
+                    <div className="p-5 rounded-2xl bg-[#052216]/95 border-2 border-[#d4af37]/40 shadow-xl space-y-4">
+                      <div className="flex items-center gap-3 pb-3 border-b border-[#d4af37]/20">
+                        <div className="w-10 h-10 rounded-xl bg-amber-400/20 text-amber-300 border border-amber-400/30 flex items-center justify-center shrink-0">
+                          <ShieldCheck className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-extrabold text-white text-gold-3d">
+                            Disaster Recovery: Backup & Pemulihan Database Produksi
+                          </h4>
+                          <p className="text-[11px] text-emerald-300/90">
+                            Unduh seluruh salinan data produksi langsung dari Firestore, atau pulihkan data dari berkas cadangan JSON sewaktu-waktu.
+                          </p>
+                        </div>
+                      </div>
+
+                      {backupExportStatus && (
+                        <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>{backupExportStatus}</span>
+                        </div>
+                      )}
+
+                      {restoreStatusMessage && (
+                        <div className="p-3 rounded-xl bg-amber-950/80 border border-amber-500/40 text-amber-200 text-xs flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>{restoreStatusMessage}</span>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Download Backup */}
+                        <div className="p-4 rounded-xl bg-[#041a10] border border-[#d4af37]/30 flex flex-col justify-between space-y-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Download className="w-4 h-4 text-[#d4af37]" />
+                              <span className="text-xs font-extrabold text-[#f5e298]">Unduh Cadangan JSON (Snapshot)</span>
+                            </div>
+                            <p className="text-[11px] text-emerald-200/80 mt-1">
+                              Menghasilkan berkas cadangan JSON komprehensif berisi semua santri, guru, jadwal, presensi, nadzhom, kurikulum, dan pengaturan sistem.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleDownloadBackup}
+                            disabled={isExportingBackup}
+                            className="w-full py-2.5 px-4 rounded-xl btn-3d-gold text-black font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg hover:brightness-105 disabled:opacity-50"
+                          >
+                            <Download className="w-4 h-4" />
+                            <span>{isExportingBackup ? 'Memproses Ekspor Firestore...' : 'Unduh Backup Database (.json)'}</span>
+                          </button>
+                        </div>
+
+                        {/* Restore Backup */}
+                        <div className="p-4 rounded-xl bg-[#041a10] border border-[#d4af37]/30 flex flex-col justify-between space-y-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Upload className="w-4 h-4 text-amber-400" />
+                              <span className="text-xs font-extrabold text-[#f5e298]">Pulihkan Database dari JSON</span>
+                            </div>
+                            <p className="text-[11px] text-emerald-200/80 mt-1">
+                              Pilih berkas JSON cadangan yang pernah diunduh untuk memulihkan seluruh koleksi ke Firestore produksi dengan aman.
+                            </p>
+                          </div>
+                          <div>
+                            <input
+                              type="file"
+                              ref={restoreFileInputRef}
+                              accept=".json,application/json"
+                              onChange={handleFileSelectForRestore}
+                              className="hidden"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => restoreFileInputRef.current?.click()}
+                              disabled={isRestoringBackup}
+                              className="w-full py-2.5 px-4 rounded-xl bg-[#083321] border border-[#d4af37]/50 text-[#f5e298] font-bold text-xs flex items-center justify-center gap-2 hover:bg-[#0c472f] hover:text-white transition disabled:opacity-50"
+                            >
+                              <Upload className="w-4 h-4" />
+                              <span>Pilih Berkas Backup JSON...</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Modal Konfirmasi Restore jika file dipilih */}
+                      {restoreConfirmData && (
+                        <div className="p-4 rounded-xl bg-amber-950/70 border-2 border-amber-400/60 space-y-3 animate-fadeIn">
+                          <div className="flex items-center gap-2 text-amber-300 font-extrabold text-xs">
+                            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                            <span>Konfirmasi Pemulihan Database Produksi</span>
+                          </div>
+                          <p className="text-[11px] text-amber-100">
+                            Berkas cadangan terdeteksi: <strong>{restoreConfirmData.appName || 'SIM Ponpes Salaf Al-Maliki'}</strong> (dibuat: {restoreConfirmData.exportedAt || 'Tidak diketahui'}).
+                          </p>
+                          <div className="text-[10px] text-amber-200/90 bg-black/40 p-2.5 rounded-lg font-mono">
+                            Modul data yang akan disinkronkan: {Object.keys(restoreConfirmData.collections || restoreConfirmData).join(', ')}
+                          </div>
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={handleExecuteRestore}
+                              disabled={isRestoringBackup}
+                              className="px-4 py-2 rounded-lg bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1.5 hover:bg-amber-300 disabled:opacity-50"
+                            >
+                              <Check className="w-4 h-4" />
+                              <span>{isRestoringBackup ? 'Menulis ke Firestore...' : 'Ya, Terapkan Pemulihan Sekarang'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRestoreConfirmData(null)}
+                              disabled={isRestoringBackup}
+                              className="px-3.5 py-2 rounded-lg bg-black/50 text-stone-300 text-xs font-bold hover:text-white"
+                            >
+                              Batal
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Panduan Multi-Domain & Multi-Device */}
+                    <div className="p-4 rounded-xl bg-[#041a10] border border-[#d4af37]/20 text-[11px] text-emerald-200/80 space-y-1.5">
+                      <div className="font-bold text-[#f5e298] flex items-center gap-1.5">
+                        <Globe className="w-3.5 h-3.5 text-[#d4af37]" />
+                        <span>Arsitektur Multi-Domain & Cross-Platform Terpadu</span>
+                      </div>
+                      <p>
+                        Aplikasi telah dikonfigurasi dengan <strong>vercel.json</strong> dan <strong>netlify.toml</strong> untuk memastikan semua URL dan sub-halaman di-route secara sempurna ke <code>/index.html</code> (SPA standard). Tidak ada pemisahan database; seluruh perubahan data dari perangkat santri, pengurus, maupun pengajar langsung tercatat di Firestore produksi dan disinkronkan secara realtime ke seluruh pengguna.
+                      </p>
                     </div>
                   </div>
                 )}

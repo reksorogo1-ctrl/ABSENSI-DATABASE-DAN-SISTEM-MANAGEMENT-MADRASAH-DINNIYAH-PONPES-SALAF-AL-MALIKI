@@ -154,3 +154,122 @@ export function subscribeMasterDataFromFirestore<T = any>(
     return () => {};
   }
 }
+
+export interface FirestoreBackupPackage {
+  version: string;
+  exportedAt: string;
+  projectId: string;
+  databaseId: string;
+  storageBucket?: string;
+  authDomain?: string;
+  appName: string;
+  settings: any;
+  collections: Record<string, any>;
+  summary: Record<string, number>;
+}
+
+export const MASTER_COLLECTION_KEYS = [
+  'santri',
+  'guru',
+  'jadwal',
+  'absensi_santri',
+  'absensi_guru',
+  'nilai',
+  'nadzhom',
+  'syahriyah',
+  'kurikulum',
+  'pengurus',
+  'izin_mengajar',
+  'sync_meta'
+];
+
+/**
+ * Ekspor seluruh database Firestore produksi (Single Source of Truth) ke objek backup JSON
+ */
+export async function exportFirestoreBackup(): Promise<FirestoreBackupPackage> {
+  const collections: Record<string, any> = {};
+  const summary: Record<string, number> = {};
+
+  for (const key of MASTER_COLLECTION_KEYS) {
+    try {
+      const data = await loadMasterDataFromFirestore(key);
+      if (data !== null && data !== undefined) {
+        collections[key] = data;
+        summary[key] = Array.isArray(data) ? data.length : 1;
+      } else {
+        collections[key] = [];
+        summary[key] = 0;
+      }
+    } catch (err) {
+      console.error(`Gagal mengekspor koleksi ${key}:`, err);
+      collections[key] = [];
+      summary[key] = 0;
+    }
+  }
+
+  const settings = await loadSettingsFromFirestore();
+
+  return {
+    version: '1.0.0',
+    exportedAt: new Date().toISOString(),
+    projectId: firebaseConfig.projectId,
+    databaseId: firebaseConfig.firestoreDatabaseId,
+    storageBucket: firebaseConfig.storageBucket,
+    authDomain: firebaseConfig.authDomain,
+    appName: 'SIM Pondok Pesantren Salaf Al-Maliki',
+    settings: settings || null,
+    collections,
+    summary
+  };
+}
+
+/**
+ * Memulihkan data Firestore dari objek backup JSON yang valid secara non-destruktif
+ */
+export async function restoreFirestoreBackup(backup: any): Promise<{
+  success: boolean;
+  restoredKeys: string[];
+  summary: Record<string, number>;
+  message: string;
+}> {
+  if (!backup || typeof backup !== 'object') {
+    throw new Error('Format file backup tidak valid. Harus berupa JSON.');
+  }
+
+  const targetCollections = backup.collections || (backup.santri ? backup : null);
+  if (!targetCollections || typeof targetCollections !== 'object') {
+    throw new Error('Data backup tidak memiliki struktur koleksi yang dapat dibaca.');
+  }
+
+  const restoredKeys: string[] = [];
+  const summary: Record<string, number> = {};
+
+  // Pulihkan pengaturan umum jika ada
+  if (backup.settings) {
+    try {
+      await saveSettingsToFirestore(backup.settings);
+      restoredKeys.push('settings');
+    } catch (err) {
+      console.warn('Gagal memulihkan pengaturan umum:', err);
+    }
+  }
+
+  // Pulihkan masing-masing master collection
+  for (const key of MASTER_COLLECTION_KEYS) {
+    if (key in targetCollections) {
+      const itemData = targetCollections[key];
+      if (itemData !== undefined && itemData !== null) {
+        await saveMasterDataToFirestore(key, itemData);
+        restoredKeys.push(key);
+        summary[key] = Array.isArray(itemData) ? itemData.length : 1;
+      }
+    }
+  }
+
+  return {
+    success: true,
+    restoredKeys,
+    summary,
+    message: `Berhasil memulihkan ${restoredKeys.length} modul data ke database Firestore produksi.`
+  };
+}

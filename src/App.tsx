@@ -505,15 +505,13 @@ export default function App() {
       }
     });
 
-    // SINKRONISASI DATA MASTER ANTAR-PERANGKAT (LAPTOP & HP)
+    // SINKRONISASI DATA MASTER ANTAR-PERANGKAT (LAPTOP & HP) - STRICT SINGLE SOURCE OF TRUTH
     // 1. Data Santri
     loadMasterDataFromFirestore<Santri[]>('santri').then((data) => {
       if (data && Array.isArray(data) && data.length > 0) {
         const cleaned = deduplicateSantriList(data);
         setSantriList(cleaned);
         localStorage.setItem('sim_santri', JSON.stringify(cleaned));
-      } else {
-        saveMasterDataToFirestore('santri', santriList);
       }
     });
 
@@ -523,8 +521,6 @@ export default function App() {
         const cleaned = deduplicateGuruList(data);
         setGuruList(cleaned);
         localStorage.setItem('sim_guru', JSON.stringify(cleaned));
-      } else {
-        saveMasterDataToFirestore('guru', guruList);
       }
     });
 
@@ -534,8 +530,6 @@ export default function App() {
         setJadwalList(data);
         localStorage.setItem('sim_jadwal', JSON.stringify(data));
         broadcastScheduleUpdate(data, 'Firestore');
-      } else {
-        saveMasterDataToFirestore('jadwal', jadwalList);
       }
     });
 
@@ -544,8 +538,6 @@ export default function App() {
       if (data && Array.isArray(data) && data.length > 0) {
         setAbsensiSantriList(data);
         localStorage.setItem('sim_absensi_santri', JSON.stringify(data));
-      } else if (absensiSantriList.length > 0) {
-        saveMasterDataToFirestore('absensi_santri', absensiSantriList);
       }
     });
 
@@ -554,8 +546,6 @@ export default function App() {
       if (data && Array.isArray(data) && data.length > 0) {
         setAbsensiGuruList(data);
         localStorage.setItem('sim_absensi_guru', JSON.stringify(data));
-      } else if (absensiGuruList.length > 0) {
-        saveMasterDataToFirestore('absensi_guru', absensiGuruList);
       }
     });
 
@@ -564,8 +554,6 @@ export default function App() {
       if (data && Array.isArray(data) && data.length > 0) {
         setNilaiList(data);
         localStorage.setItem('sim_nilai', JSON.stringify(data));
-      } else {
-        saveMasterDataToFirestore('nilai', nilaiList);
       }
     });
 
@@ -574,8 +562,6 @@ export default function App() {
       if (data && Array.isArray(data) && data.length > 0) {
         setNadzhomList(data);
         localStorage.setItem('sim_nadzhom', JSON.stringify(data));
-      } else {
-        saveMasterDataToFirestore('nadzhom', nadzhomList);
       }
     });
 
@@ -584,12 +570,10 @@ export default function App() {
       if (data && Array.isArray(data) && data.length > 0) {
         setSyahriyahList(data);
         localStorage.setItem('sim_syahriyah', JSON.stringify(data));
-      } else {
-        saveMasterDataToFirestore('syahriyah', syahriyahList);
       }
     });
 
-    // 9. Kurikulum & Pengurus
+    // 9. Kurikulum & Pengurus & Izin Mengajar
     loadMasterDataFromFirestore<KurikulumKitabRecord[]>('kurikulum').then((data) => {
       if (data && Array.isArray(data) && data.length > 0) {
         setKurikulumList(data);
@@ -601,6 +585,13 @@ export default function App() {
       if (data && Array.isArray(data) && data.length > 0) {
         setPengurusList(prev => syncPengurusWithGuru(data, guruList));
         localStorage.setItem('sim_pengurus', JSON.stringify(data));
+      }
+    });
+
+    loadMasterDataFromFirestore<IzinMengajarRequest[]>('izin_mengajar').then((data) => {
+      if (data && Array.isArray(data) && data.length > 0) {
+        setIzinMengajarList(data);
+        localStorage.setItem('sim_izin_mengajar', JSON.stringify(data));
       }
     });
 
