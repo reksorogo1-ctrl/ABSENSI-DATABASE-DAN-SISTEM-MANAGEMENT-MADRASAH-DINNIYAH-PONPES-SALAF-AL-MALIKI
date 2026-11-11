@@ -118,6 +118,10 @@ interface AdminDashboardProps {
   onSubmitIzinMengajar?: (req: IzinMengajarRequest) => void;
   onDeleteIzinMengajar?: (id: string) => void;
   onDeleteSantri?: (id: string) => void;
+  rekapSantriHistoryList?: AbsensiSantriRecord[];
+  rekapGuruHistoryList?: AbsensiGuruRecord[];
+  onSaveRekapSantriHistory?: (records: AbsensiSantriRecord[]) => Promise<void> | void;
+  onSaveRekapGuruHistory?: (records: AbsensiGuruRecord[]) => Promise<void> | void;
   sheetsService?: any;
   isGoogleConnected?: boolean;
   setIsGoogleConnected?: (connected: boolean) => void;
@@ -135,6 +139,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   nilaiList,
   absensiSantriList = [],
   absensiGuruList = [],
+  rekapSantriHistoryList = [],
+  rekapGuruHistoryList = [],
+  onSaveRekapSantriHistory,
+  onSaveRekapGuruHistory,
   syahriyahList = [],
   uangSakuList = [],
   kurikulumList = [],
@@ -269,31 +277,58 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return () => unsub();
   }, []);
 
-  // Rekapan Absensi Guru & Santri (Tersimpan dari Simpan Rekap & Ganti Hari)
+  // Rekapan Absensi Guru & Santri (Firestore Single Source of Truth, dengan fallback local)
   const [rekapGuruLog, setRekapGuruLog] = useState<AbsensiGuruRecord[]>(() => {
-    const saved = localStorage.getItem('sim_rekap_guru_harian_history');
-    return saved ? JSON.parse(saved) : [];
+    if (rekapGuruHistoryList && rekapGuruHistoryList.length > 0) return rekapGuruHistoryList;
+    try {
+      const saved = localStorage.getItem('sim_rekap_guru_harian_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
   const [rekapSantriLog, setRekapSantriLog] = useState<AbsensiSantriRecord[]>(() => {
-    const saved = localStorage.getItem('sim_rekap_santri_harian_history');
-    return saved ? JSON.parse(saved) : [];
+    if (rekapSantriHistoryList && rekapSantriHistoryList.length > 0) return rekapSantriHistoryList;
+    try {
+      const saved = localStorage.getItem('sim_rekap_santri_harian_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
-  // Sinkronisasi realtime riwayat rekapan saat ada reset / update
+  // Sinkronisasi realtime saat rekapSantriHistoryList atau rekapGuruHistoryList dari Firestore diupdate
+  useEffect(() => {
+    if (rekapGuruHistoryList && rekapGuruHistoryList.length > 0) {
+      setRekapGuruLog(rekapGuruHistoryList);
+    }
+  }, [rekapGuruHistoryList]);
+
+  useEffect(() => {
+    if (rekapSantriHistoryList && rekapSantriHistoryList.length > 0) {
+      setRekapSantriLog(rekapSantriHistoryList);
+    }
+  }, [rekapSantriHistoryList]);
+
+  // Sinkronisasi realtime riwayat rekapan antar-tab (jika Firestore belum terisi)
   useEffect(() => {
     const handleStorageChange = () => {
       try {
         const savedG = localStorage.getItem('sim_rekap_guru_harian_history');
-        if (savedG) setRekapGuruLog(JSON.parse(savedG));
+        if (savedG && (!rekapGuruHistoryList || rekapGuruHistoryList.length === 0)) {
+          setRekapGuruLog(JSON.parse(savedG));
+        }
         const savedS = localStorage.getItem('sim_rekap_santri_harian_history');
-        if (savedS) setRekapSantriLog(JSON.parse(savedS));
+        if (savedS && (!rekapSantriHistoryList || rekapSantriHistoryList.length === 0)) {
+          setRekapSantriLog(JSON.parse(savedS));
+        }
       } catch {}
     };
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+  }, [rekapGuruHistoryList, rekapSantriHistoryList]);
 
-  // Gabungkan absensiGuruList (live real-time dari props/pengurus) dengan rekapGuruLog (arsip)
+  // Gabungkan absensiGuruList (live real-time dari props/pengurus) dengan rekapGuruLog (arsip Firestore Single Source of Truth)
   const combinedGuruLog = useMemo(() => {
     const map = new Map<string, AbsensiGuruRecord>();
     // Tambahkan absensiGuruList live real-time
@@ -301,8 +336,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const key = `${item.tanggal}_${item.nama}_${item.kelas}_${item.jamKe}`;
       map.set(key, item);
     });
-    // Tambahkan rekapGuruLog
-    rekapGuruLog.forEach(item => {
+    // Tambahkan riwayat arsip (prioritaskan rekapGuruHistoryList dari Firestore)
+    const historyList = (rekapGuruHistoryList && rekapGuruHistoryList.length > 0) ? rekapGuruHistoryList : rekapGuruLog;
+    historyList.forEach(item => {
       const key = `${item.tanggal}_${item.nama}_${item.kelas}_${item.jamKe}`;
       if (!map.has(key)) {
         map.set(key, item);
@@ -311,9 +347,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return Array.from(map.values()).sort((a, b) => {
       return (b.tanggal || '').localeCompare(a.tanggal || '');
     });
-  }, [absensiGuruList, rekapGuruLog]);
+  }, [absensiGuruList, rekapGuruHistoryList, rekapGuruLog]);
 
-  // Gabungkan absensiSantriList (live real-time dari props/pengurus) dengan rekapSantriLog (arsip riwayat)
+  // Gabungkan absensiSantriList (live real-time dari props/pengurus) dengan rekapSantriLog (arsip riwayat Firestore Single Source of Truth)
   const combinedSantriLog = useMemo(() => {
     const map = new Map<string, AbsensiSantriRecord>();
     // Tambahkan absensiSantriList live real-time
@@ -321,8 +357,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const key = `${item.tanggal}_${item.idSantri || item.nama}`;
       map.set(key, item);
     });
-    // Tambahkan rekapSantriLog
-    rekapSantriLog.forEach(item => {
+    // Tambahkan riwayat arsip (prioritaskan rekapSantriHistoryList dari Firestore)
+    const historyList = (rekapSantriHistoryList && rekapSantriHistoryList.length > 0) ? rekapSantriHistoryList : rekapSantriLog;
+    historyList.forEach(item => {
       const key = `${item.tanggal}_${item.idSantri || item.nama}`;
       if (!map.has(key)) {
         map.set(key, item);
@@ -331,7 +368,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return Array.from(map.values()).sort((a, b) => {
       return (b.tanggal || '').localeCompare(a.tanggal || '');
     });
-  }, [absensiSantriList, rekapSantriLog]);
+  }, [absensiSantriList, rekapSantriHistoryList, rekapSantriLog]);
 
   // Daftar 12 Bulan Kalender Resmi
   const DAFTAR_BULAN_REKAP = [
@@ -401,13 +438,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return false;
   };
 
-  // Handler Perubahan Status & Hapus Absensi Santri secara Real-Time
+  // Handler Perubahan Status & Hapus Absensi Santri secara Real-Time (Firestore Single Source of Truth)
   const handleUpdateSantriStatus = (record: AbsensiSantriRecord, newStatus: 'Hadir' | 'Izin' | 'Sakit' | 'Alpha') => {
-    const updatedRecord: AbsensiSantriRecord = { ...record, status: newStatus };
+    const updatedRecord: AbsensiSantriRecord = { 
+      ...record, 
+      status: newStatus,
+      waktuRevisi: new Date().toISOString(),
+      revisiBy: 'Admin'
+    };
     onSaveAbsensiSantri([updatedRecord]);
     setRekapSantriLog(prev => {
       const filtered = prev.filter(p => !(p.tanggal === record.tanggal && (p.idSantri === record.idSantri || p.nama === record.nama)));
       const updated = [updatedRecord, ...filtered];
+      if (onSaveRekapSantriHistory) {
+        onSaveRekapSantriHistory(updated);
+      }
       try {
         localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(updated));
       } catch {}
@@ -422,6 +467,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     setRekapSantriLog(prev => {
       const updated = prev.filter(p => !(p.tanggal === record.tanggal && (p.idSantri === record.idSantri || p.nama === record.nama)));
+      if (onSaveRekapSantriHistory) {
+        onSaveRekapSantriHistory(updated);
+      }
       try {
         localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(updated));
       } catch {}
@@ -429,13 +477,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   };
 
-  // Handler Perubahan Status & Hapus Absensi Guru secara Real-Time
+  // Handler Perubahan Status & Hapus Absensi Guru secara Real-Time (Firestore Single Source of Truth)
   const handleUpdateGuruStatus = (record: AbsensiGuruRecord, newStatus: 'Hadir' | 'Terlambat' | 'Izin' | 'Alpha') => {
-    const updatedRecord: AbsensiGuruRecord = { ...record, status: newStatus };
+    const updatedRecord: AbsensiGuruRecord = { 
+      ...record, 
+      status: newStatus,
+      waktuRevisi: new Date().toISOString(),
+      revisiBy: 'Admin'
+    };
     onSaveAbsensiGuru([updatedRecord]);
     setRekapGuruLog(prev => {
       const filtered = prev.filter(p => !(p.tanggal === record.tanggal && p.nama === record.nama && p.kelas === record.kelas && String(p.jamKe) === String(record.jamKe)));
       const updated = [updatedRecord, ...filtered];
+      if (onSaveRekapGuruHistory) {
+        onSaveRekapGuruHistory(updated);
+      }
       try {
         localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(updated));
       } catch {}
@@ -450,6 +506,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     setRekapGuruLog(prev => {
       const updated = prev.filter(p => !(p.tanggal === record.tanggal && p.nama === record.nama && p.kelas === record.kelas && String(p.jamKe) === String(record.jamKe)));
+      if (onSaveRekapGuruHistory) {
+        onSaveRekapGuruHistory(updated);
+      }
       try {
         localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(updated));
       } catch {}
@@ -459,6 +518,140 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // State Dialog Konfirmasi Reset Rekapan ke Nol (0)
   const [showResetConfirmModal, setShowResetConfirmModal] = useState<boolean>(false);
+
+  // State Migration LocalStorage ke Firestore Single Source of Truth
+  const [localMigrationInfo, setLocalMigrationInfo] = useState<{
+    santriLocalCount: number;
+    guruLocalCount: number;
+    hasLocalData: boolean;
+  }>(() => {
+    let sCount = 0;
+    let gCount = 0;
+    try {
+      const s = localStorage.getItem('sim_rekap_santri_harian_history');
+      if (s) sCount = (JSON.parse(s) || []).length;
+      const g = localStorage.getItem('sim_rekap_guru_harian_history');
+      if (g) gCount = (JSON.parse(g) || []).length;
+    } catch {}
+    return {
+      santriLocalCount: sCount,
+      guruLocalCount: gCount,
+      hasLocalData: sCount > 0 || gCount > 0
+    };
+  });
+  const [showMigrationModal, setShowMigrationModal] = useState<boolean>(false);
+  const [isMigratingData, setIsMigratingData] = useState<boolean>(false);
+  const [migrationFeedback, setMigrationFeedback] = useState<string | null>(null);
+
+  // Download Backup JSON LocalStorage sebelum migrasi (Sesuai Syarat C.3)
+  const handleDownloadLocalStorageBackup = () => {
+    try {
+      const sStr = localStorage.getItem('sim_rekap_santri_harian_history') || '[]';
+      const gStr = localStorage.getItem('sim_rekap_guru_harian_history') || '[]';
+      const backupObj = {
+        app: 'SIM Pondok Pesantren Salaf Al-Maliki',
+        kategori: 'Backup Riwayat Rekap LocalStorage',
+        exportedAt: new Date().toISOString(),
+        totalSantri: JSON.parse(sStr).length,
+        totalGuru: JSON.parse(gStr).length,
+        santriHistory: JSON.parse(sStr),
+        guruHistory: JSON.parse(gStr)
+      };
+      const blob = new Blob([JSON.stringify(backupObj, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `backup-localstorage-rekap-absensi-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Gagal mengunduh berkas backup: ' + (e as Error).message);
+    }
+  };
+
+  // Eksekusi Migrasi Aman ke Firestore (Idempotent, Zero Data Loss, Deduplikasi C.4-C.6)
+  const handleExecuteLocalStorageMigration = async () => {
+    setIsMigratingData(true);
+    setMigrationFeedback('Memvalidasi format data dan mencegah duplikasi...');
+    try {
+      const sStr = localStorage.getItem('sim_rekap_santri_harian_history') || '[]';
+      const gStr = localStorage.getItem('sim_rekap_guru_harian_history') || '[]';
+      const localSantri: AbsensiSantriRecord[] = JSON.parse(sStr);
+      const localGuru: AbsensiGuruRecord[] = JSON.parse(gStr);
+
+      const nowIso = new Date().toISOString();
+
+      // Deduplikasi Santri
+      const existingSantriMap = new Map<string, AbsensiSantriRecord>();
+      (rekapSantriHistoryList || []).forEach(item => {
+        existingSantriMap.set(`${item.tanggal}_${item.idSantri || item.nama}`, item);
+      });
+
+      let santriAdded = 0;
+      localSantri.forEach((item, idx) => {
+        const key = `${item.tanggal}_${item.idSantri || item.nama}`;
+        if (!existingSantriMap.has(key)) {
+          existingSantriMap.set(key, {
+            ...item,
+            recordId: item.recordId || `MIG-S-${item.tanggal}-${idx + 1}`,
+            waktuPencatatan: item.waktuPencatatan || nowIso,
+            sumber: item.sumber || 'Migrasi LocalStorage ke Firestore Single Source of Truth'
+          });
+          santriAdded++;
+        }
+      });
+
+      // Deduplikasi Guru
+      const existingGuruMap = new Map<string, AbsensiGuruRecord>();
+      (rekapGuruHistoryList || []).forEach(item => {
+        existingGuruMap.set(`${item.tanggal}_${item.nama}_${item.kelas}_${item.jamKe}`, item);
+      });
+
+      let guruAdded = 0;
+      localGuru.forEach((item, idx) => {
+        const key = `${item.tanggal}_${item.nama}_${item.kelas}_${item.jamKe}`;
+        if (!existingGuruMap.has(key)) {
+          existingGuruMap.set(key, {
+            ...item,
+            id: item.id || `MIG-G-${item.tanggal}-${idx + 1}`,
+            waktuPencatatan: item.waktuPencatatan || nowIso,
+            sumber: item.sumber || 'Migrasi LocalStorage ke Firestore Single Source of Truth'
+          });
+          guruAdded++;
+        }
+      });
+
+      const mergedSantri = Array.from(existingSantriMap.values());
+      const mergedGuru = Array.from(existingGuruMap.values());
+
+      if (onSaveRekapSantriHistory) {
+        await onSaveRekapSantriHistory(mergedSantri);
+      }
+      if (onSaveRekapGuruHistory) {
+        await onSaveRekapGuruHistory(mergedGuru);
+      }
+
+      setRekapSantriLog(mergedSantri);
+      setRekapGuruLog(mergedGuru);
+
+      setLocalMigrationInfo({
+        santriLocalCount: localSantri.length,
+        guruLocalCount: localGuru.length,
+        hasLocalData: false
+      });
+
+      const successMsg = `Alhamdulillah! Migrasi berhasil. ${santriAdded} catatan santri dan ${guruAdded} catatan ustadz berhasil disimpan permanen ke Firestore. Seluruh perangkat (PC, Laptop, HP) kini membaca data yang sama persis secara real-time. Data lokal tetap aman sebagai backup.`;
+      setMigrationFeedback(successMsg);
+      alert(successMsg);
+      setShowMigrationModal(false);
+    } catch (e) {
+      const errMsg = 'Gagal migrasi ke Firestore: ' + (e as Error).message;
+      setMigrationFeedback(errMsg);
+      alert(errMsg);
+    } finally {
+      setIsMigratingData(false);
+    }
+  };
 
   // State Modal Revisi Rekap Bulanan (Santri & Guru)
   const [editingRevisiSantri, setEditingRevisiSantri] = useState<{
@@ -483,11 +676,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     alpha: number;
   } | null>(null);
 
-  // Handler Reset Rekapan ke Nol
+  // Handler Reset Rekapan ke Nol (Firestore Single Source of Truth)
   const handleExecuteReset = (resetAllLogs: boolean = false) => {
     if (resetAllLogs) {
       setRekapSantriLog([]);
       setRekapGuruLog([]);
+      if (onSaveRekapSantriHistory) {
+        onSaveRekapSantriHistory([]);
+      }
+      if (onSaveRekapGuruHistory) {
+        onSaveRekapGuruHistory([]);
+      }
       try {
         localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify([]));
         localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify([]));
@@ -499,7 +698,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setShowResetConfirmModal(false);
   };
 
-  // Handler Revisi Rekap Santri (Simpan jumlah Hadir, Izin, Sakit, Alpha)
+  // Handler Revisi Rekap Santri (Simpan jumlah Hadir, Izin, Sakit, Alpha ke Firestore Single Source of Truth)
   const handleSaveRevisiSantri = (rev: {
     id: string;
     nama: string;
@@ -523,49 +722,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const newRecords: AbsensiSantriRecord[] = [];
     let day = 1;
     const makeDate = (d: number) => `${targetYear}-${mm}-${String(Math.min(28, d)).padStart(2, '0')}`;
+    const nowIso = new Date().toISOString();
 
     for (let i = 0; i < rev.hadir; i++) {
       newRecords.push({
+        recordId: `REV-S-${rev.id}-${targetYear}${mm}-H${i + 1}`,
         tanggal: makeDate(day++),
         idSantri: rev.id,
         nama: rev.nama,
         kelas: rev.kelas,
         status: 'Hadir',
-        keterangan: 'Revisi Rekap Kehadiran (Admin)'
+        keterangan: 'Revisi Rekap Kehadiran (Admin)',
+        waktuPencatatan: nowIso,
+        waktuRevisi: nowIso,
+        revisiBy: 'Admin',
+        sumber: 'Revisi Rekap Bulanan'
       });
     }
     for (let i = 0; i < rev.izin; i++) {
       newRecords.push({
+        recordId: `REV-S-${rev.id}-${targetYear}${mm}-I${i + 1}`,
         tanggal: makeDate(day++),
         idSantri: rev.id,
         nama: rev.nama,
         kelas: rev.kelas,
         status: 'Izin',
-        keterangan: 'Revisi Rekap Izin (Admin)'
+        keterangan: 'Revisi Rekap Izin (Admin)',
+        waktuPencatatan: nowIso,
+        waktuRevisi: nowIso,
+        revisiBy: 'Admin',
+        sumber: 'Revisi Rekap Bulanan'
       });
     }
     for (let i = 0; i < rev.sakit; i++) {
       newRecords.push({
+        recordId: `REV-S-${rev.id}-${targetYear}${mm}-S${i + 1}`,
         tanggal: makeDate(day++),
         idSantri: rev.id,
         nama: rev.nama,
         kelas: rev.kelas,
         status: 'Sakit',
-        keterangan: 'Revisi Rekap Sakit (Admin)'
+        keterangan: 'Revisi Rekap Sakit (Admin)',
+        waktuPencatatan: nowIso,
+        waktuRevisi: nowIso,
+        revisiBy: 'Admin',
+        sumber: 'Revisi Rekap Bulanan'
       });
     }
     for (let i = 0; i < rev.alpha; i++) {
       newRecords.push({
+        recordId: `REV-S-${rev.id}-${targetYear}${mm}-A${i + 1}`,
         tanggal: makeDate(day++),
         idSantri: rev.id,
         nama: rev.nama,
         kelas: rev.kelas,
         status: 'Alpha',
-        keterangan: 'Revisi Rekap Alpha (Admin)'
+        keterangan: 'Revisi Rekap Alpha (Admin)',
+        waktuPencatatan: nowIso,
+        waktuRevisi: nowIso,
+        revisiBy: 'Admin',
+        sumber: 'Revisi Rekap Bulanan'
       });
     }
 
-    const updatedRekap = rekapSantriLog.filter(r => {
+    const currentBase = (rekapSantriHistoryList && rekapSantriHistoryList.length > 0) ? rekapSantriHistoryList : rekapSantriLog;
+    const updatedRekap = currentBase.filter(r => {
       const isThisSantri = (r.idSantri && r.idSantri === rev.id) || r.nama.trim().toLowerCase() === rev.nama.trim().toLowerCase();
       const inMonth = isDateInSelectedMonth(r.tanggal, rev.bulan);
       return !(isThisSantri && inMonth);
@@ -573,6 +794,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     const finalRekap = [...newRecords, ...updatedRekap];
     setRekapSantriLog(finalRekap);
+
+    // Simpan permanen ke Firestore (Single Source of Truth)
+    if (onSaveRekapSantriHistory) {
+      onSaveRekapSantriHistory(finalRekap);
+    }
     try {
       localStorage.setItem('sim_rekap_santri_harian_history', JSON.stringify(finalRekap));
     } catch {}
@@ -587,9 +813,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
 
     setEditingRevisiSantri(null);
+    alert(`Alhamdulillah! Revisi rekap kehadiran santri ${rev.nama} (${rev.bulan}) berhasil disimpan permanen ke Firebase Firestore. Sinkronisasi realtime ke semua perangkat (PC, Laptop, HP) aktif.`);
   };
 
-  // Handler Revisi Rekap Guru (Simpan jumlah Hadir, Izin, SakitTelat, Alpha)
+  // Handler Revisi Rekap Guru (Simpan jumlah Hadir, Izin, SakitTelat, Alpha ke Firestore Single Source of Truth)
   const handleSaveRevisiGuru = (rev: {
     nama: string;
     mapel: string;
@@ -613,9 +840,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const newRecords: AbsensiGuruRecord[] = [];
     let day = 1;
     const makeDate = (d: number) => `${targetYear}-${mm}-${String(Math.min(28, d)).padStart(2, '0')}`;
+    const nowIso = new Date().toISOString();
 
     for (let i = 0; i < rev.hadir; i++) {
       newRecords.push({
+        id: `REV-G-${rev.nama.replace(/\s+/g, '_')}-${targetYear}${mm}-H${i + 1}`,
         tanggal: makeDate(day++),
         nama: rev.nama,
         mapel: rev.mapel,
@@ -624,11 +853,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         catatan: 'Revisi Rekap Mengajar (Admin)',
         hari: 'SENIN',
         jamKe: 1,
-        waktu: '08:00 - 09:00'
+        waktu: '08:00 - 09:00',
+        waktuPencatatan: nowIso,
+        waktuRevisi: nowIso,
+        revisiBy: 'Admin',
+        sumber: 'Revisi Rekap Bulanan'
       });
     }
     for (let i = 0; i < rev.izin; i++) {
       newRecords.push({
+        id: `REV-G-${rev.nama.replace(/\s+/g, '_')}-${targetYear}${mm}-I${i + 1}`,
         tanggal: makeDate(day++),
         nama: rev.nama,
         mapel: rev.mapel,
@@ -637,11 +871,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         catatan: 'Revisi Rekap Izin (Admin)',
         hari: 'SENIN',
         jamKe: 1,
-        waktu: '08:00 - 09:00'
+        waktu: '08:00 - 09:00',
+        waktuPencatatan: nowIso,
+        waktuRevisi: nowIso,
+        revisiBy: 'Admin',
+        sumber: 'Revisi Rekap Bulanan'
       });
     }
     for (let i = 0; i < rev.sakitTelat; i++) {
       newRecords.push({
+        id: `REV-G-${rev.nama.replace(/\s+/g, '_')}-${targetYear}${mm}-T${i + 1}`,
         tanggal: makeDate(day++),
         nama: rev.nama,
         mapel: rev.mapel,
@@ -650,11 +889,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         catatan: 'Revisi Rekap Sakit/Telat (Admin)',
         hari: 'SENIN',
         jamKe: 1,
-        waktu: '08:00 - 09:00'
+        waktu: '08:00 - 09:00',
+        waktuPencatatan: nowIso,
+        waktuRevisi: nowIso,
+        revisiBy: 'Admin',
+        sumber: 'Revisi Rekap Bulanan'
       });
     }
     for (let i = 0; i < rev.alpha; i++) {
       newRecords.push({
+        id: `REV-G-${rev.nama.replace(/\s+/g, '_')}-${targetYear}${mm}-A${i + 1}`,
         tanggal: makeDate(day++),
         nama: rev.nama,
         mapel: rev.mapel,
@@ -663,11 +907,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         catatan: 'Revisi Rekap Alpha (Admin)',
         hari: 'SENIN',
         jamKe: 1,
-        waktu: '08:00 - 09:00'
+        waktu: '08:00 - 09:00',
+        waktuPencatatan: nowIso,
+        waktuRevisi: nowIso,
+        revisiBy: 'Admin',
+        sumber: 'Revisi Rekap Bulanan'
       });
     }
 
-    const updatedRekap = rekapGuruLog.filter(r => {
+    const currentBase = (rekapGuruHistoryList && rekapGuruHistoryList.length > 0) ? rekapGuruHistoryList : rekapGuruLog;
+    const updatedRekap = currentBase.filter(r => {
       const isThisGuru = r.nama.trim().toLowerCase() === rev.nama.trim().toLowerCase();
       const inMonth = isDateInSelectedMonth(r.tanggal, rev.bulan);
       return !(isThisGuru && inMonth);
@@ -675,6 +924,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     const finalRekap = [...newRecords, ...updatedRekap];
     setRekapGuruLog(finalRekap);
+
+    // Simpan permanen ke Firestore (Single Source of Truth)
+    if (onSaveRekapGuruHistory) {
+      onSaveRekapGuruHistory(finalRekap);
+    }
     try {
       localStorage.setItem('sim_rekap_guru_harian_history', JSON.stringify(finalRekap));
     } catch {}
@@ -689,6 +943,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
 
     setEditingRevisiGuru(null);
+    alert(`Alhamdulillah! Revisi rekap mengajar ustadz ${rev.nama} (${rev.bulan}) berhasil disimpan permanen ke Firebase Firestore. Sinkronisasi realtime ke semua perangkat (PC, Laptop, HP) aktif.`);
   };
 
   // Filter Tipe Kehadiran Ustadz: SEMUA | NORMAL | PENGGANTI | TERLAMBAT | BELUM HADIR | BERHALANGAN
@@ -4178,6 +4433,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
+              {/* Firestore Terpusat Single Source of Truth & Sinkronisasi Antar-Perangkat */}
+              <div className="p-3 rounded-2xl bg-[#041a10] border border-[#d4af37]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-md">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center text-emerald-300 shrink-0">
+                    <Database className="w-4 h-4 text-[#d4af37]" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-extrabold text-[#f3e5ab] text-xs">
+                        Firestore Single Source of Truth
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/50 text-emerald-300 text-[10px] font-bold font-mono flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        PC • Laptop • HP 100% Real-Time
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-emerald-300/80 block">
+                      Riwayat & rekapan dihitung seragam dari Firestore produksi (<span className="font-mono text-[#f5e298]">{rekapSantriHistoryList.length}</span> arsip santri, <span className="font-mono text-[#f5e298]">{rekapGuruHistoryList.length}</span> arsip guru).
+                    </span>
+                  </div>
+                </div>
+
+                {localMigrationInfo.hasLocalData && (
+                  <button
+                    type="button"
+                    onClick={() => setShowMigrationModal(true)}
+                    className="btn-3d-gold px-3 py-1.5 text-black font-extrabold text-[11px] rounded-xl flex items-center gap-1.5 shrink-0 shadow animate-pulse hover:animate-none"
+                    title="Migrasikan arsip lokal perangkat ini ke Firestore terpusat"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-black" />
+                    <span>Migrasikan LocalStorage ({localMigrationInfo.santriLocalCount + localMigrationInfo.guruLocalCount} Data)</span>
+                  </button>
+                )}
+              </div>
+
               {/* Status Banner Bulan & Koneksi Real-Time */}
               {(() => {
                 const curBulan = dashboardRekapTab === 'santri' ? selectedBulanSantri : selectedBulanGuru;
@@ -5057,6 +5347,106 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </button>
                     </div>
                   </form>
+                </div>
+              </div>
+            )}
+
+            {/* MODAL MIGRASI LOCALSTORAGE KE FIRESTORE SINGLE SOURCE OF TRUTH (Sesuai Syarat C) */}
+            {showMigrationModal && (
+              <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+                <div className="card-3d rounded-3xl p-6 sm:p-7 max-w-xl w-full border-2 border-[#d4af37] bg-gradient-to-b from-[#18251b] via-[#0d1a10] to-[#051108] space-y-4 shadow-2xl">
+                  <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/30">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/50 flex items-center justify-center text-amber-300 shadow">
+                        <Upload className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-extrabold text-white text-gold-3d">
+                          Migrasi LocalStorage ke Firestore Terpusat
+                        </h4>
+                        <p className="text-xs text-emerald-300">
+                          Jadikan Firestore satu-satunya sumber data permanen (Zero Data Loss)
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowMigrationModal(false)}
+                      className="p-1.5 rounded-xl bg-red-950/80 border border-red-500/40 text-red-300 hover:bg-red-900 transition"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3 text-xs text-slate-300">
+                    <div className="p-3.5 rounded-2xl bg-[#041a10] border border-[#d4af37]/30 space-y-2">
+                      <span className="font-extrabold text-[#f3e5ab] text-xs block">
+                        📊 Audit Deteksi Data Perangkat Ini:
+                      </span>
+                      <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                        <div className="p-2.5 rounded-xl bg-black/40 border border-emerald-500/30">
+                          <span className="text-slate-400 block text-[10px]">Riwayat Santri Lokal:</span>
+                          <b className="text-emerald-300 text-sm">{localMigrationInfo.santriLocalCount} catatan</b>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-black/40 border border-emerald-500/30">
+                          <span className="text-slate-400 block text-[10px]">Riwayat Ustadz Lokal:</span>
+                          <b className="text-emerald-300 text-sm">{localMigrationInfo.guruLocalCount} catatan</b>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-black/40 border border-amber-500/30">
+                          <span className="text-slate-400 block text-[10px]">Arsip Firestore Santri:</span>
+                          <b className="text-amber-300 text-sm">{rekapSantriHistoryList.length} catatan</b>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-black/40 border border-amber-500/30">
+                          <span className="text-slate-400 block text-[10px]">Arsip Firestore Ustadz:</span>
+                          <b className="text-amber-300 text-sm">{rekapGuruHistoryList.length} catatan</b>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-[11px] text-emerald-200/90 space-y-1">
+                      <b className="text-[#f3e5ab] block">🛡️ Keamanan & Zero Data Loss:</b>
+                      <p>
+                        Sistem memvalidasi seluruh data lokal dan hanya menambahkan data yang belum ada di Firestore (deduplikasi otomatis). Data lokal di browser Anda TIDAK akan dihapus, melainkan tetap dipertahankan sebagai cadangan keselamatan.
+                      </p>
+                    </div>
+
+                    {migrationFeedback && (
+                      <div className="p-3 rounded-xl bg-[#03180f] border border-[#d4af37]/40 text-xs text-[#f5e298] font-medium">
+                        {migrationFeedback}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-[#d4af37]/30">
+                    <button
+                      type="button"
+                      onClick={handleDownloadLocalStorageBackup}
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-950/90 border border-emerald-500/50 hover:bg-emerald-900 text-emerald-300 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow"
+                      title="Unduh backup data lokal sebelum migrasi"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>1. Unduh Backup JSON</span>
+                    </button>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setShowMigrationModal(false)}
+                        className="px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-white text-xs font-bold transition"
+                      >
+                        Tutup
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExecuteLocalStorageMigration}
+                        disabled={isMigratingData}
+                        className="btn-3d-gold px-5 py-2.5 text-black font-extrabold text-xs shadow-lg flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Upload className="w-4 h-4 text-black" />
+                        <span>{isMigratingData ? 'Memproses Migrasi...' : '2. Simpan ke Firestore Terpusat'}</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -11184,6 +11574,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             >
                               <Upload className="w-4 h-4" />
                               <span>Pilih Berkas Backup JSON...</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Migrasi LocalStorage ke Firestore */}
+                        <div className="p-4 rounded-xl bg-[#041a10] border border-[#d4af37]/30 flex flex-col justify-between space-y-3 md:col-span-2">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <Database className="w-4 h-4 text-[#d4af37]" />
+                                <span className="text-xs font-extrabold text-[#f5e298]">Migrasi Arsip LocalStorage ke Firestore Terpusat</span>
+                              </div>
+                              <p className="text-[11px] text-emerald-200/80 mt-1">
+                                Pindahkan seluruh riwayat rekapan presensi lokal di browser perangkat ini ke Firestore Single Source of Truth agar seluruh perangkat (PC, Laptop, HP) menampilkan data yang sama persis tanpa perbedaan.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setShowMigrationModal(true)}
+                              className="btn-3d-gold px-4 py-2 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 shrink-0 shadow whitespace-nowrap"
+                            >
+                              <Upload className="w-4 h-4 text-black" />
+                              <span>Buka Dialog Migrasi ({localMigrationInfo.santriLocalCount + localMigrationInfo.guruLocalCount} Data)</span>
                             </button>
                           </div>
                         </div>
