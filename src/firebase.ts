@@ -13,7 +13,8 @@ import {
   setDoc, 
   getDoc, 
   onSnapshot,
-  getDocFromServer 
+  getDocFromServer,
+  runTransaction
 } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -182,6 +183,10 @@ export const MASTER_COLLECTION_KEYS = [
   'kurikulum',
   'pengurus',
   'izin_mengajar',
+  'pelanggaran_santri',
+  'pelanggaran_template',
+  'pelanggaran_counter',
+  'pelanggaran_audit',
   'sync_meta'
 ];
 
@@ -275,3 +280,108 @@ export async function restoreFirestoreBackup(backup: any): Promise<{
     message: `Berhasil memulihkan ${restoredKeys.length} modul data ke database Firestore produksi.`
   };
 }
+
+const ROMAN_MONTHS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+const INDONESIAN_MONTHS = [
+  'januari', 'februari', 'maret', 'april', 'mei', 'juni',
+  'juli', 'agustus', 'september', 'oktober', 'november', 'desember'
+];
+
+export function formatNomorSuratFromCounter(
+  urutan: number,
+  formatPattern: string = '{NO}/TAKZIRAN/MD-ALMALIKI/{ROMAWI}/{TAHUN}',
+  periodeBulan?: string
+): string {
+  const paddedNo = String(Math.max(1, urutan)).padStart(3, '0');
+  const now = new Date();
+  let monthIdx = now.getMonth();
+  let yearNum = now.getFullYear();
+
+  if (periodeBulan) {
+    const parts = periodeBulan.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      const mIdx = INDONESIAN_MONTHS.findIndex(m => parts[0].toLowerCase().startsWith(m.slice(0, 3)));
+      if (mIdx !== -1) monthIdx = mIdx;
+      const yParsed = parseInt(parts[1], 10);
+      if (!isNaN(yParsed)) yearNum = yParsed;
+    }
+  }
+
+  const romawi = ROMAN_MONTHS[monthIdx] || 'XI';
+  const tahunStr = String(yearNum);
+
+  if (!formatPattern || !formatPattern.trim()) {
+    return `${paddedNo}/TAKZIRAN/MD-ALMALIKI/${romawi}/${tahunStr}`;
+  }
+
+  // Jika pengguna menuliskan contoh statis seperti "001/TAKZIRAN/MD-ALMALIKI/XI/2026" tanpa placeholder
+  if (
+    !formatPattern.includes('{NO}') &&
+    !formatPattern.includes('{NOMOR}')
+  ) {
+    const replacedFirstNum = formatPattern.replace(/^\d+/, paddedNo);
+    if (replacedFirstNum !== formatPattern) {
+      return replacedFirstNum;
+    }
+    return `${paddedNo}/${formatPattern}`;
+  }
+
+  return formatPattern
+    .replace(/\{NO\}|\{NOMOR\}/gi, paddedNo)
+    .replace(/\{ROMAWI\}|\{BULAN_ROMAWI\}/gi, romawi)
+    .replace(/\{TAHUN\}/gi, tahunStr);
+}
+
+/**
+ * Penomoran Surat Takziran Otomatis & Atomik via Transaksi Firestore
+ * Menjamin nomor berurutan (001, 002, 003...) dan tidak pernah ganda antar perangkat/Admin
+ */
+export async function generateAtomicNomorSuratTakziran(
+  formatPattern: string = '{NO}/TAKZIRAN/MD-ALMALIKI/{ROMAWI}/{TAHUN}',
+  periodeBulan?: string,
+  existingMaxUrutan: number = 0
+): Promise<{ nomorSurat: string; urutan: number }> {
+  const counterDocRef = doc(db, 'sim_master_data', 'pelanggaran_counter');
+  let nextUrutan = existingMaxUrutan + 1;
+
+  try {
+    nextUrutan = await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(counterDocRef);
+      let currentSeq = 0;
+      if (snap.exists()) {
+        const data = snap.data();
+        const payloadSeq = typeof data?.payload?.lastSeq === 'number'
+          ? data.payload.lastSeq
+          : typeof data?.lastSeq === 'number'
+          ? data.lastSeq
+          : 0;
+        currentSeq = payloadSeq;
+      }
+      const nextSeq = Math.max(currentSeq, existingMaxUrutan) + 1;
+      transaction.set(counterDocRef, {
+        payload: {
+          lastSeq: nextSeq,
+          updatedAt: new Date().toISOString()
+        },
+        lastSeq: nextSeq,
+        collectionKey: 'pelanggaran_counter',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      return nextSeq;
+    });
+  } catch (e) {
+    console.warn('Transaksi nomor surat Firestore fallback ke urutan aman:', e);
+    try {
+      const localSeq = parseInt(localStorage.getItem('sim_pelanggaran_last_seq') || '0', 10) || 0;
+      nextUrutan = Math.max(localSeq, existingMaxUrutan) + 1;
+    } catch {}
+  }
+
+  try {
+    localStorage.setItem('sim_pelanggaran_last_seq', String(nextUrutan));
+  } catch {}
+
+  const nomorSurat = formatNomorSuratFromCounter(nextUrutan, formatPattern, periodeBulan);
+  return { nomorSurat, urutan: nextUrutan };
+}
+

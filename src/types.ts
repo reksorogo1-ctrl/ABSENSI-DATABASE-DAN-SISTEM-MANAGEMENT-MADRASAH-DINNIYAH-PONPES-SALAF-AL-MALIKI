@@ -516,3 +516,131 @@ export interface AuthSession {
   santriData?: Santri;
   pengurusData?: Pengurus;
 }
+
+export type StatusTakziran =
+  | 'Belum Diterbitkan'
+  | 'Surat Diterbitkan'
+  | 'Menunggu Pengumpulan'
+  | 'Sudah Dikumpulkan'
+  | 'Terlambat'
+  | 'Pelanggaran Berat';
+
+export type KategoriPelanggaran = 'Pelanggaran Ringan' | 'Pelanggaran Berat';
+
+export interface TemplateSuratTakziran {
+  // Pengaturan Kriteria & Batas Waktu (Bagian C)
+  batasMinimalKehadiran: number; // default 60 (%)
+  durasiPengumpulanHari: number; // default 3 (hari)
+  jamBatasAkhir: string; // default "16:00"
+  ketentuanKeterlambatan: string;
+  sertakanSantriTanpaSesi?: boolean; // default false (ditandai untuk pemeriksaan admin)
+
+  // Pengaturan Jenis Pelanggaran (Bagian C.3)
+  labelPelanggaranRingan: string;
+  keteranganPelanggaranRingan: string;
+  ketentuanTakziranRingan: string;
+  labelPelanggaranBerat: string;
+  keteranganPelanggaranBerat: string;
+  ketentuanTakziranBerat: string;
+
+  // Editor Template Surat Takziran (Bagian D & E)
+  namaLembaga: string;
+  namaMadrasah: string;
+  subKopSurat: string;
+  alamatLembaga: string;
+  logoUrl: string;
+  gunakanLogoUtama: boolean;
+  formatNomorSurat: string; // e.g. "{NO}/TAKZIRAN/MD-ALMALIKI/{ROMAWI}/{TAHUN}"
+  lampiranSurat: string;
+  perihalSurat: string;
+  judulSurat: string;
+  isiPembukaan: string;
+  isiPemberitahuan: string;
+  isiKetentuanTakziran: string;
+  isiPeringatanBerat: string;
+  isiPenutup: string;
+  kotaTanggalSurat: string;
+  kalimatTandaTangan: string;
+  jabatanPenandatangan1: string; // Wali Kelas
+  namaPenandatangan1: string; // Otomatis Wali Kelas atau custom
+  gunakanWaliKelasOtomatis: boolean;
+  jabatanPenandatangan2: string; // Keamanan
+  namaPenandatangan2: string;
+  jabatanPenandatangan3: string; // Ketua Madrasah
+  namaPenandatangan3: string;
+  ukuranKertas: 'A4' | 'F4';
+  marginAtasMm: number;
+  marginBawahMm: number;
+  marginKiriMm: number;
+  marginKananMm: number;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface PelanggaranSantriRecord {
+  id: string; // `${idSantri}_${periodeBulan.replace(/\s+/g, '_')}`
+  idSantri: string;
+  namaSantri: string;
+  nis: string;
+  kelas: string;
+  namaWaliKelas?: string;
+  periodeBulan: string; // e.g. "November 2026"
+  hadir: number;
+  izin: number;
+  sakit: number;
+  alpha: number;
+  totalSesi: number;
+  persentaseKehadiran: number;
+  batasMinimalSaatItu: number;
+  jenisPelanggaran: KategoriPelanggaran;
+  keteranganPelanggaran: string;
+  statusTakziran: StatusTakziran;
+  nomorSurat?: string;
+  urutanNomorSurat?: number;
+  tanggalTerbitSurat?: string; // ISO string
+  batasPengumpulan?: string; // ISO string
+  tanggalDikumpulkan?: string; // ISO string
+  dikonfirmasiOleh?: string;
+  catatanKonfirmasi?: string;
+  tanggalNaikPelanggaranBerat?: string; // ISO string
+  customIsiSurat?: Partial<TemplateSuratTakziran>;
+  riwayatStatus: Array<{
+    tanggal: string;
+    status: StatusTakziran;
+    jenisPelanggaran: KategoriPelanggaran;
+    oleh: string;
+    keterangan: string;
+  }>;
+  updatedAt: string;
+}
+
+export interface PelanggaranAuditLog {
+  id: string;
+  timestamp: string;
+  aksi:
+    | 'UBAH_PERSENTASE'
+    | 'UBAH_TEMPLATE'
+    | 'TERBITKAN_SURAT'
+    | 'EDIT_SURAT'
+    | 'KONFIRMASI_PENGUMPULAN'
+    | 'NAIK_PELANGGARAN_BERAT';
+  aktor: string;
+  idSantri?: string;
+  namaSantri?: string;
+  periodeBulan?: string;
+  nomorSurat?: string;
+  detail: string;
+}
+
+
+// ==========================================
+// MODUL PELANGGARAN SANTRI & SURAT TAKZIRAN
+// ==========================================
+
+export interface RiwayatStatusTakziran {
+  waktu: string;
+  aksi: string;
+  oleh: string;
+  keterangan: string;
+}
+

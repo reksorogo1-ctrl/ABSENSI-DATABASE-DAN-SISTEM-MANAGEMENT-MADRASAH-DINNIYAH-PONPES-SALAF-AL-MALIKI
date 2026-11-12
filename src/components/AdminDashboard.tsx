@@ -21,6 +21,7 @@ import { TabUjianBacaKitab } from './TabUjianBacaKitab';
 import { TabUjianKoreksianKitab } from './TabUjianKoreksianKitab';
 import { TabGmail } from './TabGmail';
 import { ModalInputNilaiUjian } from './ModalInputNilaiUjian';
+import { TabPelanggaranSantri, OptionPanelPelanggaranTakziran } from './TabPelanggaranSantri';
 import { getOrCreateSantriHistory } from '../lib/kenaikanKelasService';
 import { queryPaginatedData } from '../lib/scalableDatabase';
 import { formatBytes, TOTAL_CAPACITY_5TB } from '../lib/scalableStorage';
@@ -2132,7 +2133,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [activeControlSection, setActiveControlSection] = useState<
     'kelola_storage_5tb' | 'kenaikan_kelas' | 'input_santri' | 'input_guru' | 'input_jadwal' | 'simpan_absensi' | 'geofencing_absensi' | 'kontrol_tombol' | 
     'visual_branding' | 'keamanan' | 'profil_santri' | 'kelola_syahriyah' | 'kelola_uang_saku' | 'kelola_kurikulum' |
-    'kelola_pengurus' | 'kelola_kalender' | 'kelola_ujian_kitab' | 'kelola_berita' | 'video_intro' | 'sosial_media' | 'firebase_central'
+    'kelola_pengurus' | 'kelola_kalender' | 'kelola_ujian_kitab' | 'kelola_berita' | 'video_intro' | 'sosial_media' | 'firebase_central' | 'pelanggaran_takziran'
   >(() => {
     const target = localStorage.getItem('sim_target_control_section');
     if (target === 'video_intro') {
@@ -3265,6 +3266,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               { id: 'ujian-baca-kitab', label: '2. Tab Baca Kitab', icon: BookOpen, badge: 'Ujian' },
               { id: 'ujian-koreksian-kitab', label: '3. Tab Koreksian Kitab', icon: CheckSquare, badge: 'Ujian' },
               { id: 'absensi-santri', label: settings.text_absensi_santri_title || 'Absensi Santri', icon: UserCheck },
+              { id: 'pelanggaran-santri', label: 'PELANGGARAN SANTRI', icon: ShieldAlert, badge: 'Takziran' },
               { id: 'absensi-guru', label: settings.text_absensi_guru_title || 'Absensi Ustadz / Guru', icon: Clock },
               { id: 'jadwal', label: settings.text_jadwal_title || 'Jadwal Pelajaran', icon: Calendar },
               { id: 'guru', label: settings.text_guru_title || 'Data Guru Pengajar', icon: Award },
@@ -6265,6 +6267,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               />
             )}
           </div>
+        )}
+
+        {/* TAB PELANGGARAN SANTRI & SURAT TAKZIRAN OTOMATIS */}
+        {activeTab === 'pelanggaran-santri' && (
+          <TabPelanggaranSantri
+            settings={settings}
+            santriList={santriList}
+            rekapBulananSantri={rekapBulananSantri}
+            selectedBulanSantri={selectedBulanSantri}
+            setSelectedBulanSantri={setSelectedBulanSantri}
+            daftarBulan={DAFTAR_BULAN_REKAP}
+            daftarTahun={DAFTAR_TAHUN_REKAP}
+            currentUserRole="admin"
+            currentUserName="Admin Madrasah"
+          />
         )}
 
         {/* TAB 2: ABSENSI SANTRI */}
@@ -11263,7 +11280,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     { id: 'video_intro', label: 'Video Intro', icon: Film },
                     { id: 'sosial_media', label: 'Media Sosial & WA', icon: MessageCircle },
                     { id: 'visual_branding', label: 'Logo & Visual', icon: Palette },
-                    { id: 'keamanan', label: 'Kata Sandi Admin', icon: Lock }
+                    { id: 'keamanan', label: 'Kata Sandi Admin', icon: Lock },
+                    { id: 'pelanggaran_takziran', label: 'PENGATURAN PELANGGARAN & SURAT TAKZIRAN', icon: ShieldAlert }
                   ].map(sec => {
                     const SecIcon = sec.icon;
                     const isSecActive = activeControlSection === sec.id;
@@ -11284,6 +11302,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     );
                   })}
                 </div>
+
+                {/* SECTION PENGATURAN PELANGGARAN & SURAT TAKZIRAN */}
+                {activeControlSection === 'pelanggaran_takziran' && (
+                  <OptionPanelPelanggaranTakziran
+                    settings={settings}
+                    santriList={santriList}
+                    rekapBulananSantri={rekapBulananSantri}
+                    selectedBulanSantri={selectedBulanSantri}
+                  />
+                )}
 
                 {/* SECTION KENAIKAN KELAS OTOMATIS */}
                 {activeControlSection === 'kenaikan_kelas' && (
