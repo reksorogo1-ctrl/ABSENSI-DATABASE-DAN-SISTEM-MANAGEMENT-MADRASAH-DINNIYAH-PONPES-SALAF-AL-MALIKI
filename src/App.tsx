@@ -566,11 +566,18 @@ export default function App() {
       }
     });
 
-    // 9. Kurikulum & Pengurus & Izin Mengajar
+    // 9. Kurikulum, Silabus, Pengurus & Izin Mengajar
     loadMasterDataFromFirestore<KurikulumKitabRecord[]>('kurikulum').then((data) => {
       if (data && Array.isArray(data) && data.length > 0) {
         setKurikulumList(data);
         localStorage.setItem('sim_kurikulum', JSON.stringify(data));
+      }
+    });
+
+    loadMasterDataFromFirestore<SilabusMemaknaiRecord[]>('silabus').then((data) => {
+      if (data && Array.isArray(data)) {
+        setSilabusList(data);
+        localStorage.setItem('sim_silabus', JSON.stringify(data));
       }
     });
 
@@ -672,6 +679,12 @@ export default function App() {
         localStorage.setItem('sim_nadzhom', JSON.stringify(data));
       }
     });
+    const unsubSilabus = subscribeMasterDataFromFirestore<SilabusMemaknaiRecord[]>('silabus', (data) => {
+      if (data && Array.isArray(data)) {
+        setSilabusList(data);
+        localStorage.setItem('sim_silabus', JSON.stringify(data));
+      }
+    });
 
     return () => {
       unsubscribe();
@@ -685,6 +698,7 @@ export default function App() {
       unsubJadwal();
       unsubIzinMengajar();
       unsubNadzhom();
+      unsubSilabus();
     };
   }, []);
 
@@ -1304,6 +1318,7 @@ export default function App() {
     }
     setSilabusList(updated);
     localStorage.setItem('sim_silabus', JSON.stringify(updated));
+    saveMasterDataToFirestore('silabus', updated);
 
     // Update ustadz / guru mapping if needed
     if (rec.ustadzPengampu) {
@@ -1322,6 +1337,7 @@ export default function App() {
     const updated = silabusList.filter(s => s.id !== id);
     setSilabusList(updated);
     localStorage.setItem('sim_silabus', JSON.stringify(updated));
+    saveMasterDataToFirestore('silabus', updated);
   };
 
   const handleSaveNewJadwal = (newJadwal: JadwalPelajaran, oldJadwal?: JadwalPelajaran) => {

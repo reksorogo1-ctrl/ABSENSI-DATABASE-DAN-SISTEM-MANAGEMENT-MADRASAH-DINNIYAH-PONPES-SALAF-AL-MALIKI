@@ -1070,6 +1070,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     targetMateri: string;
     status: string;
     keterangan: string;
+    jadwalId?: string;
+    hariJadwal?: string;
+    jamJadwal?: string;
   }>({
     id: '',
     namaKitab: '',
@@ -1082,7 +1085,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     ustadzPengampu: guruList[0]?.nama || 'Ustazah Fina Nikmatul Kamelia',
     targetMateri: '',
     status: 'Sesuai Target',
-    keterangan: ''
+    keterangan: '',
+    jadwalId: '',
+    hariJadwal: '',
+    jamJadwal: ''
   });
 
   // Filter untuk Data Guru & Santri tab (PER ANGKATAN)
@@ -7691,7 +7697,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         ustadzPengampu: guruList[0]?.nama || 'Ustazah Fina Nikmatul Kamelia',
                         targetMateri: '',
                         status: 'Sesuai Target',
-                        keterangan: ''
+                        keterangan: '',
+                        jadwalId: '',
+                        hariJadwal: '',
+                        jamJadwal: ''
                       });
                       setEditingSilabus(null);
                       setShowAddSilabusModal(true);
@@ -7770,6 +7779,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <span className="px-2.5 py-1 rounded-md bg-[#052216] border border-[#d4af37]/30 text-[#d4af37] font-bold text-[11px] whitespace-nowrap">
                                 {item.kelas}
                               </span>
+                              {(item.hariJadwal || item.jamJadwal) && (
+                                <span className="text-[10px] text-emerald-300/90 font-mono block mt-1">
+                                  {item.hariJadwal}{item.jamJadwal ? ` • ${item.jamJadwal}` : ''}
+                                </span>
+                              )}
                             </td>
                             <td className="p-3.5 text-center">
                               <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-bold">
@@ -7815,7 +7829,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       ustadzPengampu: item.ustadzPengampu,
                                       targetMateri: item.targetMateri || '',
                                       status: item.status || 'Sesuai Target',
-                                      keterangan: item.keterangan || ''
+                                      keterangan: item.keterangan || '',
+                                      jadwalId: item.jadwalId || '',
+                                      hariJadwal: item.hariJadwal || '',
+                                      jamJadwal: item.jamJadwal || ''
                                     });
                                     setShowAddSilabusModal(true);
                                   }}
@@ -8127,7 +8144,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         ustadzPengampu: silabusForm.ustadzPengampu,
                         targetMateri: silabusForm.targetMateri || `${silabusForm.mulai} s/d ${silabusForm.batasAkhir}`,
                         status: silabusForm.status,
-                        keterangan: silabusForm.keterangan
+                        keterangan: silabusForm.keterangan,
+                        jadwalId: silabusForm.jadwalId || undefined,
+                        hariJadwal: silabusForm.hariJadwal || undefined,
+                        jamJadwal: silabusForm.jamJadwal || undefined
                       };
 
                       if (onSaveSilabus) {
@@ -8139,6 +8159,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     }}
                     className="space-y-4 text-xs"
                   >
+                    <div className="p-3 rounded-xl bg-[#03150d] border border-emerald-500/35 space-y-1.5">
+                      <label className="block text-emerald-300 font-bold text-[11px]">
+                        Ambil Otomatis dari Jadwal Mengajar Guru (Opsional)
+                      </label>
+                      <select
+                        value={silabusForm.jadwalId || ''}
+                        onChange={(e) => {
+                          const pickedId = e.target.value;
+                          const matchedJadwal = jadwalList.find((j, idx) => (j.id || `${j.kelas}_${j.hari}_${j.jamKe}_${idx}`) === pickedId);
+                          if (!matchedJadwal) {
+                            setSilabusForm({ ...silabusForm, jadwalId: '' });
+                            return;
+                          }
+                          const teacherName = matchedJadwal.nama || matchedJadwal.ustadz || silabusForm.ustadzPengampu;
+                          setSilabusForm({
+                            ...silabusForm,
+                            jadwalId: matchedJadwal.id || pickedId,
+                            hariJadwal: matchedJadwal.hari,
+                            jamJadwal: `Jam Ke-${matchedJadwal.jamKe || 1}${matchedJadwal.waktu ? ` (${matchedJadwal.waktu})` : ''}`,
+                            ustadzPengampu: teacherName,
+                            namaKitab: matchedJadwal.mapel || silabusForm.namaKitab,
+                            kelas: matchedJadwal.kelas || silabusForm.kelas,
+                            tingkatan: (matchedJadwal.kelas || '').toUpperCase().includes('ALIYAH') ? 'Aliyah' : 'Tsanawiyah'
+                          });
+                        }}
+                        className="w-full bg-[#020e08] border border-[#d4af37]/40 rounded-xl p-2 text-white text-xs"
+                      >
+                        <option value="">-- Pilih Jadwal Mengajar untuk Auto-Isi Ustadz, Kelas & Pelajaran --</option>
+                        {jadwalList.map((j, idx) => {
+                          const key = j.id || `${j.kelas}_${j.hari}_${j.jamKe}_${idx}`;
+                          return (
+                            <option key={`${key}-${idx}`} value={key}>
+                              {j.nama || j.ustadz || 'Tanpa Nama'} — {j.kelas} • {j.mapel} ({j.hari}, Jam Ke-{j.jamKe || 1})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-emerald-300 font-semibold mb-1">Angkatan / Kelas</label>

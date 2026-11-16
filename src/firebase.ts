@@ -181,6 +181,7 @@ export const MASTER_COLLECTION_KEYS = [
   'nadzhom',
   'syahriyah',
   'kurikulum',
+  'silabus',
   'pengurus',
   'izin_mengajar',
   'pelanggaran_santri',

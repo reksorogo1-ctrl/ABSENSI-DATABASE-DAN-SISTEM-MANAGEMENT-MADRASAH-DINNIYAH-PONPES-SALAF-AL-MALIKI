@@ -332,6 +332,9 @@ export interface SilabusMemaknaiRecord {
   targetMateri?: string;
   status?: 'Sesuai Target' | 'Belum Tercapai / Tertinggal' | 'Khatam / Tercapai' | 'Sedang Berjalan' | string; // Status target & pencocokan sesuai materi
   keterangan?: string;
+  jadwalId?: string;
+  hariJadwal?: string;
+  jamJadwal?: string;
 }
 
 export interface WaliKelas {
