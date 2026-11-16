@@ -1411,7 +1411,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
   return (
     <div 
-      className="min-h-screen bg-[#03140c] bg-cover bg-center text-[#f3e5ab] flex flex-col transition-all duration-300 w-full overflow-x-hidden font-sans selection:bg-[#d4af37] selection:text-black"
+      className="min-h-screen bg-[#03140c] bg-cover bg-center text-[#f3e5ab] flex flex-col md:flex-row transition-all duration-300 w-full overflow-x-hidden font-sans selection:bg-[#d4af37] selection:text-black"
       style={settings.background_url ? { backgroundImage: `linear-gradient(rgba(3, 20, 12, 0.94), rgba(3, 20, 12, 0.97)), url(${settings.background_url})` } : undefined}
     >
       {/* MOBILE TOP BAR (Phone & Small Screens: iOS & Android) - Compact Sticky Header dengan Tombol Garis 3 */}
@@ -1546,33 +1546,139 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
         </div>
       )}
 
-      {/* MAIN CONTENT AREA - Optimasi Scroll & Tata Letak Ergonomis iOS/Android & Desktop */}
-      <main className={`${building ? 'build-sequence' : ''} flex-1 px-3 py-3.5 sm:p-5 md:p-6 space-y-4 sm:space-y-6 w-full max-w-7xl mx-auto pb-8`}>
-        {/* Top Header - Desktop View (Mobile menggunakan Sticky Top Bar + Menu Garis 3 agar langsung fokus ke konten) */}
-        <header className="hidden md:flex build-header header-3d-banner rounded-2xl p-5 backdrop-blur flex-row justify-between items-center gap-4 w-full shadow-2xl">
-          <div className="flex items-center gap-3.5">
-            <BrandLogos settings={settings} size="sm" gap="gap-2" idPrefix="pengurus-main-header" />
-            <div>
-              <h1 className="text-xl md:text-2xl font-bold font-serif text-[#d4af37] text-gold-3d tracking-wide leading-tight">
-                {settings.header_title || settings.portal_title || settings.nama_pesantren || 'SIM Pondok Pesantren Salaf Al-Maliki'}
-              </h1>
-              <p className="text-xs text-emerald-200/90 mt-1 flex items-center gap-2 flex-wrap">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block shrink-0" />
-                <span className="font-medium">{settings.header_subtitle || 'Portal Khusus Pengurus & Asatidz Madrasah Diniyah'}</span>
-                <span className="text-emerald-400/40">•</span>
-                <span className="text-[#d4af37] font-bold font-mono">{pengurus.nama} ({pengurus.jabatan})</span>
+      {/* DESKTOP & LAPTOP SIDEBAR (Mode PC, Laptop & Tablet) */}
+      <aside className="hidden md:flex build-sidebar w-64 lg:w-72 bg-[#052216]/95 border-r border-[#d4af37]/30 p-4 lg:p-5 flex-col justify-between shrink-0 shadow-2xl backdrop-blur-md md:sticky md:top-0 md:h-screen md:overflow-y-auto z-30">
+        <div className="space-y-5">
+          {/* Logo & Identitas Pesantren di Sidebar */}
+          <div className="flex items-center gap-3 pb-4 border-b border-[#d4af37]/25">
+            <BrandLogos settings={settings} size="sm" idPrefix="pengurus-sidebar-logo" />
+            <div className="min-w-0">
+              <h2 className="font-bold text-sm text-[#d4af37] truncate uppercase tracking-wider font-serif">
+                {settings.nama_pondok || settings.portal_title || 'Ponpes Al-Maliki'}
+              </h2>
+              <p className="text-[11px] text-emerald-300 truncate">
+                {settings.nama_madrasah || 'Panel Pengurus & Asatidz'}
               </p>
             </div>
           </div>
 
-          {/* Action Buttons: PWA Install, Profil Pengurus, Ajukan Izin, Keluar */}
-          <div className="flex flex-wrap items-center gap-2.5 text-right justify-end w-auto">
-            <PWAInstallButton variant="button" />
-            
+          {/* Kartu Singkat Profil Pengurus Login */}
+          <div className="bg-[#03140c]/90 border border-[#d4af37]/30 rounded-2xl p-3 flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl overflow-hidden bg-[#0b3824] border border-[#d4af37]/60 shrink-0">
+              <img
+                src={pengurus.foto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'}
+                alt={pengurus.nama}
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="text-xs font-extrabold text-white block truncate">{pengurus.nama}</span>
+              <span className="text-[10px] text-[#d4af37] font-semibold block truncate">{pengurus.jabatan}</span>
+            </div>
+          </div>
+
+          {/* Menu Navigasi Sidebar */}
+          <nav className="space-y-1.5" aria-label="Navigasi Sidebar Pengurus">
+            {[
+              { id: 'dashboard', label: 'Dasbor Utama', icon: Sparkles },
+              { id: 'izin-mengajar', label: 'Izin Mengajar', icon: FileText, badge: myIzinList.filter(i => i.status === 'Menunggu').length || undefined, badgeTone: 'gold' },
+              { id: 'wali-kelas', label: 'Wali Kelas', icon: GraduationCap, badge: waliKelasKelas, badgeTone: 'emerald' },
+              { id: 'kalender', label: 'Kalender & Agenda', icon: Calendar, badge: urgentEvents.length || undefined, badgeTone: 'red' },
+              { id: 'absensi-santri', label: 'Presensi Santri', icon: UserCheck },
+              { id: 'jadwal', label: 'Jadwal & Kitab', icon: BookOpen, badge: unreadSilabusUpdates.length ? `${unreadSilabusUpdates.length} Update` : undefined, badgeTone: 'amber' },
+              { id: 'nadzhom', label: 'Setoran Nadzhom', icon: BookOpen, badge: liveNadzhomList.length || undefined, badgeTone: 'emerald' },
+              { id: 'ujian-kitab', label: 'Nilai Ujian', icon: Award },
+              { id: 'profil-saya', label: 'Biodata & Profil', icon: Users },
+            ].map(tab => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`w-full min-h-[44px] text-left px-3.5 py-2.5 rounded-xl font-semibold text-xs flex items-center justify-between gap-2 transition ${
+                    isActive
+                      ? 'sidebar-menu-active'
+                      : 'sidebar-menu-inactive'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#d4af37]' : 'text-emerald-400'}`} />
+                    <span className="truncate">{tab.label}</span>
+                  </div>
+                  {tab.badge !== undefined && (
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold shrink-0 ${
+                      tab.badgeTone === 'red'
+                        ? 'bg-red-600 text-white'
+                        : tab.badgeTone === 'amber'
+                        ? 'bg-amber-500 text-black'
+                        : 'bg-[#0b422a] border border-[#d4af37]/40 text-[#d4af37]'
+                    }`}>
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Tombol Cepat Bawah Sidebar */}
+        <div className="pt-4 mt-4 border-t border-[#d4af37]/20 space-y-2.5">
+          <button
+            type="button"
+            onClick={() => setShowIzinModal(true)}
+            className="w-full min-h-[44px] py-2.5 px-3 rounded-xl btn-3d-yellow text-black text-xs font-extrabold flex items-center justify-center gap-2 shadow"
+          >
+            <Send className="w-3.5 h-3.5 text-black shrink-0" />
+            <span>Ajukan Izin Mengajar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onLogout}
+            className="w-full min-h-[44px] py-2.5 px-3 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs font-bold flex items-center justify-center gap-2 hover:bg-red-900 transition shadow"
+          >
+            <LogOut className="w-3.5 h-3.5 shrink-0" />
+            <span>Keluar Panel</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT AREA - Responsive Grid & Ergonomis di Semua Perangkat (iOS, Android, Tablet, Laptop, PC) */}
+      <main className={`${building ? 'build-sequence' : ''} flex-1 min-w-0 px-3 py-3.5 sm:p-5 lg:p-6 space-y-4 sm:space-y-5 w-full max-w-[1600px] mx-auto pb-10`}>
+        {/* Top Header - Logo Madrasah Diperbesar + Ucapan Selamat Datang Guru/Pengurus + Tombol Rapi */}
+        <header className="build-header header-3d-banner rounded-2xl p-3.5 sm:p-5 backdrop-blur flex flex-col xl:flex-row justify-between items-start xl:items-center gap-3.5 sm:gap-4 w-full shadow-2xl">
+          <div className="flex items-center gap-3.5 sm:gap-4 min-w-0 w-full xl:w-auto">
+            <BrandLogos settings={settings} size="md" idPrefix="pengurus-main-header" />
+            <div className="min-w-0 flex-1 space-y-1">
+              <h1 className="text-base sm:text-xl lg:text-2xl font-bold font-serif text-[#d4af37] text-gold-3d tracking-wide leading-tight">
+                {settings.header_title || settings.portal_title || settings.nama_pesantren || 'SIM Pondok Pesantren Salaf Al-Maliki'}
+              </h1>
+              <p className="text-xs sm:text-sm text-emerald-100 mt-1 flex items-center gap-2 flex-wrap leading-snug">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block shrink-0" />
+                <span className="font-semibold text-white">
+                  Selamat Datang, <span className="text-[#fde047] font-extrabold">{pengurus.nama}</span>
+                </span>
+                <span className="text-emerald-400/50 hidden sm:inline">•</span>
+                <span className="text-emerald-200/90 text-[11px] sm:text-xs">
+                  {pengurus.jabatan} — {settings.header_subtitle || 'Portal Khusus Pengurus & Asatidz Madrasah Diniyah'}
+                </span>
+              </p>
+            </div>
+          </div>
+
+          {/* Action Buttons: Tertata Rapi & Touch-Friendly */}
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 sm:gap-2.5 w-full xl:w-auto justify-start xl:justify-end shrink-0">
+            <div className="hidden md:inline-flex">
+              <PWAInstallButton variant="button" />
+            </div>
+
             <button
               type="button"
               onClick={() => setShowEditModal(true)}
-              className="px-3.5 py-2 rounded-xl bg-[#031c10] border border-[#d4af37]/60 text-xs font-bold text-[#f3e5ab] flex items-center gap-2 hover:bg-[#062c1b] transition shadow"
+              className="min-h-[44px] px-3 sm:px-3.5 py-2 rounded-xl bg-[#031c10] border border-[#d4af37]/60 text-xs font-bold text-[#f3e5ab] flex items-center justify-center sm:justify-start gap-2 hover:bg-[#062c1b] transition shadow min-w-0"
               title="Edit Biodata & Profil"
             >
               <div className="w-5 h-5 rounded-full overflow-hidden bg-[#0b3824] border border-[#d4af37]/50 shrink-0">
@@ -1582,13 +1688,13 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   className="w-full h-full object-cover"
                 />
               </div>
-              <span className="truncate max-w-[130px]">{pengurus.nama}</span>
+              <span className="truncate max-w-[115px] sm:max-w-[140px]">{pengurus.nama}</span>
             </button>
 
             <button
               type="button"
               onClick={() => setShowIzinModal(true)}
-              className="btn-3d-yellow px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow"
+              className="btn-3d-yellow min-h-[44px] px-3.5 sm:px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center justify-center gap-2 shadow"
               title="Ajukan Izin Tidak Mengajar"
             >
               <Send className="w-3.5 h-3.5 text-black shrink-0" />
@@ -1598,7 +1704,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             <button
               type="button"
               onClick={onLogout}
-              className="px-4 py-2 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs font-bold flex items-center gap-2 hover:bg-red-900 transition shadow"
+              className="hidden md:flex min-h-[44px] px-3.5 sm:px-4 py-2 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs font-bold items-center justify-center gap-2 hover:bg-red-900 transition shadow"
               title="Keluar dari Portal Pengurus"
             >
               <LogOut className="w-3.5 h-3.5 shrink-0" />
@@ -1606,149 +1712,6 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             </button>
           </div>
         </header>
-
-        {/* Tab Navigation Menu - Hanya tampil di Desktop/Tablet (Di HP cukup gunakan tombol garis 3 di atas) */}
-        <div className="hidden md:block card-3d-glass rounded-2xl p-2 sm:p-2.5 border border-[#d4af37]/30 shadow-lg overflow-x-auto no-scrollbar scroll-smooth touch-pan-x">
-          <nav className="flex items-center gap-1.5 sm:gap-2 min-w-max pb-0.5">
-            <button
-              type="button"
-              onClick={() => setActiveTab('dashboard')}
-              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
-                activeTab === 'dashboard'
-                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Dasbor Utama</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('izin-mengajar')}
-              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
-                activeTab === 'izin-mengajar'
-                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Izin Mengajar</span>
-              {myIzinList.filter(i => i.status === 'Menunggu').length > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full bg-black text-[#fef08a] font-mono text-[9px] font-bold border border-yellow-300/40">
-                  {myIzinList.filter(i => i.status === 'Menunggu').length}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('wali-kelas')}
-              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
-                activeTab === 'wali-kelas'
-                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
-              }`}
-            >
-              <GraduationCap className="w-3.5 h-3.5" />
-              <span>Wali Kelas</span>
-              <span className="px-1.5 py-0.5 rounded-full bg-emerald-900 border border-emerald-500/40 text-[9px] text-emerald-300 font-bold">
-                {waliKelasKelas}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('kalender')}
-              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
-                activeTab === 'kalender'
-                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
-              }`}
-            >
-              <Calendar className="w-3.5 h-3.5" />
-              <span>Kalender & Agenda</span>
-              {urgentEvents.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-600 text-white font-mono text-[9px] animate-pulse">
-                  {urgentEvents.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('absensi-santri')}
-              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
-                activeTab === 'absensi-santri'
-                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
-              }`}
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>Presensi Santri</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('jadwal')}
-              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
-                activeTab === 'jadwal'
-                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Jadwal & Kitab</span>
-              {unreadSilabusUpdates.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-black text-[#fef08a] font-black text-[9px] animate-pulse border border-yellow-200 shadow-md">
-                  ⚡ {unreadSilabusUpdates.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('nadzhom')}
-              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
-                activeTab === 'nadzhom'
-                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Setoran Nadzhom</span>
-              <span className="px-1.5 py-0.5 rounded-full bg-emerald-900 border border-emerald-500/40 text-[9px] text-emerald-300 font-bold">
-                {liveNadzhomList.length}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('ujian-kitab')}
-              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
-                activeTab === 'ujian-kitab'
-                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
-              }`}
-            >
-              <Award className="w-3.5 h-3.5" />
-              <span>Nilai Ujian</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('profil-saya')}
-              className={`px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 ${
-                activeTab === 'profil-saya'
-                  ? 'btn-3d-gold text-black font-extrabold shadow-lg'
-                  : 'text-emerald-200 hover:text-white hover:bg-emerald-950/40 border border-transparent'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Biodata & Profil</span>
-            </button>
-          </nav>
-        </div>
 
         {/* ===================== NOTIFIKASI REAL-TIME UPDATE MATERI SILABUS GURU (RINGKAS & JELAS) ===================== */}
         {unreadSilabusUpdates.length > 0 && (
@@ -1885,8 +1848,10 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               </div>
             )}
 
+            {/* FLEXIBLE MULTI-COLUMN DASHBOARD GRID (Vertikal di Mobile, Multi-Kolom di Desktop/Laptop) */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-5 items-start">
             {/* 2. PRESENSI MANDIRI HARI INI DENGAN SISTEM GEOFENCING OTOMATIS & PENGGANTI RESMI */}
-            <div className="card-3d rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 border border-[#d4af37]/40 bg-gradient-to-r from-[#031c12] via-[#05281b] to-[#031c12] shadow-2xl space-y-4 sm:space-y-5">
+            <div className="xl:col-span-7 card-3d rounded-2xl sm:rounded-3xl p-4 sm:p-5 lg:p-6 border border-[#d4af37]/40 bg-gradient-to-r from-[#031c12] via-[#05281b] to-[#031c12] shadow-2xl space-y-4 sm:space-y-5">
               {/* Header Info & Jam Server */}
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-[#d4af37]/25">
                 <div className="flex items-start sm:items-center space-x-3">
@@ -1926,7 +1891,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowSimulasiBar(!showSimulasiBar)}
-                    className="btn-3d-yellow px-3 py-2 text-xs font-extrabold"
+                    className="btn-3d-yellow min-h-[42px] px-3.5 py-2 text-xs font-extrabold flex items-center gap-1.5"
                     title="Buka panel simulasi jam server untuk pengujian"
                   >
                     <Sliders className="w-3.5 h-3.5 text-[#1a1202]" />
@@ -2038,7 +2003,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
                       {myTeachingClasses.length > 0 ? (
                         <div className="space-y-2.5">
-                          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
                             {myTeachingClasses.length > 1 && (
                               <button
                                 type="button"
@@ -2046,9 +2011,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                                   setSelectedPresensiKelas('SEMUA');
                                   setSelectedJadwalId('');
                                 }}
-                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border whitespace-nowrap shrink-0 ${
+                                className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-bold transition border whitespace-nowrap shrink-0 flex items-center ${
                                   selectedPresensiKelas === 'SEMUA'
-                                    ? 'btn-3d-yellow text-[#1a1202] shadow-md font-extrabold scale-102 ring-2 ring-amber-300'
+                                    ? 'btn-3d-yellow text-[#1a1202] shadow-md font-extrabold ring-2 ring-amber-300'
                                     : 'bg-[#031d13] text-emerald-200 border-[#d4af37]/30 hover:border-[#d4af37]'
                                 }`}
                               >
@@ -2073,9 +2038,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                                       setSelectedJadwalId('');
                                     }
                                   }}
-                                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition border whitespace-nowrap shrink-0 ${
+                                  className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-bold transition border whitespace-nowrap shrink-0 flex items-center ${
                                     isSel
-                                      ? 'btn-3d-yellow text-[#1a1202] shadow-md font-extrabold scale-102 ring-2 ring-amber-300'
+                                      ? 'btn-3d-yellow text-[#1a1202] shadow-md font-extrabold ring-2 ring-amber-300'
                                       : 'bg-[#031d13] text-emerald-200 border-[#d4af37]/30 hover:border-[#d4af37]'
                                   }`}
                                 >
@@ -2112,9 +2077,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                                           setSelectedPresensiKelas(j.kelas);
                                         }
                                       }}
-                                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border shadow-sm ${
+                                      className={`min-h-[40px] px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 border shadow-sm ${
                                         isScheduleActive
-                                          ? 'btn-3d-yellow text-[#1a1202] shadow-md font-black scale-102 ring-2 ring-amber-300'
+                                          ? 'btn-3d-yellow text-[#1a1202] shadow-md font-black ring-2 ring-amber-300'
                                           : 'bg-[#02180e] text-emerald-200 hover:text-white border-[#d4af37]/40 hover:border-[#d4af37]'
                                       }`}
                                     >
@@ -2290,15 +2255,15 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                         <button
                           type="button"
                           onClick={() => acquireFreshGpsPosition(8000)}
-                          className="min-h-[34px] px-2.5 py-1 rounded-lg bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 hover:underline font-bold flex items-center gap-1"
+                          className="min-h-[40px] px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 hover:underline font-bold flex items-center gap-1.5"
                         >
-                          <RefreshCw className={`w-3 h-3 ${gpsLoading ? 'animate-spin' : ''}`} />
+                          <RefreshCw className={`w-3.5 h-3.5 ${gpsLoading ? 'animate-spin' : ''}`} />
                           <span>{gpsLoading ? 'Membaca GPS...' : 'Refresh GPS'}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setShowGeofenceMap(!showGeofenceMap)}
-                          className="min-h-[34px] px-2.5 py-1 rounded-lg bg-black/40 border border-[#d4af37]/30 text-[#d4af37] hover:underline font-bold"
+                          className="min-h-[40px] px-3 py-1.5 rounded-xl bg-black/40 border border-[#d4af37]/30 text-[#d4af37] hover:underline font-bold"
                         >
                           {showGeofenceMap ? 'Tutup Peta GPS' : 'Lihat Peta GPS'}
                         </button>
@@ -2546,10 +2511,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               )}
             </div>
 
-            {/* 3. PROFIL PENGURUS YANG BERSANGKUTAN & REKAPAN ABSENSI PRIBADI */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-              {/* KARTU PROFIL PENGURUS */}
-              <div className="card-3d rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-[#d4af37]/40 relative overflow-hidden space-y-4 sm:space-y-5">
+            {/* 3. PROFIL PENGURUS YANG BERSANGKUTAN (Sebelah Presensi di PC/Laptop, Stack di Mobile/Tablet) */}
+            <div className="xl:col-span-5 card-3d rounded-2xl sm:rounded-3xl p-4 sm:p-5 lg:p-6 border border-[#d4af37]/40 relative overflow-hidden space-y-4 sm:space-y-5">
                 <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/20">
                   <div className="flex items-center space-x-2">
                     <Users className="w-4 h-4 text-[#d4af37]" />
@@ -2621,7 +2584,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               </div>
 
               {/* REKAPAN ABSENSI PRIBADI PENGURUS (KOLOM: HADIR, IZIN, TERLAMBAT, ALPHA) */}
-              <div className="lg:col-span-2 card-3d rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-[#d4af37]/40 space-y-4 sm:space-y-5">
+              <div className="xl:col-span-12 card-3d rounded-2xl sm:rounded-3xl p-4 sm:p-5 lg:p-6 border border-[#d4af37]/40 space-y-4 sm:space-y-5">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-[#d4af37]/20">
                   <div className="flex items-center space-x-2">
                     <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
@@ -2720,10 +2683,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   </div>
                 </div>
               </div>
-            </div>
 
             {/* 4. BERITA DAN PENGUMUMAN MADRASAH */}
-            <div className="card-3d rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-[#d4af37]/30 space-y-4">
+            <div className="xl:col-span-12 card-3d rounded-2xl sm:rounded-3xl p-4 sm:p-5 lg:p-6 border border-[#d4af37]/30 space-y-4">
               <div className="flex items-center space-x-3 pb-3 border-b border-[#d4af37]/20">
                 <div className="w-8 h-8 rounded-lg bg-[#0b3824] border border-[#d4af37]/40 flex items-center justify-center text-[#d4af37] shrink-0">
                   <Newspaper className="w-4 h-4" />
@@ -2772,6 +2734,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   <span className="text-[10px] text-[#d4af37] font-mono block pt-1">Oleh: Kepala Madrasah</span>
                 </div>
               </div>
+            </div>
             </div>
           </div>
         )}

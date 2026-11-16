@@ -5,7 +5,7 @@ import { resolveLogos, LOGO_MADRASAH, LOGO_PONDOK } from '../brand';
 type Size = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 const ROUND: Record<Size, string> = {
-  xs: 'w-9 h-9', sm: 'w-11 h-11', md: 'w-16 h-16', lg: 'w-32 h-32 sm:w-40 sm:h-40', xl: 'w-40 h-40 sm:w-52 sm:h-52',
+  xs: 'w-9 h-9', sm: 'w-11 h-11', md: 'w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20', lg: 'w-32 h-32 sm:w-40 sm:h-40', xl: 'w-40 h-40 sm:w-52 sm:h-52',
 };
 const WIDE: Record<Size, string> = {
   xs: 'w-20 h-9', sm: 'w-24 h-11', md: 'w-36 h-16', lg: 'w-56 h-[104px] sm:w-72 sm:h-[132px]', xl: 'w-72 h-[132px] sm:w-[22rem] sm:h-[164px]',
