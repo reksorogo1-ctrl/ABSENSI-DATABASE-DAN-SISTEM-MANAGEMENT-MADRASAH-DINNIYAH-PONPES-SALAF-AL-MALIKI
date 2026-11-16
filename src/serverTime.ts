@@ -93,21 +93,35 @@ export interface PesantrenDayInfo {
  * Kelas Aliyah - Malam Sabtu - 19:00 WIB -> Masuk Jumat pukul 19:00 WIB.
  * Jumat 19:00 - 23:59 dan Sabtu 00:00 - 04:00 dianggap MALAM SABTU.
  */
+export function toWibDate(serverDate?: Date): Date {
+  const dateObj = serverDate || getServerTime();
+  return new Date(dateObj.getTime() + 7 * 3600 * 1000);
+}
+
+export function normalizePesantrenDayName(dayStr?: string): string {
+  if (!dayStr) return '';
+  let upper = String(dayStr).toUpperCase().replace(/['`’]/g, '').replace(/\s+/g, ' ').trim();
+  if (upper === 'MINGGU') upper = 'AHAD';
+  if (upper === 'MALAM MINGGU') upper = 'MALAM AHAD';
+  if (upper === 'JUMAT') upper = 'JUMAT';
+  if (upper === 'MALAM JUMAT') upper = 'MALAM JUMAT';
+  return upper;
+}
+
 export function getPesantrenDayInfo(serverDate?: Date): PesantrenDayInfo {
   const dateObj = serverDate || getServerTime();
-  const utcMs = dateObj.getTime() + (dateObj.getTimezoneOffset() * 60000);
-  const wibMs = utcMs + (7 * 3600 * 1000);
-  const wibDate = new Date(wibMs);
+  // Gunakan epoch UTC + 7 jam dengan getter UTC agar 100% konsisten Asia/Jakarta di semua perangkat/zona waktu
+  const wibDate = toWibDate(dateObj);
 
-  const hours = wibDate.getHours();
-  const minutes = wibDate.getMinutes();
-  const dayIndex = wibDate.getDay(); // 0 = AHAD, 1 = SENIN, 2 = SELASA, 3 = RABU, 4 = KAMIS, 5 = JUMAT, 6 = SABTU
+  const hours = wibDate.getUTCHours();
+  const minutes = wibDate.getUTCMinutes();
+  const dayIndex = wibDate.getUTCDay(); // 0 = AHAD, 1 = SENIN, 2 = SELASA, 3 = RABU, 4 = KAMIS, 5 = JUMAT, 6 = SABTU
   const daysOfWeek = ['AHAD', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
   const calendarDayName = daysOfWeek[dayIndex];
 
   const pad = (n: number) => String(n).padStart(2, '0');
   const wibClockShort = `${pad(hours)}:${pad(minutes)}`;
-  const todayIso = `${wibDate.getFullYear()}-${pad(wibDate.getMonth() + 1)}-${pad(wibDate.getDate())}`;
+  const todayIso = `${wibDate.getUTCFullYear()}-${pad(wibDate.getUTCMonth() + 1)}-${pad(wibDate.getUTCDate())}`;
 
   // Sesi malam (ba'da Maghrib 18:00 - 23:59 WIB serta dini hari 00:00 - 04:00 WIB)
   const isNightSession = hours >= 18 || hours < 4;
@@ -259,16 +273,24 @@ export function setSimulatedServerTime(timeStr: string | null) {
     return;
   }
 
-  // Format timeStr: "HH:mm" atau "HH:mm:ss"
+  // Format timeStr: "HH:mm" atau "HH:mm:ss" dalam zona waktu WIB (Asia/Jakarta, UTC+7)
   const now = new Date(Date.now() + serverTimeOffsetMs);
+  const wibNow = new Date(now.getTime() + 7 * 3600 * 1000);
   const parts = timeStr.split(':').map(Number);
   const hours = parts[0] || 0;
   const minutes = parts[1] || 0;
   const seconds = parts[2] || 0;
 
-  const sim = new Date(now);
-  sim.setHours(hours, minutes, seconds, 0);
-  simulatedTimeDate = sim;
+  const simWibMs = Date.UTC(
+    wibNow.getUTCFullYear(),
+    wibNow.getUTCMonth(),
+    wibNow.getUTCDate(),
+    hours,
+    minutes,
+    seconds,
+    0
+  );
+  simulatedTimeDate = new Date(simWibMs - 7 * 3600 * 1000);
   notifyClockChange();
 }
 
@@ -280,15 +302,16 @@ export function isSimulationActive(): boolean {
  * Konversi string waktu "HH:mm" atau "HH:mm:ss" ke menit dari 00:00
  */
 export function timeStringToMinutes(timeStr: string): number {
-  const [h, m] = timeStr.split(':').map(Number);
+  const [h, m] = timeStr.replace('.', ':').split(':').map(Number);
   return (h || 0) * 60 + (m || 0);
 }
 
-export function timeStringToSeconds(timeStr: string): number {
-  const parts = timeStr.split(':').map(Number);
+export function timeStringToSeconds(timeStr: string, endOfMinuteIfShort = false): number {
+  const cleaned = String(timeStr || '').replace('.', ':').replace(/[^0-9:]/g, '');
+  const parts = cleaned.split(':').filter(Boolean).map(Number);
   const h = parts[0] || 0;
   const m = parts[1] || 0;
-  const s = parts[2] || 0;
+  const s = parts.length >= 3 ? (parts[2] || 0) : (endOfMinuteIfShort ? 59 : 0);
   return h * 3600 + m * 60 + s;
 }
 
@@ -318,22 +341,19 @@ export function checkPresensiSchedule(
 ): PresensiCheckResult {
   const serverTime = customDate || getServerTime();
 
-  // Hitung waktu WIB (UTC+7) dengan presisi real-time
-  const utcMs = serverTime.getTime() + (serverTime.getTimezoneOffset() * 60000);
-  const wibMs = utcMs + (7 * 3600 * 1000);
-  const wibDate = new Date(wibMs);
+  // Hitung waktu WIB (Asia/Jakarta, UTC+7) dengan getter UTC agar kebal timezone browser
+  const wibDate = toWibDate(serverTime);
 
-  const hours = wibDate.getHours();
-  const minutes = wibDate.getMinutes();
-  const seconds = wibDate.getSeconds();
+  const hours = wibDate.getUTCHours();
+  const minutes = wibDate.getUTCMinutes();
+  const seconds = wibDate.getUTCSeconds();
 
   const currentSeconds = hours * 3600 + minutes * 60 + seconds;
-  const currentMinutes = hours * 60 + minutes;
 
   const pad = (n: number) => String(n).padStart(2, '0');
   const wibTimeStr = `${pad(hours)}:${pad(minutes)}:${pad(seconds)} WIB`;
   const wibClockShort = `${pad(hours)}:${pad(minutes)}`;
-  const todayIso = `${wibDate.getFullYear()}-${pad(wibDate.getMonth() + 1)}-${pad(wibDate.getDate())}`;
+  const todayIso = `${wibDate.getUTCFullYear()}-${pad(wibDate.getUTCMonth() + 1)}-${pad(wibDate.getUTCDate())}`;
 
   const dayInfo = getPesantrenDayInfo(serverTime);
   const { calendarDayName, malamDayName, malamDescription, isNightSession } = dayInfo;
@@ -380,16 +400,16 @@ export function checkPresensiSchedule(
   const alSelesai = cfg.jam_aliyah_selesai || cfg.jam_aliyah_2_selesai || cfg.jam_aliyah_1_selesai || '23:00';
 
   const ts1StartSec = timeStringToSeconds(ts1Mulai);
-  const ts1BatasSec = timeStringToSeconds(ts1Batas);
+  const ts1BatasSec = timeStringToSeconds(ts1Batas, true);
   const ts2StartSec = timeStringToSeconds(ts2Mulai);
-  const ts2BatasSec = timeStringToSeconds(ts2Batas);
-  const tsEndSec = timeStringToSeconds(tsSelesai);
+  const ts2BatasSec = timeStringToSeconds(ts2Batas, true);
+  const tsEndSec = timeStringToSeconds(tsSelesai, true);
 
   const al1StartSec = timeStringToSeconds(al1Mulai);
-  const al1BatasSec = timeStringToSeconds(al1Batas);
+  const al1BatasSec = timeStringToSeconds(al1Batas, true);
   const al2StartSec = timeStringToSeconds(al2Mulai);
-  const al2BatasSec = timeStringToSeconds(al2Batas);
-  const alEndSec = timeStringToSeconds(alSelesai);
+  const al2BatasSec = timeStringToSeconds(al2Batas, true);
+  const alEndSec = timeStringToSeconds(alSelesai, true);
 
   // 1. EVALUASI JADWAL TSANAWIYAH (RENTANG KESELURUHAN: 08.00 - 12.30)
   if (currentSeconds >= ts1StartSec && currentSeconds <= tsEndSec) {
@@ -858,3 +878,238 @@ export function subscribeNadzhomUpdates(callback: (records: any[], sender: strin
     }
   };
 }
+
+/**
+ * ============================================================================
+ * HELPER SINKRONISASI JADWAL, IDENTITAS GURU, & MULTI-SESI HARIAN
+ * Single Source of Truth untuk PengurusDashboard, AdminDashboard, dan App
+ * ============================================================================
+ */
+
+const TITLE_REGEX = /\b(ustadzah|ustazah|ustadz|ustzh|ust|kh|hj|kyai|nyai|gus|ning|al-hafidz|al-hafidzah|al-hafiz|hafidz|hafizh|spdi|spd|mpd|sag|mag|lc|dr|prof|h)\b/gi;
+
+export function normalizeTeacherName(name?: string): string {
+  if (!name) return '';
+  // Hapus tanda baca terlebih dahulu agar 'Ust.' / 'S.Pd.I.' / 'K.H.' bersih sebelum mencocokkan batas kata
+  const noPunct = String(name)
+    .toLowerCase()
+    .replace(/[.,/\\()[\]{}"'`’]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return noPunct
+    .replace(TITLE_REGEX, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function isTeacherNameMatch(scheduleTeacherName?: string, accountTeacherName?: string): boolean {
+  if (!scheduleTeacherName || !accountTeacherName) return false;
+  const rawA = String(scheduleTeacherName).toLowerCase().trim();
+  const rawB = String(accountTeacherName).toLowerCase().trim();
+  if (!rawA || !rawB) return false;
+  if (rawA === rawB) return true;
+
+  const cleanA = normalizeTeacherName(rawA);
+  const cleanB = normalizeTeacherName(rawB);
+  if (!cleanA || !cleanB) return rawA === rawB;
+  if (cleanA === cleanB) return true;
+
+  const wordsA = cleanA.split(' ').filter(w => w.length >= 2);
+  const wordsB = cleanB.split(' ').filter(w => w.length >= 2);
+  if (wordsA.length === 0 || wordsB.length === 0) {
+    return cleanA === cleanB;
+  }
+
+  // Cocok tepat bila salah satu nama hanya terdiri dari 1 kata (misal "Yasir" vs "Ustadz Yasir")
+  if (wordsA.length === 1 && wordsB.length === 1) {
+    return wordsA[0] === wordsB[0];
+  }
+  if (wordsA.length === 1 && wordsB.includes(wordsA[0])) {
+    return true;
+  }
+  if (wordsB.length === 1 && wordsA.includes(wordsB[0])) {
+    return true;
+  }
+
+  // Jika keduanya multi-kata: cocok jika semua kata pada nama yang lebih pendek ada pada nama yang lebih panjang
+  // atau minimal 2 kata signifikan sama persis
+  const shorter = wordsA.length <= wordsB.length ? wordsA : wordsB;
+  const longer = wordsA.length <= wordsB.length ? wordsB : wordsA;
+  const matchedWords = shorter.filter(w => longer.includes(w));
+
+  if (matchedWords.length === shorter.length && shorter.length >= 2) {
+    return true;
+  }
+  return matchedWords.length >= 2;
+}
+
+export function collectTeacherIdentity(
+  pengurus: { id?: string; guruId?: string; nama?: string },
+  guruList: Array<{ id?: string; nama?: string }> = []
+): { ids: Set<string>; names: Set<string> } {
+  const ids = new Set<string>();
+  const names = new Set<string>();
+
+  if (pengurus.id) ids.add(String(pengurus.id).trim());
+  if (pengurus.guruId) ids.add(String(pengurus.guruId).trim());
+  if (pengurus.nama) {
+    names.add(pengurus.nama.toLowerCase().trim());
+    const norm = normalizeTeacherName(pengurus.nama);
+    if (norm) names.add(norm);
+  }
+
+  for (const g of guruList || []) {
+    const gId = g.id ? String(g.id).trim() : '';
+    const idMatches = Boolean(gId && ids.has(gId));
+    const nameMatches = Boolean(g.nama && pengurus.nama && isTeacherNameMatch(g.nama, pengurus.nama));
+    if (idMatches || nameMatches) {
+      if (gId) ids.add(gId);
+      if (g.nama) {
+        names.add(g.nama.toLowerCase().trim());
+        const norm = normalizeTeacherName(g.nama);
+        if (norm) names.add(norm);
+      }
+    }
+  }
+
+  return { ids, names };
+}
+
+export function isScheduleOwnedByTeacher(
+  jadwal: { ustadzId?: string; nama?: string; ustadz?: string },
+  pengurus: { id?: string; guruId?: string; nama?: string },
+  guruList: Array<{ id?: string; nama?: string }> = []
+): boolean {
+  const { ids, names } = collectTeacherIdentity(pengurus, guruList);
+  if (jadwal.ustadzId && ids.has(String(jadwal.ustadzId).trim())) {
+    return true;
+  }
+
+  const schedName = jadwal.nama || jadwal.ustadz || '';
+  if (!schedName) return false;
+  if (isTeacherNameMatch(schedName, pengurus.nama)) return true;
+
+  for (const knownName of names) {
+    if (isTeacherNameMatch(schedName, knownName)) return true;
+  }
+  return false;
+}
+
+export function isAliyahSchedule(jadwal: { kelas?: string; hari?: string; tingkatan?: string }): boolean {
+  const kelasUpper = (jadwal.kelas || '').toUpperCase();
+  const tingUpper = (jadwal.tingkatan || '').toUpperCase();
+  const hariUpper = normalizePesantrenDayName(jadwal.hari);
+  return kelasUpper.includes('ALIYAH') || tingUpper === 'ALIYAH' || hariUpper.startsWith('MALAM');
+}
+
+export function doesScheduleMatchDay(
+  jadwal: { kelas?: string; hari?: string; tingkatan?: string },
+  dayInfo: PesantrenDayInfo
+): boolean {
+  const jHari = normalizePesantrenDayName(jadwal.hari);
+  if (!jHari) return false;
+
+  const malamToday = normalizePesantrenDayName(dayInfo.malamDayName);
+  const calToday = normalizePesantrenDayName(dayInfo.calendarDayName);
+
+  if (jHari.startsWith('MALAM')) {
+    return jHari === malamToday;
+  }
+
+  const isAliyah = isAliyahSchedule(jadwal);
+  if (isAliyah) {
+    // Jika admin mengisi hari Aliyah dengan nama hari kalender biasa (tanpa 'MALAM'), tetap cocokkan ke hari kalender
+    return jHari === malamToday || jHari === calToday;
+  }
+
+  return jHari === calToday;
+}
+
+export function parseScheduleTimeWindowSeconds(waktuStr?: string): { startSec: number; endSec: number } | null {
+  if (!waktuStr) return null;
+  const matches = String(waktuStr).match(/(\d{1,2})[:.](\d{2})/g);
+  if (!matches || matches.length < 2) return null;
+
+  const toSec = (hhmm: string, isEnd: boolean) => {
+    const [h, m] = hhmm.replace('.', ':').split(':').map(Number);
+    if (!Number.isFinite(h) || !Number.isFinite(m) || h > 23 || m > 59) return null;
+    return h * 3600 + m * 60 + (isEnd ? 59 : 0);
+  };
+
+  const startSec = toSec(matches[0], false);
+  const endSec = toSec(matches[1], true);
+  if (startSec === null || endSec === null) return null;
+  return { startSec, endSec };
+}
+
+export function getScheduleKey(j: { id?: string; kelas?: string; hari?: string; jamKe?: number | string; mapel?: string }): string {
+  return j.id || `${j.kelas || ''}_${normalizePesantrenDayName(j.hari)}_${j.jamKe || 1}_${(j.mapel || '').trim()}`;
+}
+
+export function isScheduleCheckedInToday(
+  schedule: { id?: string; kelas?: string; hari?: string; jamKe?: number | string; mapel?: string },
+  absensiGuruList: Array<{ tanggal?: string; nama?: string; jadwalId?: string; kelas?: string; mapel?: string; jamKe?: number | string; ustadzAktualNama?: string; ustadzTerjadwalNama?: string }>,
+  todayIso: string,
+  pengurus: { id?: string; guruId?: string; nama?: string },
+  guruList: Array<{ id?: string; nama?: string }> = []
+): boolean {
+  const schedKey = getScheduleKey(schedule);
+  const schedMapel = (schedule.mapel || '').toLowerCase().trim();
+  const schedKelas = (schedule.kelas || '').toUpperCase().trim();
+  const schedJamKe = Number(schedule.jamKe || 1);
+
+  return (absensiGuruList || []).some(rec => {
+    if (rec.tanggal !== todayIso) return false;
+    const ownerMatches =
+      isTeacherNameMatch(rec.nama, pengurus.nama) ||
+      isTeacherNameMatch(rec.ustadzAktualNama, pengurus.nama) ||
+      isTeacherNameMatch(rec.ustadzTerjadwalNama, pengurus.nama) ||
+      guruList.some(g => isTeacherNameMatch(g.nama, pengurus.nama) && isTeacherNameMatch(rec.nama, g.nama));
+    if (!ownerMatches) return false;
+
+    if (rec.jadwalId && (rec.jadwalId === schedule.id || rec.jadwalId === schedKey)) {
+      return true;
+    }
+
+    const recKelas = (rec.kelas || '').toUpperCase().trim();
+    const recMapel = (rec.mapel || '').toLowerCase().trim();
+    const recJamKe = Number(rec.jamKe || 1);
+
+    if (recKelas !== schedKelas) return false;
+    if (schedMapel && recMapel && recMapel === schedMapel && recJamKe === schedJamKe) return true;
+    return recJamKe === schedJamKe && (!schedMapel || !recMapel);
+  });
+}
+
+export function isScheduleWindowActiveNow(
+  schedule: { kelas?: string; hari?: string; jamKe?: number | string; tingkatan?: string; waktu?: string },
+  activeSession: PresensiCheckResult,
+  bypassActive?: boolean
+): boolean {
+  if (bypassActive) return true;
+  if (!activeSession.isActive) return false;
+
+  const isAliyah = isAliyahSchedule(schedule);
+  const correctTingkat = activeSession.tingkat === 'ALIYAH' ? isAliyah : !isAliyah;
+  if (!correctTingkat) return false;
+
+  const schedJam = Number(schedule.jamKe || 1);
+  if (schedJam === Number(activeSession.jamKe)) {
+    return true;
+  }
+
+  // Dukungan untuk Jam Ke-3+ atau waktu khusus yang masih berada di dalam rentang waktu aktif WIB
+  if (schedJam >= 3) {
+    const parsed = parseScheduleTimeWindowSeconds(schedule.waktu);
+    if (parsed) {
+      const wib = toWibDate(activeSession.serverTime);
+      const secNow = wib.getUTCHours() * 3600 + wib.getUTCMinutes() * 60 + wib.getUTCSeconds();
+      return secNow >= parsed.startSec && secNow <= parsed.endSec;
+    }
+    return Number(activeSession.jamKe) >= 2;
+  }
+
+  return false;
+}
+

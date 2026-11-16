@@ -21,7 +21,10 @@ import {
   checkPresensiSchedule, getServerTime, setSimulatedServerTime, isSimulationActive,
   PresensiCheckResult, OFFICIAL_SCHEDULES, broadcastAttendanceUpdate,
   getPesantrenDayInfo, getMalamDaySubtitle, subscribeScheduleUpdates,
-  subscribeIzinMengajarUpdates, subscribeNadzhomUpdates
+  subscribeIzinMengajarUpdates, subscribeNadzhomUpdates,
+  isTeacherNameMatch, isScheduleOwnedByTeacher, isAliyahSchedule,
+  doesScheduleMatchDay, getScheduleKey, isScheduleCheckedInToday,
+  isScheduleWindowActiveNow
 } from '../serverTime';
 import { PenggantiUstadzRequest } from '../types';
 
@@ -348,8 +351,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     alert(`Setoran nadzhom ${rec.nama} (${rec.kitab} - ${rec.bait} bait) berhasil disimpan dan disinkronkan secara real-time ke Dashboard Admin & Wali Santri!`);
   };
 
-  // Status presensi mandiri hari ini
-  const todayIso = new Date().toISOString().split('T')[0];
+  // Status presensi mandiri hari ini (WIB Asia/Jakarta)
+  const todayIso = getPesantrenDayInfo().todayIso;
   const todayAttendance = useMemo(() => {
     return personalAbsensi.find(a => a.tanggal === todayIso);
   }, [personalAbsensi, todayIso]);
@@ -502,62 +505,104 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   // Mode Tampilan Absensi: 'normal' | 'pengganti'
   const [absensiMode, setAbsensiMode] = useState<'normal' | 'pengganti'>('normal');
 
-  // State Pelacakan Geolocation GPS Real-Time
-  const [userCoords, setUserCoords] = useState<{ lat: number | null; lng: number | null; accuracy: number | null }>({
+  // State Pelacakan Geolocation GPS Real-Time dengan stabilisasi pembacaan akurasi terbaik
+  const [userCoords, setUserCoords] = useState<{ lat: number | null; lng: number | null; accuracy: number | null; updatedAt?: number }>({
     lat: null,
     lng: null,
-    accuracy: null
+    accuracy: null,
+    updatedAt: 0
   });
   const [gpsLoading, setGpsLoading] = useState<boolean>(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [gpsErrorCode, setGpsErrorCode] = useState<'permission_denied' | 'position_unavailable' | 'timeout' | 'unsupported' | null>(null);
 
-  // Ambil lokasi GPS perangkat secara berkala
+  const applyPositionSample = useCallback((pos: GeolocationPosition, forceUpdate = false) => {
+    const { latitude, longitude, accuracy } = pos.coords;
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+    const acc = Number.isFinite(accuracy) && accuracy > 0 ? accuracy : 15;
+    const now = Date.now();
+    setUserCoords(prev => {
+      const hasPrev = prev.lat !== null && prev.lng !== null && prev.accuracy !== null;
+      const isPrevStale = !prev.updatedAt || (now - prev.updatedAt > 20000);
+      // Pertahankan sampel akurasi baik yang masih segar agar lonjakan Wi-Fi/seluler tidak merusak lock GPS
+      if (!forceUpdate && hasPrev && !isPrevStale && acc > (prev.accuracy as number) + 15) {
+        return prev;
+      }
+      return {
+        lat: latitude,
+        lng: longitude,
+        accuracy: acc,
+        updatedAt: now
+      };
+    });
+    setGpsLoading(false);
+    setGpsError(null);
+    setGpsErrorCode(null);
+  }, []);
+
+  const handleGeolocationError = useCallback((err: GeolocationPositionError) => {
+    setGpsLoading(false);
+    if (err.code === 1) {
+      setGpsErrorCode('permission_denied');
+      setGpsError('Izin akses lokasi GPS ditolak oleh browser/perangkat. Mohon izinkan akses lokasi lalu coba lagi.');
+    } else if (err.code === 2) {
+      setGpsErrorCode('position_unavailable');
+      setGpsError('Sinyal lokasi GPS tidak tersedia. Pastikan layanan GPS perangkat aktif.');
+    } else if (err.code === 3) {
+      setGpsErrorCode('timeout');
+      setGpsError('Pembacaan GPS melebihi batas waktu. Sistem akan mencoba membaca ulang koordinat...');
+    } else {
+      setGpsErrorCode('position_unavailable');
+      setGpsError(err.message || 'Gagal membaca lokasi GPS perangkat.');
+    }
+  }, []);
+
+  const acquireFreshGpsPosition = useCallback((timeoutMs = 8000): Promise<{ lat: number; lng: number; accuracy: number } | null> => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      setGpsErrorCode('unsupported');
+      setGpsError('Browser tidak mendukung pendeteksian lokasi GPS.');
+      return Promise.resolve(null);
+    }
+    setGpsLoading(true);
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          applyPositionSample(pos, true);
+          resolve({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: Number.isFinite(pos.coords.accuracy) && pos.coords.accuracy > 0 ? pos.coords.accuracy : 15
+          });
+        },
+        (err) => {
+          handleGeolocationError(err);
+          resolve(null);
+        },
+        { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 }
+      );
+    });
+  }, [applyPositionSample, handleGeolocationError]);
+
+  // Ambil lokasi GPS perangkat secara berkala + watchPosition real-time
   useEffect(() => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
+      setGpsErrorCode('unsupported');
       setGpsError('Browser tidak mendukung pendeteksian lokasi GPS.');
       return;
     }
 
-    setGpsLoading(true);
-    // Coba dapatkan posisi awal
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUserCoords({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy
-        });
-        setGpsLoading(false);
-        setGpsError(null);
-      },
-      (err) => {
-        setGpsLoading(false);
-        setGpsError(err.message);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+    acquireFreshGpsPosition(10000);
 
-    // Pasang watcher posisi real-time
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        setUserCoords({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy
-        });
-        setGpsLoading(false);
-        setGpsError(null);
-      },
-      (err) => {
-        setGpsError(err.message);
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+      (pos) => applyPositionSample(pos, false),
+      (err) => handleGeolocationError(err),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, [acquireFreshGpsPosition, applyPositionSample, handleGeolocationError]);
 
-  // Hasil Validasi Geofencing Terhadap Pengaturan Admin
+  // Hasil Validasi Geofencing Terhadap Pengaturan Admin Option Panel
   const geofenceCheck = useMemo(() => {
     return validateGeofence(userCoords.lat, userCoords.lng, userCoords.accuracy, {
       enabled: settings.geofencing_enabled,
@@ -569,6 +614,35 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     });
   }, [userCoords, settings]);
 
+  // Mekanisme pembacaan ulang otomatis jika sinyal GPS belum stabil / akurasi buruk / belum terdeteksi
+  useEffect(() => {
+    if (settings.geofencing_enabled === false) return;
+    if (gpsErrorCode === 'permission_denied' || gpsErrorCode === 'unsupported') return;
+    if (!geofenceCheck.needsGpsRetry && geofenceCheck.hasLocation) return;
+
+    let cancelled = false;
+    let attempts = 0;
+    const retryInterval = window.setInterval(() => {
+      if (cancelled || attempts >= 4) {
+        window.clearInterval(retryInterval);
+        return;
+      }
+      attempts += 1;
+      acquireFreshGpsPosition(7000);
+    }, 4500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(retryInterval);
+    };
+  }, [
+    settings.geofencing_enabled,
+    gpsErrorCode,
+    geofenceCheck.needsGpsRetry,
+    geofenceCheck.hasLocation,
+    acquireFreshGpsPosition
+  ]);
+
   // State Permohonan Pengganti Ustadz
   const [penggantiRequestList, setPenggantiRequestList] = useState<PenggantiUstadzRequest[]>(() => {
     try {
@@ -579,17 +653,19 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     }
   });
 
-  // State Modal Notifikasi / Dialog Validasi Presensi (Di Luar Radius, Di Luar Jam, Berhasil)
+  // State Modal Notifikasi / Dialog Validasi Presensi (Di Luar Radius, GPS Tidak Akurat, Di Luar Jam, Berhasil)
   const [validationAlertModal, setValidationAlertModal] = useState<{
     isOpen: boolean;
-    type: 'outside_radius' | 'outside_hours' | 'already_checked' | 'no_schedule' | 'no_pengganti' | 'success';
+    type: 'outside_radius' | 'gps_inaccurate' | 'gps_unavailable' | 'outside_hours' | 'already_checked' | 'no_schedule' | 'no_pengganti' | 'success';
     title: string;
     message: string;
     submessage?: string;
+    allowGpsRetry?: boolean;
     details?: {
       distance?: number;
       maxRadius?: number;
       accuracy?: number;
+      maxAccuracy?: number;
       currentTime?: string;
       allowedSchedule?: string;
     };
@@ -632,19 +708,20 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   // Listener sinkronisasi jadwal real-time dari Admin Dashboard Tab Jadwal Pelajaran
   useEffect(() => {
     const unsub = subscribeScheduleUpdates((newSchedules) => {
-      if (Array.isArray(newSchedules) && newSchedules.length > 0) {
+      if (Array.isArray(newSchedules)) {
         setLiveJadwalList(newSchedules);
       }
     });
     return () => unsub();
   }, []);
 
-  // Logika Evaluasi Jam Server Real-Time:
+  // Logika Evaluasi Jam Server Real-Time (tersinkron ke pengaturan Option Panel Admin):
   const activeSession: PresensiCheckResult = useMemo(() => {
     return checkPresensiSchedule(serverClock, {
-      bypassActive: settings.bypass_jam_presensi_testing
+      bypassActive: settings.bypass_jam_presensi_testing,
+      settings
     });
-  }, [serverClock, settings.bypass_jam_presensi_testing]);
+  }, [serverClock, settings]);
 
   // Evaluasi Hari & Sesi Pesantren (WIB):
   // Siang (Tsanawiyah): Hari Kalender Masehi (SABTU, AHAD, SENIN, dst)
@@ -655,50 +732,15 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
   const currentDayName = activeSession.currentDayName;
 
-  // Helper pencocokan nama pengurus login dengan nama ustadz di jadwal pelajaran
+  // Helper pencocokan nama pengurus login dengan nama ustadz di jadwal pelajaran (Single Source of Truth)
   const isMatchMyTeacherName = useCallback((scheduleTeacherName: string | undefined): boolean => {
-    if (!scheduleTeacherName || !pengurus.nama) return false;
-    const s = scheduleTeacherName.toLowerCase().trim();
-    const p = pengurus.nama.toLowerCase().trim();
-    if (s === p) return true;
-
-    // Normalisasi gelar & titel agar akurat (Ustadz, Ust., Ustazah, S.Pd., dll)
-    const clean = (str: string) => str
-      .replace(/\b(ustadz|ustazah|ustadzah|ust|kh|k\.h|h\.|h|kyai|gus|s\.pd|s\.pd\.i|m\.pd|lc|al-hafidz|al-hafiz)\b/gi, '')
-      .replace(/[^a-z0-9]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    const cleanS = clean(s);
-    const cleanP = clean(p);
-    if (cleanS && cleanP && (cleanS === cleanP || cleanS.includes(cleanP) || cleanP.includes(cleanS))) {
-      return true;
-    }
-
-    const wordsS = cleanS.split(' ').filter(w => w.length > 2);
-    const wordsP = cleanP.split(' ').filter(w => w.length > 2);
-    const matches = wordsS.filter(w => wordsP.includes(w));
-    return matches.length >= 2 || (wordsS.length === 1 && wordsP.includes(wordsS[0])) || (wordsP.length === 1 && wordsS.includes(wordsP[0]));
+    return isTeacherNameMatch(scheduleTeacherName, pengurus.nama);
   }, [pengurus.nama]);
 
-  // JADWAL PELAJARAN KHUSUS PENGURUS/USTADZ YANG SEDANG LOGIN (DATA PRIBADI)
+  // JADWAL PELAJARAN KHUSUS PENGURUS/USTADZ YANG SEDANG LOGIN (DATA PRIBADI - ID & NAMA TERINTEGRASI GURU_LIST)
   const myAllSchedules = useMemo(() => {
-    const list = (liveJadwalList || []).filter(j => 
-      (j.ustadzId && (j.ustadzId === pengurus.id || (pengurus as any).guruId === j.ustadzId)) ||
-      isMatchMyTeacherName(j.nama || j.ustadz)
-    );
-    if (list.length > 0) return list;
-    
-    // Cadangan jika ustadz baru atau mapping mapel/kelas pribadi
-    if (pengurus.mapel || pengurus.kelasBimbingan) {
-      return (liveJadwalList || []).filter(j => {
-        const matchMapel = pengurus.mapel && j.mapel && j.mapel.toLowerCase().includes(pengurus.mapel.toLowerCase().trim());
-        const matchKelas = pengurus.kelasBimbingan && j.kelas === pengurus.kelasBimbingan;
-        return matchMapel || (matchKelas && isMatchMyTeacherName(j.nama || j.ustadz));
-      });
-    }
-    return [];
-  }, [liveJadwalList, isMatchMyTeacherName, pengurus.id, (pengurus as any).guruId, pengurus.mapel, pengurus.kelasBimbingan]);
+    return (liveJadwalList || []).filter(j => isScheduleOwnedByTeacher(j, pengurus, guruList));
+  }, [liveJadwalList, pengurus, guruList]);
 
   // Kelas-kelas yang diampu oleh ustadz yang sedang login
   const myTeachingClasses = useMemo(() => {
@@ -706,158 +748,175 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     myAllSchedules.forEach(j => {
       if (j.kelas) clsSet.add(j.kelas);
     });
-    if (clsSet.size === 0 && pengurus.kelasBimbingan) {
+    if (clsSet.size === 0 && pengurus.kelasBimbingan && pengurus.kelasBimbingan !== 'Dewan Asatidz') {
       clsSet.add(pengurus.kelasBimbingan);
     }
     return Array.from(clsSet);
   }, [myAllSchedules, pengurus.kelasBimbingan]);
 
-  // 1. Ambil jadwal mengajar pribadi ustadz pada hari ini sesuai aturan pesantren
-  // - Aliyah (Malam) dicocokkan dengan dayInfo.malamDayName (Contoh: Jumat malam = MALAM SABTU)
-  // - Tsanawiyah (Siang) dicocokkan dengan dayInfo.calendarDayName (Contoh: SABTU, AHAD, dst)
+  // 1. Ambil jadwal mengajar pribadi ustadz pada hari ini sesuai aturan pesantren WIB
   const myTodaySchedules = useMemo(() => {
-    return myAllSchedules.filter(j => {
-      const jHari = (j.hari || '').toUpperCase().trim();
-      const isAliyah = (j.kelas || '').includes('ALIYAH') || jHari.startsWith('MALAM');
-      if (isAliyah) {
-        return jHari === dayInfo.malamDayName;
-      } else {
-        return jHari === dayInfo.calendarDayName;
-      }
-    });
-  }, [myAllSchedules, dayInfo.malamDayName, dayInfo.calendarDayName]);
+    return myAllSchedules.filter(j => doesScheduleMatchDay(j, dayInfo));
+  }, [myAllSchedules, dayInfo]);
 
   // State filter kelas untuk jadwal presensi hari ini (hanya dari kelas yang diampu)
   const [selectedPresensiKelas, setSelectedPresensiKelas] = useState<string>('SEMUA');
 
-  // 2. Filter jadwal hari ini berdasarkan kelas yang dipilih (khusus data pribadi)
-  // Jika kelas yang dipilih belum memiliki jadwal hari ini, tetap tampilkan jadwal kelas tersebut dari myAllSchedules agar button & div selalu cocok & sinkron
+  // 2. Filter jadwal HARI INI berdasarkan kelas yang dipilih (tidak mencampur jadwal hari lain)
   const myTodaySchedulesByClass = useMemo(() => {
     if (selectedPresensiKelas === 'SEMUA' || !selectedPresensiKelas) {
-      return myTodaySchedules.length > 0 ? myTodaySchedules : myAllSchedules;
+      return myTodaySchedules;
     }
-    const todayFiltered = myTodaySchedules.filter(j => j.kelas === selectedPresensiKelas);
-    if (todayFiltered.length > 0) return todayFiltered;
-    return myAllSchedules.filter(j => j.kelas === selectedPresensiKelas);
-  }, [myTodaySchedules, myAllSchedules, selectedPresensiKelas]);
+    return myTodaySchedules.filter(j => j.kelas === selectedPresensiKelas);
+  }, [myTodaySchedules, selectedPresensiKelas]);
 
   // State jadwal yang dipilih oleh ustadz
   const [selectedJadwalId, setSelectedJadwalId] = useState<string>('');
 
-  // Jadwal mengajar ustadz hari ini pada sesi jam yang sedang aktif
+  // Reset filter kelas / pilihan jadwal yang sudah kedaluwarsa saat jadwal Admin diperbarui atau ganti hari
+  useEffect(() => {
+    if (selectedPresensiKelas !== 'SEMUA' && !myTeachingClasses.includes(selectedPresensiKelas)) {
+      setSelectedPresensiKelas('SEMUA');
+    }
+  }, [myTeachingClasses, selectedPresensiKelas]);
+
+  useEffect(() => {
+    if (selectedJadwalId && !myTodaySchedules.some(j => getScheduleKey(j) === selectedJadwalId)) {
+      setSelectedJadwalId('');
+    }
+  }, [myTodaySchedules, selectedJadwalId]);
+
+  // Jadwal mengajar ustadz hari ini pada sesi jam yang sedang aktif (prioritas: belum absen & kelas terpilih)
   const myCurrentSessionSchedule = useMemo(() => {
-    if (!activeSession.isActive) return null;
-    return myTodaySchedules.find(j => {
-      const isAliyah = (j.kelas || '').includes('ALIYAH') || (j.hari || '').toUpperCase().startsWith('MALAM');
-      const correctTingkat = activeSession.tingkat === 'ALIYAH' ? isAliyah : !isAliyah;
-      const matchJam = Number(j.jamKe) === Number(activeSession.jamKe);
-      const matchKelas = selectedPresensiKelas === 'SEMUA' || !selectedPresensiKelas || j.kelas === selectedPresensiKelas;
-      return correctTingkat && matchJam && matchKelas;
-    }) || myTodaySchedules.find(j => {
-      const isAliyah = (j.kelas || '').includes('ALIYAH') || (j.hari || '').toUpperCase().startsWith('MALAM');
-      const correctTingkat = activeSession.tingkat === 'ALIYAH' ? isAliyah : !isAliyah;
-      return correctTingkat && Number(j.jamKe) === Number(activeSession.jamKe);
-    }) || null;
-  }, [activeSession, myTodaySchedules, selectedPresensiKelas]);
+    if (!activeSession.isActive && !settings.bypass_jam_presensi_testing) return null;
 
-  // Jadwal mengajar ustadz hari ini pada sesi jam yang LAIN (misal terjadwal Jam 2 saat jam aktif masih Jam 1, atau sebaliknya)
+    const matchingActive = myTodaySchedules.filter(j =>
+      isScheduleWindowActiveNow(j, activeSession, settings.bypass_jam_presensi_testing)
+    );
+    if (matchingActive.length === 0) return null;
+
+    const inSelectedClass = (selectedPresensiKelas && selectedPresensiKelas !== 'SEMUA')
+      ? matchingActive.filter(j => j.kelas === selectedPresensiKelas)
+      : matchingActive;
+
+    const pool = inSelectedClass.length > 0 ? inSelectedClass : matchingActive;
+    // Utamakan jadwal sesi aktif yang BELUM diabsen hari ini (penting jika ada beberapa jadwal dalam satu hari)
+    const unchecked = pool.find(j => !isScheduleCheckedInToday(j, absensiGuruList, activeSession.todayIso, pengurus, guruList));
+    return unchecked || pool[0] || null;
+  }, [
+    activeSession,
+    settings.bypass_jam_presensi_testing,
+    myTodaySchedules,
+    selectedPresensiKelas,
+    absensiGuruList,
+    pengurus,
+    guruList
+  ]);
+
+  // Jadwal mengajar ustadz hari ini pada sesi jam yang LAIN
   const myOtherSessionSchedule = useMemo(() => {
-    return myTodaySchedules.find(j => {
-      const isAliyah = (j.kelas || '').includes('ALIYAH') || (j.hari || '').toUpperCase().startsWith('MALAM');
-      const correctTingkat = activeSession.tingkat === 'ALIYAH' ? isAliyah : !isAliyah;
-      return correctTingkat && Number(j.jamKe) !== Number(activeSession.jamKe);
-    }) || null;
-  }, [activeSession, myTodaySchedules]);
+    const otherPool = myTodaySchedules.filter(j =>
+      !isScheduleWindowActiveNow(j, activeSession, settings.bypass_jam_presensi_testing)
+    );
+    if (otherPool.length === 0) return null;
 
-  // Evaluasi jadwal yang aktif untuk ditampilkan dan diverifikasi
+    const sameTingkat = otherPool.find(j => {
+      const isAliyah = isAliyahSchedule(j);
+      return activeSession.tingkat === 'ALIYAH' ? isAliyah : !isAliyah;
+    });
+    return sameTingkat || otherPool[0] || null;
+  }, [activeSession, settings.bypass_jam_presensi_testing, myTodaySchedules]);
+
+  // Evaluasi jadwal yang aktif hari ini untuk ditampilkan dan diverifikasi
   const myActiveSchedule = useMemo(() => {
-    // 1. Jika ada jadwal yang dipilih spesifik oleh tombol atau dropdown
+    if (myTodaySchedules.length === 0) return null;
+
+    // 1. Jika ada jadwal hari ini yang dipilih spesifik oleh tombol sesi
     if (selectedJadwalId) {
-      const found = myTodaySchedulesByClass.find(j => (j.id || `${j.kelas}_${j.hari}_${j.jamKe}`) === selectedJadwalId) ||
-                    myTodaySchedules.find(j => (j.id || `${j.kelas}_${j.hari}_${j.jamKe}`) === selectedJadwalId) ||
-                    myAllSchedules.find(j => (j.id || `${j.kelas}_${j.hari}_${j.jamKe}`) === selectedJadwalId);
+      const found = myTodaySchedulesByClass.find(j => getScheduleKey(j) === selectedJadwalId) ||
+                    myTodaySchedules.find(j => getScheduleKey(j) === selectedJadwalId);
       if (found) return found;
     }
 
-    // 2. Jika sesi aktif dan ustadz punya jadwal di sesi ini, utamakan sesi ini!
-    if (activeSession.isActive && myCurrentSessionSchedule) {
-      return myCurrentSessionSchedule;
+    // 2. Jika sesi aktif dan ustadz punya jadwal aktif saat ini (prioritaskan yang belum absen)
+    if ((activeSession.isActive || settings.bypass_jam_presensi_testing) && myCurrentSessionSchedule) {
+      if (!selectedPresensiKelas || selectedPresensiKelas === 'SEMUA' || myCurrentSessionSchedule.kelas === selectedPresensiKelas) {
+        return myCurrentSessionSchedule;
+      }
     }
 
-    // 3. Jika sesi aktif dan ustadz punya jadwal di jam lain hari ini, tampilkan untuk konteks
-    if (activeSession.isActive && myOtherSessionSchedule) {
+    // 3. Jadwal hari ini sesuai kelas yang dipilih
+    if (myTodaySchedulesByClass.length > 0) {
+      const uncheckedInClass = myTodaySchedulesByClass.find(
+        j => !isScheduleCheckedInToday(j, absensiGuruList, activeSession.todayIso, pengurus, guruList)
+      );
+      return uncheckedInClass || myTodaySchedulesByClass[0];
+    }
+
+    // 4. Jadwal hari ini (jika ada pada jam lain)
+    if (myOtherSessionSchedule) {
       return myOtherSessionSchedule;
     }
 
-    // 4. Candidate pool strictly terikat pada kelas yang dipilih (jika bukan 'SEMUA')
-    const candidatePool = (selectedPresensiKelas && selectedPresensiKelas !== 'SEMUA')
-      ? myTodaySchedulesByClass
-      : (myTodaySchedules.length > 0 ? myTodaySchedules : myAllSchedules);
+    return myTodaySchedules[0] || null;
+  }, [
+    selectedJadwalId,
+    activeSession,
+    settings.bypass_jam_presensi_testing,
+    myCurrentSessionSchedule,
+    myOtherSessionSchedule,
+    selectedPresensiKelas,
+    myTodaySchedulesByClass,
+    myTodaySchedules,
+    absensiGuruList,
+    pengurus,
+    guruList
+  ]);
 
-    if (!candidatePool || candidatePool.length === 0) return null;
-
-    // 5. Cocokkan dengan hari ini
-    const matchToday = candidatePool.find(j => {
-      const jHari = (j.hari || '').toUpperCase().trim();
-      const isAliyah = (j.kelas || '').includes('ALIYAH') || jHari.startsWith('MALAM');
-      return isAliyah ? jHari === dayInfo.malamDayName : jHari === dayInfo.calendarDayName;
-    });
-    if (matchToday) return matchToday;
-
-    // 6. Fallback ke jadwal pertama dalam candidate pool
-    return candidatePool[0] || null;
-  }, [selectedJadwalId, activeSession, myCurrentSessionSchedule, myOtherSessionSchedule, selectedPresensiKelas, myTodaySchedulesByClass, myTodaySchedules, myAllSchedules, dayInfo]);
-
-  // Validasi Ketidaksesuaian Sesi Jam Mengajar Guru (Jam Ke-1 vs Jam Ke-2)
+  // Validasi Ketidaksesuaian Sesi Jam Mengajar Guru (Jam Ke-1 vs Jam Ke-2 / Jam Ke-3 / Jenjang Siang-Malam)
   const sessionMismatchInfo = useMemo(() => {
     if (!activeSession.isActive || settings.bypass_jam_presensi_testing) {
       return { isMismatch: false, title: '', message: '', targetJam: 0 };
     }
 
-    // 1. Jika ustadz memiliki jadwal pada sesi yang sedang aktif saat ini
-    if (myCurrentSessionSchedule) {
-      if (selectedJadwalId && myActiveSchedule && Number(myActiveSchedule.jamKe) !== Number(activeSession.jamKe)) {
-        const jamTarget = Number(myActiveSchedule.jamKe);
+    if (myActiveSchedule) {
+      if (isScheduleWindowActiveNow(myActiveSchedule, activeSession, false)) {
+        return { isMismatch: false, title: '', message: '', targetJam: 0 };
+      }
+
+      const jamTarget = Number(myActiveSchedule.jamKe || 1);
+      const schedIsAliyah = isAliyahSchedule(myActiveSchedule);
+      const sessionIsAliyah = activeSession.tingkat === 'ALIYAH';
+
+      if (schedIsAliyah !== sessionIsAliyah) {
         return {
           isMismatch: true,
           targetJam: jamTarget,
-          title: jamTarget === 2
-            ? '⛔ Belum Waktunya Presensi (Jadwal Jam Ke-2)'
-            : '⛔ Sesi Jam Ke-1 Telah Selesai',
-          message: jamTarget === 2
-            ? `Jadwal pilihan Anda (${myActiveSchedule.mapel} - ${myActiveSchedule.kelas}) terjadwal pada Jam Ke-2. Anda hanya dapat melakukan presensi saat sesi Jam Ke-2 dimulai.`
-            : `Jadwal pilihan Anda (${myActiveSchedule.mapel} - ${myActiveSchedule.kelas}) adalah Jam Ke-1. Sesi Jam Ke-1 telah berakhir dan Anda tidak boleh absen pada Jam Ke-2.`
+          title: schedIsAliyah ? '⛔ Jadwal Ini Khusus Sesi Malam (Aliyah)' : '⛔ Jadwal Ini Khusus Sesi Siang (Tsanawiyah)',
+          message: `Jadwal pilihan Anda (${myActiveSchedule.mapel} - ${myActiveSchedule.kelas}) adalah jadwal jenjang ${schedIsAliyah ? 'Aliyah (Malam)' : 'Tsanawiyah (Siang)'}, sedangkan sesi presensi saat ini adalah ${activeSession.tingkat} (${activeSession.sesi}).`,
         };
       }
-      return { isMismatch: false, title: '', message: '', targetJam: 0 };
-    }
 
-    // 2. Jika ustadz TIDAK memiliki jadwal pada sesi aktif saat ini, tetapi memiliki jadwal hari ini di jam lain
-    if (myOtherSessionSchedule) {
-      const jamTarget = Number(myOtherSessionSchedule.jamKe);
       return {
         isMismatch: true,
         targetJam: jamTarget,
-        title: jamTarget === 2
-          ? '⛔ Belum Waktunya Presensi (Jadwal Anda: Jam Ke-2)'
-          : '⛔ Sesi Jam Ke-1 Telah Selesai',
-        message: jamTarget === 2
-          ? `Sesi presensi yang aktif saat ini adalah Jam Ke-1 (${activeSession.sesi}). Anda terjadwal mengajar pada Jam Ke-2 (${myOtherSessionSchedule.mapel} - ${myOtherSessionSchedule.kelas}). Sesuai aturan madrasah, guru yang terjadwal Jam Ke-2 hanya dapat melakukan absensi pada Jam Ke-2 dan dilarang absen pada Jam Ke-1.`
-          : `Sesi presensi yang aktif saat ini adalah Jam Ke-2 (${activeSession.sesi}). Jadwal mengajar Anda hari ini (${myOtherSessionSchedule.mapel} - ${myOtherSessionSchedule.kelas}) adalah Jam Ke-1. Sesi Jam Ke-1 telah berakhir dan guru Jam Ke-1 dilarang absen pada Jam Ke-2.`
+        title: jamTarget > Number(activeSession.jamKe)
+          ? `⛔ Belum Waktunya Presensi (Jadwal Jam Ke-${jamTarget})`
+          : `⛔ Sesi Jam Ke-${jamTarget} Telah Selesai / Di Luar Rentang Waktu`,
+        message: jamTarget > Number(activeSession.jamKe)
+          ? `Jadwal pilihan Anda (${myActiveSchedule.mapel} - ${myActiveSchedule.kelas}) terjadwal pada Jam Ke-${jamTarget} (${myActiveSchedule.waktu || '-'}). Anda hanya dapat melakukan presensi saat sesi Jam Ke-${jamTarget} dimulai.`
+          : `Jadwal pilihan Anda (${myActiveSchedule.mapel} - ${myActiveSchedule.kelas}) adalah Jam Ke-${jamTarget} (${myActiveSchedule.waktu || '-'}). Sesi Jam Ke-${jamTarget} telah berakhir dan Anda tidak dapat absen pada sesi Jam Ke-${activeSession.jamKe}.`
       };
     }
 
     return { isMismatch: false, title: '', message: '', targetJam: 0 };
-  }, [activeSession, settings.bypass_jam_presensi_testing, myCurrentSessionSchedule, myOtherSessionSchedule, selectedJadwalId, myActiveSchedule]);
+  }, [activeSession, settings.bypass_jam_presensi_testing, myActiveSchedule]);
 
-  // Cek apakah ustadz login ini sudah presensi hari ini pada sesi jadwal yang dipilih
+  // Cek apakah ustadz login ini sudah presensi hari ini pada sesi jadwal yang dipilih secara spesifik
   const isAlreadyCheckedIn = useMemo(() => {
-    return (absensiGuruList || []).some(rec => 
-      rec.tanggal === activeSession.todayIso &&
-      rec.nama.toLowerCase().trim() === pengurus.nama.toLowerCase().trim() &&
-      (myActiveSchedule ? (rec.kelas === myActiveSchedule.kelas && (rec.mapel === myActiveSchedule.mapel || Number(rec.jamKe) === Number(myActiveSchedule.jamKe))) : true)
-    );
-  }, [absensiGuruList, activeSession.todayIso, pengurus.nama, myActiveSchedule]);
+    if (!myActiveSchedule) return false;
+    return isScheduleCheckedInToday(myActiveSchedule, absensiGuruList, activeSession.todayIso, pengurus, guruList);
+  }, [myActiveSchedule, absensiGuruList, activeSession.todayIso, pengurus, guruList]);
 
   // Form Pengajuan Pengganti Ustadz (Khusus jadwal yang diampu pengurus ini)
   const [selectedJadwalToReplaceId, setSelectedJadwalToReplaceId] = useState<string>('');
@@ -938,8 +997,8 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     );
   }, [penggantiRequestList, activeSession.todayIso, pengurus.nama]);
 
-  // Eksekusi Tombol HADIR NORMAL
-  const handleHadirNormal = () => {
+  // Eksekusi Tombol HADIR NORMAL (Async untuk mengizinkan pembacaan ulang GPS otomatis bila sinyal lemah)
+  const handleHadirNormal = async () => {
     // Validasi 0: Batasan Jam Presensi Waktu Server Asia/Jakarta (WIB)
     if (!activeSession.isActive && !settings.bypass_jam_presensi_testing) {
       setValidationAlertModal({
@@ -952,51 +1011,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       return;
     }
 
-    // Validasi 0.5: Sesi Jam Mengajar Guru Wajib Cocok (Jam Ke-1 vs Jam Ke-2)
-    if (!settings.bypass_jam_presensi_testing && sessionMismatchInfo.isMismatch) {
-      setValidationAlertModal({
-        isOpen: true,
-        type: 'outside_hours',
-        title: sessionMismatchInfo.title,
-        message: sessionMismatchInfo.message,
-        submessage: `Waktu Server Asia/Jakarta (WIB): ${activeSession.wibTimeStr}. Sesi aktif: Jam Ke-${activeSession.jamKe} (${activeSession.sesi}). Sesuai aturan madrasah, guru yang terjadwal jam ke-2 hanya dapat presensi pada jam ke-2, dan guru jam ke-1 hanya pada jam ke-1.`
-      });
-      return;
-    }
-
-    // Validasi 0.6: Jam Ke Jadwal vs Jam Ke Sesi Aktif
-    if (!settings.bypass_jam_presensi_testing && myActiveSchedule && Number(myActiveSchedule.jamKe) !== Number(activeSession.jamKe)) {
-      const jamTarget = Number(myActiveSchedule.jamKe);
-      setValidationAlertModal({
-        isOpen: true,
-        type: 'outside_hours',
-        title: jamTarget === 2 ? '⛔ Belum Waktunya Presensi (Jadwal Jam Ke-2)' : '⛔ Sesi Jam Ke-1 Telah Selesai',
-        message: jamTarget === 2
-          ? `Guru yang terjadwal Jam Ke-2 hanya dapat melakukan absensi pada Jam Ke-2, tidak boleh absen pada Jam Ke-1.`
-          : `Guru yang terjadwal Jam Ke-1 hanya dapat melakukan absensi pada Jam Ke-1, tidak boleh absen pada Jam Ke-2.`,
-        submessage: `Jadwal Anda (${myActiveSchedule.mapel} - ${myActiveSchedule.kelas}) adalah Jam Ke-${myActiveSchedule.jamKe}, sedangkan sesi aktif saat ini adalah Jam Ke-${activeSession.jamKe} (${activeSession.sesi}).`
-      });
-      return;
-    }
-
-    // Validasi 1: Geofencing & Lokasi
-    if (settings.geofencing_enabled && !geofenceCheck.isValid) {
-      setValidationAlertModal({
-        isOpen: true,
-        type: 'outside_radius',
-        title: '⚠️ Anda Berada di Luar Radius Madrasah',
-        message: `Jarak posisi Anda saat ini: ${geofenceCheck.distanceMeters.toFixed(1)} meter dari titik pusat madrasah (${geofenceCheck.zoneName || 'Zona Madrasah'}).`,
-        submessage: `Batas radius absensi kehadiran yang diizinkan adalah ${geofenceCheck.radiusMeters} meter. Silakan berada di dalam area madrasah untuk melakukan absensi kehadiran.`,
-        details: {
-          distance: geofenceCheck.distanceMeters,
-          maxRadius: geofenceCheck.radiusMeters,
-          accuracy: userCoords.accuracy ?? undefined
-        }
-      });
-      return;
-    }
-
-    // Validasi 2: Cek Jadwal Aktif Milik Pribadi
+    // Validasi 1: Cek Jadwal Aktif Milik Pribadi hari ini
     if (!myActiveSchedule) {
       setValidationAlertModal({
         isOpen: true,
@@ -1008,8 +1023,21 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       return;
     }
 
+    // Validasi 1.5: Sesi Jam Mengajar Guru Wajib Cocok (Jam Ke-1 vs Jam Ke-2 / Rentang Waktu Jadwal)
+    if (!settings.bypass_jam_presensi_testing && (sessionMismatchInfo.isMismatch || !isScheduleWindowActiveNow(myActiveSchedule, activeSession, false))) {
+      const jamTarget = Number(myActiveSchedule.jamKe || 1);
+      setValidationAlertModal({
+        isOpen: true,
+        type: 'outside_hours',
+        title: sessionMismatchInfo.title || `⛔ Sesi Jadwal Jam Ke-${jamTarget} Tidak Aktif`,
+        message: sessionMismatchInfo.message || `Jadwal Anda (${myActiveSchedule.mapel} - ${myActiveSchedule.kelas}) adalah Jam Ke-${jamTarget} (${myActiveSchedule.waktu || '-'}).`,
+        submessage: `Waktu Server Asia/Jakarta (WIB): ${activeSession.wibTimeStr}. Sesi aktif: Jam Ke-${activeSession.jamKe} (${activeSession.sesi}). Sesuai aturan madrasah, presensi hanya berlaku pada jam jadwal yang sesuai.`
+      });
+      return;
+    }
+
     // Validasi Integritas: Tidak bisa mengabsensikan pengurus / ustadz lain
-    if (!isMatchMyTeacherName(myActiveSchedule.nama || myActiveSchedule.ustadz)) {
+    if (!isScheduleOwnedByTeacher(myActiveSchedule, pengurus, guruList)) {
       setValidationAlertModal({
         isOpen: true,
         type: 'no_schedule',
@@ -1020,7 +1048,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       return;
     }
 
-    // Validasi 3: Cek Belum Absen
+    // Validasi 2: Cek Belum Absen untuk sesi ini
     if (isAlreadyCheckedIn) {
       setValidationAlertModal({
         isOpen: true,
@@ -1032,13 +1060,82 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       return;
     }
 
+    // Validasi 3: Geofencing & Lokasi (dengan pembacaan ulang otomatis jika akurasi GPS buruk)
+    const isGeofencingEnabled = settings.geofencing_enabled !== false;
+    let activeGeoCheck = geofenceCheck;
+    let effectiveCoords = userCoords;
+
+    if (isGeofencingEnabled && !activeGeoCheck.isValid && activeGeoCheck.needsGpsRetry && typeof navigator !== 'undefined' && navigator.geolocation) {
+      const fresh = await acquireFreshGpsPosition(7000);
+      if (fresh) {
+        effectiveCoords = { lat: fresh.lat, lng: fresh.lng, accuracy: fresh.accuracy };
+        activeGeoCheck = validateGeofence(fresh.lat, fresh.lng, fresh.accuracy, {
+          enabled: settings.geofencing_enabled,
+          zoneName: settings.geofencing_zone_name,
+          latitude: settings.geofencing_latitude,
+          longitude: settings.geofencing_longitude,
+          radiusMeters: settings.geofencing_radius_meters,
+          maxGpsAccuracy: settings.geofencing_max_gps_accuracy
+        });
+      }
+    }
+
+    if (isGeofencingEnabled && !activeGeoCheck.isValid) {
+      if (!activeGeoCheck.hasLocation || activeGeoCheck.statusText === 'GPS BELUM TERDETEKSI') {
+        setValidationAlertModal({
+          isOpen: true,
+          type: 'gps_unavailable',
+          title: '📡 Lokasi GPS Belum Terdeteksi',
+          message: gpsError || activeGeoCheck.message,
+          submessage: 'Pastikan layanan lokasi/GPS perangkat aktif, izin lokasi browser diizinkan, lalu tekan tombol "Baca Ulang Lokasi GPS".',
+          allowGpsRetry: true
+        });
+        return;
+      }
+
+      if (activeGeoCheck.statusText === 'GPS KURANG AKURAT') {
+        setValidationAlertModal({
+          isOpen: true,
+          type: 'gps_inaccurate',
+          title: '📡 Sinyal GPS Kurang Akurat / Tidak Stabil',
+          message: `Akurasi GPS perangkat saat ini ±${Math.round(activeGeoCheck.accuracyMeters)}m (batas maksimal yang diizinkan ±${activeGeoCheck.maxAccuracyMeters}m).`,
+          submessage: 'Anda kemungkinan sudah berada di area madrasah, namun sinyal GPS belum cukup presisi. Silakan pindah sejenak ke area yang lebih terbuka dan tekan "Baca Ulang Lokasi GPS".',
+          allowGpsRetry: true,
+          details: {
+            distance: activeGeoCheck.distanceMeters,
+            maxRadius: activeGeoCheck.radiusMeters,
+            accuracy: activeGeoCheck.accuracyMeters,
+            maxAccuracy: activeGeoCheck.maxAccuracyMeters
+          }
+        });
+        return;
+      }
+
+      setValidationAlertModal({
+        isOpen: true,
+        type: 'outside_radius',
+        title: '⚠️ Anda Berada di Luar Radius Madrasah',
+        message: `Jarak posisi Anda saat ini: ${activeGeoCheck.distanceMeters.toFixed(1)} meter dari titik pusat madrasah (${activeGeoCheck.zoneName || 'Zona Madrasah'}).`,
+        submessage: `Batas radius absensi kehadiran yang diizinkan adalah ${activeGeoCheck.radiusMeters} meter (akurasi GPS ±${Math.round(activeGeoCheck.accuracyMeters)}m). Silakan berada di dalam area madrasah atau tekan baca ulang GPS jika koordinat belum akurat.`,
+        allowGpsRetry: true,
+        details: {
+          distance: activeGeoCheck.distanceMeters,
+          maxRadius: activeGeoCheck.radiusMeters,
+          accuracy: activeGeoCheck.accuracyMeters,
+          maxAccuracy: activeGeoCheck.maxAccuracyMeters
+        }
+      });
+      return;
+    }
+
     const nowTime = activeSession.wibClockShort;
     const finalStatus: 'Hadir' | 'Terlambat' = activeSession.isLate ? 'Terlambat' : 'Hadir';
+    const schedKey = getScheduleKey(myActiveSchedule);
 
     const newRecord: AbsensiGuruRecord = {
       id: `ABS-G-${Date.now()}`,
       absensiId: `ABS-G-${Date.now()}`,
-      jadwalId: myActiveSchedule.id || `${myActiveSchedule.kelas}_${myActiveSchedule.hari}_${myActiveSchedule.jamKe}`,
+      jadwalId: schedKey,
       ustadzTerjadwalId: pengurus.id,
       ustadzTerjadwalNama: myActiveSchedule.nama || pengurus.nama,
       ustadzAktualId: pengurus.id,
@@ -1057,11 +1154,11 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       jamJadwal: myActiveSchedule.waktu || `${nowTime} WIB`,
       jamAbsen: `${nowTime} WIB`,
       waktu: `${nowTime} WIB`,
-      latitude: userCoords.lat ?? undefined,
-      longitude: userCoords.lng ?? undefined,
-      akurasiGps: userCoords.accuracy ?? undefined,
-      jarak: geofenceCheck.distanceMeters,
-      zona: geofenceCheck.zoneName,
+      latitude: effectiveCoords.lat ?? undefined,
+      longitude: effectiveCoords.lng ?? undefined,
+      akurasiGps: effectiveCoords.accuracy ?? undefined,
+      jarak: activeGeoCheck.distanceMeters,
+      zona: activeGeoCheck.zoneName,
       statusPersetujuan: 'Langsung',
       timestampServer: new Date().toISOString()
     };
@@ -1072,7 +1169,12 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
     try {
       const savedG = JSON.parse(localStorage.getItem('sim_absensi_guru') || '[]');
-      const filtered = savedG.filter((p: any) => !(p.tanggal === newRecord.tanggal && p.nama === newRecord.nama && p.kelas === newRecord.kelas && String(p.jamKe) === String(newRecord.jamKe)));
+      const filtered = savedG.filter((p: any) => {
+        if (p.jadwalId && newRecord.jadwalId && p.tanggal === newRecord.tanggal && p.jadwalId === newRecord.jadwalId) {
+          return false;
+        }
+        return !(p.tanggal === newRecord.tanggal && p.nama === newRecord.nama && p.kelas === newRecord.kelas && String(p.jamKe) === String(newRecord.jamKe) && (!p.mapel || !newRecord.mapel || p.mapel === newRecord.mapel));
+      });
       const updated = [newRecord, ...filtered];
       localStorage.setItem('sim_absensi_guru', JSON.stringify(updated));
       window.dispatchEvent(new Event('storage'));
@@ -1090,7 +1192,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   };
 
   // Eksekusi Tombol HADIR SEBAGAI PENGGANTI
-  const handleHadirPengganti = () => {
+  const handleHadirPengganti = async () => {
     // Validasi 1: Waktu Server Asia/Jakarta (WIB)
     if (!activeSession.isActive && !settings.bypass_jam_presensi_testing) {
       setValidationAlertModal({
@@ -1103,18 +1205,69 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       return;
     }
 
-    // Validasi 2: Geofencing
-    if (!geofenceCheck.isValid) {
+    // Validasi 2: Geofencing (konsisten menghormati settings.geofencing_enabled !== false)
+    const isGeofencingEnabled = settings.geofencing_enabled !== false;
+    let activeGeoCheck = geofenceCheck;
+    let effectiveCoords = userCoords;
+
+    if (isGeofencingEnabled && !activeGeoCheck.isValid && activeGeoCheck.needsGpsRetry && typeof navigator !== 'undefined' && navigator.geolocation) {
+      const fresh = await acquireFreshGpsPosition(7000);
+      if (fresh) {
+        effectiveCoords = { lat: fresh.lat, lng: fresh.lng, accuracy: fresh.accuracy };
+        activeGeoCheck = validateGeofence(fresh.lat, fresh.lng, fresh.accuracy, {
+          enabled: settings.geofencing_enabled,
+          zoneName: settings.geofencing_zone_name,
+          latitude: settings.geofencing_latitude,
+          longitude: settings.geofencing_longitude,
+          radiusMeters: settings.geofencing_radius_meters,
+          maxGpsAccuracy: settings.geofencing_max_gps_accuracy
+        });
+      }
+    }
+
+    if (isGeofencingEnabled && !activeGeoCheck.isValid) {
+      if (!activeGeoCheck.hasLocation || activeGeoCheck.statusText === 'GPS BELUM TERDETEKSI') {
+        setValidationAlertModal({
+          isOpen: true,
+          type: 'gps_unavailable',
+          title: '📡 Lokasi GPS Belum Terdeteksi',
+          message: gpsError || activeGeoCheck.message,
+          submessage: 'Aktifkan GPS dan izinkan akses lokasi browser, lalu tekan "Baca Ulang Lokasi GPS".',
+          allowGpsRetry: true
+        });
+        return;
+      }
+
+      if (activeGeoCheck.statusText === 'GPS KURANG AKURAT') {
+        setValidationAlertModal({
+          isOpen: true,
+          type: 'gps_inaccurate',
+          title: '📡 Sinyal GPS Kurang Akurat / Tidak Stabil',
+          message: `Akurasi GPS saat ini ±${Math.round(activeGeoCheck.accuracyMeters)}m (batas maksimal ±${activeGeoCheck.maxAccuracyMeters}m).`,
+          submessage: 'Silakan pindah ke area terbuka lalu tekan "Baca Ulang Lokasi GPS".',
+          allowGpsRetry: true,
+          details: {
+            distance: activeGeoCheck.distanceMeters,
+            maxRadius: activeGeoCheck.radiusMeters,
+            accuracy: activeGeoCheck.accuracyMeters,
+            maxAccuracy: activeGeoCheck.maxAccuracyMeters
+          }
+        });
+        return;
+      }
+
       setValidationAlertModal({
         isOpen: true,
         type: 'outside_radius',
         title: '⚠️ Anda Berada di Luar Radius Madrasah',
-        message: `Jarak posisi Anda saat ini: ${geofenceCheck.distanceMeters.toFixed(1)} meter dari titik pusat madrasah (${geofenceCheck.zoneName || 'Zona Madrasah'}).`,
-        submessage: `Ustadz pengganti tetap wajib berada secara fisik di lokasi madrasah (Maks: ${geofenceCheck.radiusMeters}m). Dekati lokasi madrasah untuk melakukan absensi.`,
+        message: `Jarak posisi Anda saat ini: ${activeGeoCheck.distanceMeters.toFixed(1)} meter dari titik pusat madrasah (${activeGeoCheck.zoneName || 'Zona Madrasah'}).`,
+        submessage: `Ustadz pengganti tetap wajib berada secara fisik di lokasi madrasah (Maks: ${activeGeoCheck.radiusMeters}m).`,
+        allowGpsRetry: true,
         details: {
-          distance: geofenceCheck.distanceMeters,
-          maxRadius: geofenceCheck.radiusMeters,
-          accuracy: userCoords.accuracy ?? undefined
+          distance: activeGeoCheck.distanceMeters,
+          maxRadius: activeGeoCheck.radiusMeters,
+          accuracy: activeGeoCheck.accuracyMeters,
+          maxAccuracy: activeGeoCheck.maxAccuracyMeters
         }
       });
       return;
@@ -1123,7 +1276,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     // Validasi 3: Cek Persetujuan Pengganti Aktif
     const targetSub = approvedSubstituteForMe || penggantiRequestList.find(r => 
       r.tanggal === activeSession.todayIso && r.status === 'Disetujui' &&
-      r.ustadzPengganti.toLowerCase().trim() === pengurus.nama.toLowerCase().trim()
+      isTeacherNameMatch(r.ustadzPengganti, pengurus.nama)
     );
 
     if (!targetSub) {
@@ -1152,17 +1305,17 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       kelas: targetSub.kelas,
       status: activeSession.status,
       alasanPenggantian: targetSub.alasan,
-      catatan: `Hadir Sebagai Pengganti Resmi ${targetSub.ustadzTerjadwal} (Alasan: ${targetSub.alasan}) • Jarak: ${geofenceCheck.distanceMeters.toFixed(1)}m`,
+      catatan: `Hadir Sebagai Pengganti Resmi ${targetSub.ustadzTerjadwal} (Alasan: ${targetSub.alasan}) • Jarak: ${activeGeoCheck.distanceMeters.toFixed(1)}m`,
       hari: currentDayName,
       jamKe: targetSub.jamKe || activeSession.jamKe || 1,
       jamJadwal: targetSub.jamJadwal,
       jamAbsen: `${nowTime} WIB`,
       waktu: `${nowTime} WIB`,
-      latitude: userCoords.lat ?? undefined,
-      longitude: userCoords.lng ?? undefined,
-      akurasiGps: userCoords.accuracy ?? undefined,
-      jarak: geofenceCheck.distanceMeters,
-      zona: geofenceCheck.zoneName,
+      latitude: effectiveCoords.lat ?? undefined,
+      longitude: effectiveCoords.lng ?? undefined,
+      akurasiGps: effectiveCoords.accuracy ?? undefined,
+      jarak: activeGeoCheck.distanceMeters,
+      zona: activeGeoCheck.zoneName,
       statusPersetujuan: 'Disetujui',
       timestampServer: new Date().toISOString()
     };
@@ -1173,7 +1326,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
     try {
       const savedG = JSON.parse(localStorage.getItem('sim_absensi_guru') || '[]');
-      const filtered = savedG.filter((p: any) => !(p.tanggal === newRecord.tanggal && p.nama === newRecord.nama && p.kelas === newRecord.kelas && String(p.jamKe) === String(newRecord.jamKe)));
+      const filtered = savedG.filter((p: any) => !(p.tanggal === newRecord.tanggal && p.nama === newRecord.nama && p.kelas === newRecord.kelas && String(p.jamKe) === String(newRecord.jamKe) && (!p.mapel || !newRecord.mapel || p.mapel === newRecord.mapel)));
       const updated = [newRecord, ...filtered];
       localStorage.setItem('sim_absensi_guru', JSON.stringify(updated));
       window.dispatchEvent(new Event('storage'));
@@ -1868,11 +2021,12 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                                   type="button"
                                   onClick={() => {
                                     setSelectedPresensiKelas(kls);
-                                    const pool = (myTodaySchedules.filter(j => j.kelas === kls).length > 0
-                                      ? myTodaySchedules.filter(j => j.kelas === kls)
-                                      : myAllSchedules.filter(j => j.kelas === kls));
+                                    const pool = myTodaySchedules.filter(j => j.kelas === kls);
                                     if (pool.length > 0) {
-                                      setSelectedJadwalId(pool[0].id || `${pool[0].kelas}_${pool[0].hari}_${pool[0].jamKe}`);
+                                      const preferActive = pool.find(j => isScheduleWindowActiveNow(j, activeSession, settings.bypass_jam_presensi_testing) && !isScheduleCheckedInToday(j, absensiGuruList, activeSession.todayIso, pengurus, guruList))
+                                        || pool.find(j => !isScheduleCheckedInToday(j, absensiGuruList, activeSession.todayIso, pengurus, guruList))
+                                        || pool[0];
+                                      setSelectedJadwalId(getScheduleKey(preferActive));
                                     } else {
                                       setSelectedJadwalId('');
                                     }
@@ -1903,11 +2057,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                               </div>
                               <div className="flex flex-wrap gap-2">
                                 {myTodaySchedulesByClass.map((j) => {
-                                  const jId = j.id || `${j.kelas}_${j.hari}_${j.jamKe}`;
-                                  const isScheduleActive = myActiveSchedule && (
-                                    (myActiveSchedule.id && myActiveSchedule.id === j.id) ||
-                                    (myActiveSchedule.kelas === j.kelas && myActiveSchedule.hari === j.hari && Number(myActiveSchedule.jamKe) === Number(j.jamKe))
-                                  );
+                                  const jId = getScheduleKey(j);
+                                  const isScheduleActive = myActiveSchedule && getScheduleKey(myActiveSchedule) === jId;
+                                  const isSessChecked = isScheduleCheckedInToday(j, absensiGuruList, activeSession.todayIso, pengurus, guruList);
                                   return (
                                     <button
                                       key={jId}
@@ -1924,10 +2076,15 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                                           : 'bg-[#02180e] text-emerald-200 hover:text-white border-[#d4af37]/40 hover:border-[#d4af37]'
                                       }`}
                                     >
-                                      <span className={`w-2 h-2 rounded-full ${isScheduleActive ? 'bg-black animate-pulse' : 'bg-emerald-400'}`} />
+                                      <span className={`w-2 h-2 rounded-full ${isScheduleActive ? 'bg-black animate-pulse' : isSessChecked ? 'bg-emerald-400' : 'bg-amber-400'}`} />
                                       <span className="font-mono">Jam Ke-{j.jamKe} ({j.waktu})</span>
                                       <span className={isScheduleActive ? 'text-black font-black' : 'text-amber-300 font-bold'}>• {j.mapel}</span>
                                       <span className="text-[10px] opacity-80">({j.kelas})</span>
+                                      {isSessChecked && (
+                                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${isScheduleActive ? 'bg-emerald-900 text-emerald-200' : 'bg-emerald-500/20 text-emerald-300'}`}>
+                                          ✓
+                                        </span>
+                                      )}
                                     </button>
                                   );
                                 })}
@@ -2063,14 +2220,41 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
                       <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-[11px] text-slate-400 pt-1">
                         <span className="flex items-center gap-1.5">
-                          <span className={`w-2 h-2 rounded-full ${geofenceCheck.isValid ? 'bg-emerald-400' : 'bg-red-400 animate-pulse'}`} />
-                          <span>Lokasi: {geofenceCheck.isValid ? 'Radius Madrasah' : `Luar Radius (${geofenceCheck.distanceMeters.toFixed(0)}m)`}</span>
+                          <span className={`w-2 h-2 rounded-full ${
+                            geofenceCheck.statusText === 'GEOFENCING NONAKTIF' || geofenceCheck.isValid
+                              ? 'bg-emerald-400'
+                              : (geofenceCheck.statusText === 'GPS KURANG AKURAT' || geofenceCheck.statusText === 'GPS BELUM TERDETEKSI')
+                              ? 'bg-amber-400 animate-pulse'
+                              : 'bg-red-400 animate-pulse'
+                          }`} />
+                          <span>
+                            Lokasi: {
+                              geofenceCheck.statusText === 'GEOFENCING NONAKTIF'
+                                ? 'Geofencing Nonaktif'
+                                : geofenceCheck.isValid
+                                ? `Radius Madrasah (${geofenceCheck.distanceMeters.toFixed(0)}m)`
+                                : geofenceCheck.statusText === 'GPS KURANG AKURAT'
+                                ? `Sinyal GPS Lemah (±${Math.round(geofenceCheck.accuracyMeters)}m)`
+                                : geofenceCheck.statusText === 'GPS BELUM TERDETEKSI'
+                                ? (gpsLoading ? 'Mendeteksi GPS...' : 'GPS Belum Aktif')
+                                : `Luar Radius (${geofenceCheck.distanceMeters.toFixed(0)}m)`
+                            }
+                          </span>
                         </span>
                         <span>•</span>
                         <span className="flex items-center gap-1.5">
                           <span className={`w-2 h-2 rounded-full ${activeSession.isActive ? 'bg-emerald-400' : 'bg-slate-500'}`} />
                           <span>Waktu: {activeSession.isActive ? `Sesi ${activeSession.status}` : 'Di Luar Jam'}</span>
                         </span>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={() => acquireFreshGpsPosition(8000)}
+                          className="text-emerald-300 hover:underline font-bold flex items-center gap-1"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${gpsLoading ? 'animate-spin' : ''}`} />
+                          <span>{gpsLoading ? 'Membaca GPS...' : 'Refresh GPS'}</span>
+                        </button>
                         <span>•</span>
                         <button
                           type="button"
@@ -2189,14 +2373,14 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                       <div className="lg:col-span-8">
                         <GoogleMapsGeofence
-                          centerLat={settings.geofencing_latitude || DEFAULT_GEOFENCE_ZONE.latitude}
-                          centerLng={settings.geofencing_longitude || DEFAULT_GEOFENCE_ZONE.longitude}
-                          radiusMeters={settings.geofencing_radius_meters || DEFAULT_GEOFENCE_ZONE.radiusMeters}
+                          centerLat={settings.geofencing_latitude ?? DEFAULT_GEOFENCE_ZONE.latitude}
+                          centerLng={settings.geofencing_longitude ?? DEFAULT_GEOFENCE_ZONE.longitude}
+                          radiusMeters={settings.geofencing_radius_meters ?? DEFAULT_GEOFENCE_ZONE.radiusMeters}
                           zoneName={settings.geofencing_zone_name || DEFAULT_GEOFENCE_ZONE.zoneName}
                           userLat={userCoords.lat}
                           userLng={userCoords.lng}
                           userAccuracy={userCoords.accuracy}
-                          enabled={settings.geofencing_enabled ?? true}
+                          enabled={settings.geofencing_enabled !== false}
                           height="220px"
                           interactive={false}
                         />
@@ -2206,14 +2390,20 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                         <div className="flex justify-between items-center pb-2 border-b border-slate-700">
                           <span className="text-slate-400">Status Zona:</span>
                           <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
-                            geofenceCheck.isValid ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'
+                            geofenceCheck.isValid
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : (geofenceCheck.statusText === 'GPS KURANG AKURAT' || geofenceCheck.statusText === 'GPS BELUM TERDETEKSI')
+                              ? 'bg-amber-500/20 text-amber-300'
+                              : 'bg-red-500/20 text-red-300'
                           }`}>
-                            {geofenceCheck.isValid ? '✓ VALID' : '✕ LUAR RADIUS'}
+                            {geofenceCheck.isValid ? `✓ ${geofenceCheck.statusText}` : `⚠ ${geofenceCheck.statusText}`}
                           </span>
                         </div>
                         <div className="flex justify-between items-center text-[11px]">
                           <span className="text-slate-400">Jarak ke Madrasah:</span>
-                          <span className="font-mono font-bold text-white">{geofenceCheck.distanceMeters.toFixed(1)}m</span>
+                          <span className="font-mono font-bold text-white">
+                            {geofenceCheck.hasLocation ? `${geofenceCheck.distanceMeters.toFixed(1)}m` : '-'}
+                          </span>
                         </div>
                         <div className="flex justify-between items-center text-[11px]">
                           <span className="text-slate-400">Radius Maksimal:</span>
@@ -2221,7 +2411,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                         </div>
                         <div className="flex justify-between items-center text-[11px]">
                           <span className="text-slate-400">Akurasi GPS HP:</span>
-                          <span className="font-mono text-emerald-300">{userCoords.accuracy ? `±${Math.round(userCoords.accuracy)}m` : '-'}</span>
+                          <span className={`font-mono ${geofenceCheck.isAccuracyValid ? 'text-emerald-300' : 'text-amber-300'}`}>
+                            {userCoords.accuracy ? `±${Math.round(userCoords.accuracy)}m (Maks ±${geofenceCheck.maxAccuracyMeters}m)` : '-'}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -4617,6 +4809,10 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 <div className="w-16 h-16 rounded-3xl bg-amber-500/20 border-2 border-amber-400/80 flex items-center justify-center text-[#fef08a] shadow-[0_0_25px_rgba(251,191,36,0.35)] animate-pulse">
                   <MapPin className="w-8 h-8 text-[#fef08a]" />
                 </div>
+              ) : (validationAlertModal.type === 'gps_inaccurate' || validationAlertModal.type === 'gps_unavailable') ? (
+                <div className="w-16 h-16 rounded-3xl bg-amber-500/20 border-2 border-amber-400/80 flex items-center justify-center text-[#fef08a] shadow-[0_0_25px_rgba(251,191,36,0.35)] animate-pulse">
+                  <Compass className="w-8 h-8 text-[#fef08a]" />
+                </div>
               ) : validationAlertModal.type === 'outside_hours' ? (
                 <div className="w-16 h-16 rounded-3xl bg-amber-500/20 border-2 border-amber-400/80 flex items-center justify-center text-[#fef08a] shadow-[0_0_25px_rgba(251,191,36,0.35)] animate-pulse">
                   <Clock className="w-8 h-8 text-[#fef08a]" />
@@ -4666,6 +4862,14 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                     </span>
                   </div>
                 )}
+                {validationAlertModal.details.accuracy !== undefined && (
+                  <div className="flex justify-between items-center text-[11px] border-b border-slate-700/60 pb-1.5">
+                    <span className="text-slate-400">Akurasi GPS Perangkat:</span>
+                    <span className="font-mono font-bold text-amber-300">
+                      ±{Math.round(validationAlertModal.details.accuracy)} meter{validationAlertModal.details.maxAccuracy ? ` (Maks ±${validationAlertModal.details.maxAccuracy}m)` : ''}
+                    </span>
+                  </div>
+                )}
                 {validationAlertModal.details.currentTime && (
                   <div className="flex justify-between items-center text-[11px] border-b border-slate-700/60 pb-1.5">
                     <span className="text-slate-400">Jam Server Terkini:</span>
@@ -4686,7 +4890,20 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             )}
 
             {/* Action Button */}
-            <div className="pt-2 flex justify-center">
+            <div className="pt-2 flex flex-wrap justify-center gap-2.5">
+              {validationAlertModal.allowGpsRetry && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await acquireFreshGpsPosition(8000);
+                    setValidationAlertModal(null);
+                  }}
+                  className="btn-3d-yellow px-4 py-2.5 rounded-xl font-black text-xs flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${gpsLoading ? 'animate-spin' : ''}`} />
+                  <span>Baca Ulang Lokasi GPS</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setValidationAlertModal(null)}

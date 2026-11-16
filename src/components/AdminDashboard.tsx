@@ -49,7 +49,7 @@ import {
   checkPresensiSchedule, getServerTime, subscribeAttendanceUpdates, 
   RealtimeAttendancePayload, OFFICIAL_SCHEDULES,
   getMalamDaySubtitle, getPesantrenDayInfo,
-  subscribeIzinMengajarUpdates
+  subscribeIzinMengajarUpdates, isTeacherNameMatch
 } from '../serverTime';
 import { INITIAL_KURIKULUM_LIST } from '../data';
 import { 
@@ -237,9 +237,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const adminPresensiStatus = useMemo(() => {
     return checkPresensiSchedule(adminServerClock, {
-      bypassActive: settings.bypass_jam_presensi_testing
+      bypassActive: settings.bypass_jam_presensi_testing,
+      settings
     });
-  }, [adminServerClock, settings.bypass_jam_presensi_testing]);
+  }, [adminServerClock, settings]);
 
   // Alert Notifikasi Masuk Real-Time dari Pengurus
   const [realtimeAlert, setRealtimeAlert] = useState<{
@@ -3080,13 +3081,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       alert('Mata Pelajaran dan Nama Ustadz Pengajar wajib diisi!');
       return;
     }
+    const matchedGuru = guruList.find(g => isTeacherNameMatch(g.nama, inputJadwalForm.nama));
     onSaveNewJadwal({
+      id: `JAD-${Date.now()}`,
+      ustadzId: matchedGuru?.id,
       kelas: inputJadwalForm.kelas,
       hari: inputJadwalForm.hari,
       jamKe: Number(inputJadwalForm.jamKe),
       waktu: inputJadwalForm.waktu,
       mapel: inputJadwalForm.mapel.trim(),
-      nama: inputJadwalForm.nama.trim()
+      nama: inputJadwalForm.nama.trim(),
+      tingkatan: inputJadwalForm.kelas.toUpperCase().includes('ALIYAH') ? 'Aliyah' : 'Tsanawiyah'
     });
     alert(`Jadwal ${inputJadwalForm.mapel} (${inputJadwalForm.hari} Jam ke-${inputJadwalForm.jamKe}) untuk ${inputJadwalForm.kelas} berhasil ditambahkan!`);
     setInputJadwalForm({
@@ -7888,14 +7893,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onSubmit={(e) => {
                       e.preventDefault();
                       if (onSaveNewJadwal) {
+                        const matchedGuru = guruList.find(g => isTeacherNameMatch(g.nama, jadwalForm.nama));
                         onSaveNewJadwal({
                           id: editingJadwal?.id || `JAD-${Date.now()}`,
+                          ustadzId: matchedGuru?.id || editingJadwal?.ustadzId,
                           hari: jadwalForm.hari,
                           jamKe: Number(jadwalForm.jamKe),
                           waktu: jadwalForm.waktu,
                           kelas: jadwalForm.kelas,
-                          mapel: jadwalForm.mapel,
-                          nama: jadwalForm.nama,
+                          mapel: jadwalForm.mapel.trim(),
+                          nama: jadwalForm.nama.trim(),
                           tingkatan: jadwalForm.tingkatan
                         }, editingJadwal || undefined);
                         alert(`Jadwal pelajaran ${jadwalForm.mapel} (${jadwalForm.kelas} - ${jadwalForm.hari} Jam ke-${jadwalForm.jamKe}) berhasil ${editingJadwal ? 'direvisi' : 'disimpan'}!`);
@@ -14845,12 +14852,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <label className="block text-xs font-semibold text-[#d4af37] mb-1">Nama Ustadz Pengampu</label>
                         <input
                           type="text"
+                          list="guruListOptionPanelOptions"
                           value={inputJadwalForm.nama}
                           onChange={(e) => setInputJadwalForm({ ...inputJadwalForm, nama: e.target.value })}
                           required
                           className="w-full bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
                           placeholder="Contoh: Ustadz Ahmad Shobirin"
                         />
+                        <datalist id="guruListOptionPanelOptions">
+                          {Array.from(new Set(guruList.map(g => g.nama).filter(Boolean))).map(nama => (
+                            <option key={nama} value={nama} />
+                          ))}
+                        </datalist>
                       </div>
                     </div>
 

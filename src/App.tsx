@@ -44,7 +44,10 @@ import {
   broadcastNadzhomUpdate,
   subscribeNadzhomUpdates,
   getServerTime,
-  checkPresensiSchedule
+  checkPresensiSchedule,
+  isTeacherNameMatch,
+  parseScheduleTimeWindowSeconds,
+  toWibDate
 } from './serverTime';
 import { AdminDashboard } from './components/AdminDashboard';
 import { WaliSantriPortal } from './components/WaliSantriPortal';
@@ -653,6 +656,7 @@ export default function App() {
       if (data && Array.isArray(data)) {
         setJadwalList(data);
         localStorage.setItem('sim_jadwal', JSON.stringify(data));
+        broadcastScheduleUpdate(data, 'Firestore');
       }
     });
     const unsubIzinMengajar = subscribeMasterDataFromFirestore<IzinMengajarRequest[]>('izin_mengajar', (data) => {
@@ -1048,23 +1052,42 @@ export default function App() {
   const handleSaveAbsensiGuru = async (records: AbsensiGuruRecord[]) => {
     // Validasi Pembatasan Jam Presensi Waktu Server Asia/Jakarta (WIB) untuk Pengurus
     if (session?.role === 'pengurus' && !settings.bypass_jam_presensi_testing) {
-      const currentCheck = checkPresensiSchedule(getServerTime(), { settings });
+      const serverNow = getServerTime();
+      const currentCheck = checkPresensiSchedule(serverNow, { settings });
       if (!currentCheck.isActive) {
         alert(`Presensi Ditolak: Saat ini berada di luar rentang jam absensi resmi (${currentCheck.wibTimeStr}). Presensi hanya dapat dilakukan pada jam yang ditentukan oleh Admin.`);
         return;
       }
-      // Validasi ketat kesesuaian jam mengajar: Jam ke-1 hanya boleh absen di Jam ke-1, Jam ke-2 hanya boleh absen di Jam ke-2
+      // Validasi ketat kesesuaian jam mengajar: Jam ke-1 hanya boleh absen di Jam ke-1, Jam ke-2 di Jam ke-2, dan Jam ke-3+ mengikuti jendela waktunya
+      const wibNow = toWibDate(serverNow);
+      const secNow = wibNow.getUTCHours() * 3600 + wibNow.getUTCMinutes() * 60 + wibNow.getUTCSeconds();
       for (const rec of records) {
-        if (rec.tipeAbsensi === 'Normal' && rec.jamKe && Number(rec.jamKe) !== Number(currentCheck.jamKe)) {
-          alert(`Presensi Ditolak: Anda terjadwal pada Jam Ke-${rec.jamKe}. Sesi presensi aktif saat ini adalah Jam Ke-${currentCheck.jamKe} (${currentCheck.sesi}). Guru yang terjadwal jam ke-${rec.jamKe} hanya dapat melakukan presensi pada jam ke-${rec.jamKe}.`);
-          return;
+        if (rec.tipeAbsensi === 'Normal' && rec.jamKe) {
+          const jamNum = Number(rec.jamKe);
+          if (jamNum >= 3) {
+            const parsedWin = parseScheduleTimeWindowSeconds(rec.jamJadwal);
+            const inCustomWindow = parsedWin
+              ? (secNow >= parsedWin.startSec && secNow <= parsedWin.endSec)
+              : (Number(currentCheck.jamKe) >= 2);
+            if (!inCustomWindow) {
+              alert(`Presensi Ditolak: Anda terjadwal pada Jam Ke-${rec.jamKe} (${rec.jamJadwal || '-'}). Saat ini berada di luar waktu sesi tersebut (${currentCheck.wibTimeStr}).`);
+              return;
+            }
+          } else if (jamNum !== Number(currentCheck.jamKe)) {
+            alert(`Presensi Ditolak: Anda terjadwal pada Jam Ke-${rec.jamKe}. Sesi presensi aktif saat ini adalah Jam Ke-${currentCheck.jamKe} (${currentCheck.sesi}). Guru yang terjadwal jam ke-${rec.jamKe} hanya dapat melakukan presensi pada jam ke-${rec.jamKe}.`);
+            return;
+          }
         }
       }
     }
 
     setAbsensiGuruList(prev => {
-      const keys = new Set(records.map(r => `${r.tanggal}_${r.nama.toLowerCase().trim()}_${r.kelas}_${r.jamKe}`));
-      const filtered = prev.filter(p => !keys.has(`${p.tanggal}_${p.nama.toLowerCase().trim()}_${p.kelas}_${p.jamKe}`));
+      const getRecKey = (r: AbsensiGuruRecord) =>
+        r.jadwalId
+          ? `${r.tanggal}_${r.jadwalId}_${r.nama.toLowerCase().trim()}`
+          : `${r.tanggal}_${r.nama.toLowerCase().trim()}_${r.kelas}_${r.jamKe}_${(r.mapel || '').toLowerCase().trim()}`;
+      const keys = new Set(records.map(getRecKey));
+      const filtered = prev.filter(p => !keys.has(getRecKey(p)));
       const updated = [...records, ...filtered];
       try {
         localStorage.setItem('sim_absensi_guru', JSON.stringify(updated));
@@ -1314,7 +1337,13 @@ export default function App() {
       existingIdx = jadwalList.findIndex(j => j.id === newJadwal.id);
     }
     if (existingIdx === -1) {
-      existingIdx = jadwalList.findIndex(j => j.kelas === newJadwal.kelas && j.hari === newJadwal.hari && j.jamKe === newJadwal.jamKe);
+      existingIdx = jadwalList.findIndex(
+        j =>
+          j.kelas === newJadwal.kelas &&
+          j.hari === newJadwal.hari &&
+          Number(j.jamKe) === Number(newJadwal.jamKe) &&
+          (j.mapel || '').toLowerCase().trim() === (newJadwal.mapel || '').toLowerCase().trim()
+      );
     }
 
     if (existingIdx >= 0) {
@@ -1886,9 +1915,13 @@ export default function App() {
     }
   }
 
-  // 2. If logged in as Pengurus -> render PengurusDashboard
+  // 2. If logged in as Pengurus -> render PengurusDashboard (prioritaskan data pengurus terbaru yang tersinkron dari Firestore)
   if (session?.role === 'pengurus') {
-    const livePengurus = session.pengurusData || pengurusList.find(p => p.id === session.identifier) || pengurusList[0];
+    const livePengurus =
+      pengurusList.find(p => p.id === (session.pengurusData?.id || session.identifier)) ||
+      pengurusList.find(p => session.pengurusData?.nama && isTeacherNameMatch(p.nama, session.pengurusData.nama)) ||
+      session.pengurusData ||
+      pengurusList[0];
     if (livePengurus) {
       return (
         <>
