@@ -19,6 +19,7 @@ import { EditSantriModal } from './EditSantriModal';
 import { TabUjianMuhafadzoh } from './TabUjianMuhafadzoh';
 import { TabUjianBacaKitab } from './TabUjianBacaKitab';
 import { TabUjianKoreksianKitab } from './TabUjianKoreksianKitab';
+import { OptionPanelUjianKitab } from './OptionPanelUjianKitab';
 import { TabGmail } from './TabGmail';
 import { ModalInputNilaiUjian } from './ModalInputNilaiUjian';
 import { TabPelanggaranSantri, OptionPanelPelanggaranTakziran } from './TabPelanggaranSantri';
@@ -40,8 +41,14 @@ import {
   GuruPengajar, NadzhomRecord, NilaiUjianRecord, AppSettings, DashboardStats,
   SyahriyahRecord, UangSakuRecord, KurikulumKitabRecord,
   Pengurus, KalenderAkademikEvent, UjianSantriRecord, IzinMengajarRequest,
-  SilabusMemaknaiRecord, PenggantiUstadzRequest
+  SilabusMemaknaiRecord, PenggantiUstadzRequest, TemplateSuratPeringatanGuru,
+  UjianExamGlobalConfig
 } from '../types';
+import {
+  createDefaultUjianConfig,
+  mergeUjianConfigWithDefaults
+} from '../lib/ujianExamHelpers';
+import { calculateGuruAttendanceScore } from '../lib/guruAttendanceScoring';
 import { 
   saveVideoFile, saveVideoUrl, resetVideoToDefault, resolveActiveVideo, type VideoInfo 
 } from '../lib/videoStorage';
@@ -55,7 +62,9 @@ import { INITIAL_KURIKULUM_LIST } from '../data';
 import { 
   exportFirestoreBackup, 
   restoreFirestoreBackup, 
-  safeFirebaseConfig 
+  safeFirebaseConfig,
+  loadMasterDataFromFirestore,
+  subscribeMasterDataFromFirestore
 } from '../firebase';
 
 
@@ -329,6 +338,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [rekapGuruHistoryList, rekapSantriHistoryList]);
+
+  // Sinkronisasi bobot nilai Telat Ustadz / Guru dari Option Panel (Firestore)
+  const [bobotNilaiTelatGuru, setBobotNilaiTelatGuru] = useState<number>(50);
+  useEffect(() => {
+    let mounted = true;
+    loadMasterDataFromFirestore<TemplateSuratPeringatanGuru>('peringatan_guru_template').then((tpl) => {
+      if (mounted && tpl && typeof tpl.bobotNilaiTelatPersen === 'number') {
+        setBobotNilaiTelatGuru(tpl.bobotNilaiTelatPersen);
+      }
+    });
+    const unsub = subscribeMasterDataFromFirestore<TemplateSuratPeringatanGuru>('peringatan_guru_template', (tpl) => {
+      if (mounted && tpl && typeof tpl.bobotNilaiTelatPersen === 'number') {
+        setBobotNilaiTelatGuru(tpl.bobotNilaiTelatPersen);
+      }
+    });
+    return () => {
+      mounted = false;
+      unsub();
+    };
+  }, []);
 
   // Gabungkan absensiGuruList (live real-time dari props/pengurus) dengan rekapGuruLog (arsip Firestore Single Source of Truth)
   const combinedGuruLog = useMemo(() => {
@@ -888,7 +917,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         mapel: rev.mapel,
         kelas: rev.kelas,
         status: 'Terlambat',
-        catatan: 'Revisi Rekap Sakit/Telat (Admin)',
+        catatan: 'Revisi Rekap Telat (Admin)',
         hari: 'SENIN',
         jamKe: 1,
         waktu: '08:00 - 09:00',
@@ -1125,6 +1154,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, [santriList, combinedSantriLog, selectedBulanSantri]);
 
   // Kalkulasi Rekapan Bulanan Guru berdasarkan Bulan + Tahun terpilih (Otomatis dari 0 untuk bulan baru)
+  // Ketentuan: Guru yang Telat tetap dihitung Hadir, namun Telat memengaruhi persentase penilaian.
   const rekapBulananGuru = useMemo(() => {
     // Saring log absensi guru yang hanya sesuai dengan Bulan + Tahun yang dipilih
     const monthFilteredLogs = combinedGuruLog.filter(l => isDateInSelectedMonth(l.tanggal, selectedBulanGuru));
@@ -1137,29 +1167,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const actualIzin = logs.filter(l => l.status === 'Izin').length;
       const actualAlpha = logs.filter(l => l.status === 'Alpha').length;
 
-      const totalSesi = actualHadir + actualTerlambat + actualIzin + actualAlpha;
-      // Perhitungan otomatis dimulai dari 0 untuk bulan baru tanpa membawa data bulan sebelumnya!
-      const persentase = totalSesi > 0 ? Math.min(100, Math.round(((actualHadir + actualTerlambat) / totalSesi) * 100)) : 0;
+      const score = calculateGuruAttendanceScore(
+        actualHadir,
+        actualTerlambat,
+        actualIzin,
+        actualAlpha,
+        bobotNilaiTelatGuru
+      );
 
       let predikat = 'Belum Ada Sesi';
-      if (totalSesi > 0) {
-        predikat = persentase >= 95 ? 'Sangat Teladan' : persentase >= 85 ? 'Tertib' : 'Evaluasi Disiplin';
+      if (score.totalSesi > 0) {
+        predikat = score.persentasePenilaian >= 95 ? 'Sangat Teladan' : score.persentasePenilaian >= 85 ? 'Tertib' : 'Evaluasi Disiplin';
       }
 
       return {
         nama: guru.nama,
         mapel: guru.mapel,
         kelas: guru.kelas,
-        totalSesi,
-        hadir: actualHadir,
-        izin: actualIzin,
-        sakitTelat: actualTerlambat,
-        alpha: actualAlpha,
-        persentase,
+        totalSesi: score.totalSesi,
+        hadir: score.totalHadir,
+        hadirTepatWaktu: score.hadirTepatWaktu,
+        izin: score.izin,
+        telat: score.telat,
+        sakitTelat: score.telat,
+        alpha: score.alpha,
+        persentase: score.persentasePenilaian,
         predikat
       };
     });
-  }, [guruList, combinedGuruLog, selectedBulanGuru]);
+  }, [guruList, combinedGuruLog, selectedBulanGuru, bobotNilaiTelatGuru]);
 
   // Helper Ekspor Data (Google Sheets / CSV, Microsoft Word, dan Print / PDF)
   const downloadCSV = (filename: string, headers: string[], rows: (string | number)[][]) => {
@@ -2421,51 +2457,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     sasaran: 'Seluruh Dewan Asatidz & Pengurus'
   });
 
-  // State Ujian Santri Terintegrasi di Option Panel
-  const [selectedUjianSantriId, setSelectedUjianSantriId] = useState<string>(
-    santriList[0]?.id || 'S-1001'
+  // Konfigurasi Terpusat Ujian Muhafadzoh, Baca Kitab, Koreksian Kitab & Takziran (Firestore)
+  const [ujianExamConfig, setUjianExamConfig] = useState<UjianExamGlobalConfig>(() =>
+    createDefaultUjianConfig(kurikulumList)
   );
-  const currentUjianSantri = useMemo(() => {
-    return santriList.find(s => s.id === selectedUjianSantriId) || santriList[0];
-  }, [santriList, selectedUjianSantriId]);
-
-  const [ujianKitabForm, setUjianKitabForm] = useState({
-    nilaiKoreksianKitab: currentUjianSantri?.nilaiKoreksianKitab ?? 90,
-    predikatKoreksianKitab: currentUjianSantri?.predikatKoreksianKitab || 'Mumtaz (Makna Gandul Sah & Lengkap)',
-    kitabKoreksian: 'Kitab Fathul Qorib Al-Mujib',
-    catatanKoreksianKitab: currentUjianSantri?.catatanUjianKitab || 'Catatan pegon tertib, makna gandul sah dan lengkap.',
-    nilaiMuhafadzoh: currentUjianSantri?.nilaiMuhafadzoh ?? 92,
-    predikatMuhafadzoh: currentUjianSantri?.predikatMuhafadzoh || 'Mumtaz (Hafal Lancar 250 Bait)',
-    kitabMuhafadzoh: 'Nadzhom Al-Imrithi',
-    catatanMuhafadzoh: 'Hafalan sangat mutqin dan fashih.',
-    nilaiBacaKitab: currentUjianSantri?.nilaiBacaKitab ?? 88,
-    predikatBacaKitab: currentUjianSantri?.predikatBacaKitab || 'Jayyid Jiddan (Fashih & Paham Tarkib)',
-    kitabBaca: 'Fathul Qorib Bab Sholat',
-    catatanBacaKitab: 'Mampu menjelaskan tarkib i\'rob dengan baik.',
-    ustadzPenguji: currentUjianSantri?.ustadzPengujiKitab || 'Ust. Muhammad Ilyas Al-Hafidz',
-    tanggalUjian: currentUjianSantri?.tanggalUjianKitab || new Date().toISOString().split('T')[0]
-  });
 
   useEffect(() => {
-    if (currentUjianSantri) {
-      setUjianKitabForm({
-        nilaiKoreksianKitab: currentUjianSantri.nilaiKoreksianKitab ?? 90,
-        predikatKoreksianKitab: currentUjianSantri.predikatKoreksianKitab || 'Mumtaz (Makna Gandul Sah & Lengkap)',
-        kitabKoreksian: 'Kitab Fathul Qorib Al-Mujib',
-        catatanKoreksianKitab: currentUjianSantri.catatanUjianKitab || 'Catatan pegon tertib, makna gandul sah dan lengkap.',
-        nilaiMuhafadzoh: currentUjianSantri.nilaiMuhafadzoh ?? 92,
-        predikatMuhafadzoh: currentUjianSantri.predikatMuhafadzoh || 'Mumtaz (Hafal Lancar 250 Bait)',
-        kitabMuhafadzoh: 'Nadzhom Al-Imrithi',
-        catatanMuhafadzoh: 'Hafalan sangat mutqin dan fashih.',
-        nilaiBacaKitab: currentUjianSantri.nilaiBacaKitab ?? 88,
-        predikatBacaKitab: currentUjianSantri.predikatBacaKitab || 'Jayyid Jiddan (Fashih & Paham Tarkib)',
-        kitabBaca: 'Fathul Qorib Bab Sholat',
-        catatanBacaKitab: 'Mampu menjelaskan tarkib i\'rob dengan baik.',
-        ustadzPenguji: currentUjianSantri.ustadzPengujiKitab || 'Ust. Muhammad Ilyas Al-Hafidz',
-        tanggalUjian: currentUjianSantri.tanggalUjianKitab || new Date().toISOString().split('T')[0]
-      });
-    }
-  }, [currentUjianSantri]);
+    let active = true;
+    loadMasterDataFromFirestore<Partial<UjianExamGlobalConfig>>('ujian_config').then((data) => {
+      if (active) {
+        setUjianExamConfig(mergeUjianConfigWithDefaults(data, kurikulumList));
+      }
+    });
+    const unsub = subscribeMasterDataFromFirestore<Partial<UjianExamGlobalConfig>>(
+      'ujian_config',
+      (data) => {
+        if (active) {
+          setUjianExamConfig(mergeUjianConfigWithDefaults(data, kurikulumList));
+        }
+      }
+    );
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, [kurikulumList]);
 
   // Form input manual santri di Option Panel
   const [inputSantriForm, setInputSantriForm] = useState({
@@ -3271,7 +3287,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               { id: 'ujian-baca-kitab', label: '2. Tab Baca Kitab', icon: BookOpen, badge: 'Ujian' },
               { id: 'ujian-koreksian-kitab', label: '3. Tab Koreksian Kitab', icon: CheckSquare, badge: 'Ujian' },
               { id: 'absensi-santri', label: settings.text_absensi_santri_title || 'Absensi Santri', icon: UserCheck },
-              { id: 'pelanggaran-santri', label: 'PELANGGARAN SANTRI', icon: ShieldAlert, badge: 'Takziran' },
+              { id: 'pelanggaran-santri', label: 'Indikator Kehadiran', icon: ShieldAlert, badge: 'Takziran & SP' },
               { id: 'absensi-guru', label: settings.text_absensi_guru_title || 'Absensi Ustadz / Guru', icon: Clock },
               { id: 'jadwal', label: settings.text_jadwal_title || 'Jadwal Pelajaran', icon: Calendar },
               { id: 'guru', label: settings.text_guru_title || 'Data Guru Pengajar', icon: Award },
@@ -4416,8 +4432,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           const rows = rekapBulananSantri.map((s, idx) => [idx + 1, s.id, s.nama, s.kelas, s.hadir, s.izin, s.sakit, s.alpha, `${s.persentase}%`, s.keterangan]);
                           downloadCSV(`Rekap_Bulanan_Santri_${selectedBulanSantri.replace(' ', '_')}`, headers, rows);
                         } else {
-                          const headers = ['NO', 'NAMA USTADZ', 'MAPEL', 'KELAS', 'TOTAL SESI', `HADIR (${selectedBulanGuru})`, 'IZIN', 'SAKIT/TELAT', 'ALPHA', 'PERSENTASE (%)', 'PREDIKAT'];
-                          const rows = rekapBulananGuru.map((g, idx) => [idx + 1, g.nama, g.mapel, g.kelas, g.totalSesi, g.hadir, g.izin, g.sakitTelat, g.alpha, `${g.persentase}%`, g.predikat]);
+                          const headers = ['NO', 'NAMA USTADZ', 'MAPEL', 'KELAS', 'TOTAL SESI', `HADIR (${selectedBulanGuru})`, 'IZIN', 'TELAT', 'ALPHA', 'PERSENTASE (%)', 'PREDIKAT'];
+                          const rows = rekapBulananGuru.map((g, idx) => [idx + 1, g.nama, g.mapel, g.kelas, g.totalSesi, g.hadir, g.izin, g.telat, g.alpha, `${g.persentase}%`, g.predikat]);
                           downloadCSV(`Rekap_Bulanan_Guru_${selectedBulanGuru.replace(' ', '_')}`, headers, rows);
                         }
                       }}
@@ -4613,9 +4629,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <th className="p-3">NAMA USTADZ / USTADZAH</th>
                         <th className="p-3">MATA PELAJARAN</th>
                         <th className="p-3 w-32">ANGKATAN</th>
-                        <th className="p-3 w-28 text-center text-emerald-300 bg-emerald-950/40">MENGAJAR ({selectedBulanGuru})</th>
+                        <th className="p-3 w-28 text-center text-emerald-300 bg-emerald-950/40">HADIR ({selectedBulanGuru})</th>
                         <th className="p-3 w-20 text-center text-amber-300 bg-amber-950/30">IZIN</th>
-                        <th className="p-3 w-24 text-center text-orange-300 bg-orange-950/30">SAKIT/TELAT</th>
+                        <th className="p-3 w-24 text-center text-orange-300 bg-orange-950/30">TELAT</th>
                         <th className="p-3 w-20 text-center text-red-300 bg-red-950/30">ALPHA</th>
                         <th className="p-3 w-28 text-center text-[#d4af37]">PERSENTASE</th>
                         <th className="p-3 w-28 text-center">PREDIKAT</th>
@@ -4629,9 +4645,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <td className="p-3 font-bold text-white">{g.nama}</td>
                           <td className="p-3 text-emerald-200">{g.mapel}</td>
                           <td className="p-3 text-[#d4af37] font-semibold">{g.kelas}</td>
-                          <td className="p-3 text-center font-mono font-bold text-emerald-400 bg-emerald-950/20">{g.hadir} kali</td>
+                          <td className="p-3 text-center font-mono font-bold text-emerald-400 bg-emerald-950/20">
+                            {g.hadir} kali
+                            {g.telat > 0 && (
+                              <span className="block text-[9px] text-emerald-300/75 font-normal">
+                                ({g.hadirTepatWaktu} tepat + {g.telat} telat)
+                              </span>
+                            )}
+                          </td>
                           <td className="p-3 text-center font-mono text-amber-300 bg-amber-950/20">{g.izin} kali</td>
-                          <td className="p-3 text-center font-mono text-orange-300 bg-orange-950/20">{g.sakitTelat} kali</td>
+                          <td className="p-3 text-center font-mono text-orange-300 bg-orange-950/20">{g.telat} kali</td>
                           <td className="p-3 text-center font-mono text-red-400 bg-red-950/20">{g.alpha} kali</td>
                           <td className="p-3 text-center font-mono font-extrabold text-[#d4af37] text-gold-3d">{g.persentase}%</td>
                           <td className="p-3 text-center">
@@ -4652,9 +4675,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 mapel: g.mapel,
                                 kelas: g.kelas,
                                 bulan: selectedBulanGuru,
-                                hadir: g.hadir,
+                                hadir: g.hadirTepatWaktu,
                                 izin: g.izin,
-                                sakitTelat: g.sakitTelat,
+                                sakitTelat: g.telat,
                                 alpha: g.alpha
                               })}
                               className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 mx-auto transition shadow hover:scale-105"
@@ -5266,7 +5289,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="grid grid-cols-2 gap-3">
                       <div className="p-3 rounded-xl bg-[#042013] border border-emerald-500/40 space-y-1.5">
                         <label className="text-[11px] font-bold text-emerald-300 block">
-                          JUMLAH HADIR / MENGAJAR
+                          HADIR TEPAT WAKTU (KALI)
                         </label>
                         <input
                           type="number"
@@ -5296,7 +5319,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                       <div className="p-3 rounded-xl bg-[#042013] border border-orange-500/40 space-y-1.5">
                         <label className="text-[11px] font-bold text-orange-300 block">
-                          SAKIT / TERLAMBAT (KALI)
+                          JUMLAH TELAT (KALI)
                         </label>
                         <input
                           type="number"
@@ -5325,14 +5348,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
-                    {/* Preview Persentase */}
+                    {/* Preview Persentase (Telat dihitung Hadir tetapi mengurangi skor penilaian) */}
                     {(() => {
-                      const tot = editingRevisiGuru.hadir + editingRevisiGuru.izin + editingRevisiGuru.sakitTelat + editingRevisiGuru.alpha;
-                      const pct = tot > 0 ? Math.min(100, Math.round(((editingRevisiGuru.hadir + editingRevisiGuru.sakitTelat) / tot) * 100)) : 0;
+                      const previewScore = calculateGuruAttendanceScore(
+                        editingRevisiGuru.hadir,
+                        editingRevisiGuru.sakitTelat,
+                        editingRevisiGuru.izin,
+                        editingRevisiGuru.alpha,
+                        bobotNilaiTelatGuru
+                      );
                       return (
-                        <div className="p-2.5 rounded-xl bg-[#020e07] border border-[#d4af37]/30 flex items-center justify-between text-xs font-mono">
-                          <span className="text-emerald-300">Total Sesi: <b>{tot} kali</b></span>
-                          <span className="text-[#f3e5ab]">Kalkulasi Kehadiran: <b className="text-gold-3d font-extrabold text-sm text-emerald-400">{pct}%</b></span>
+                        <div className="p-2.5 rounded-xl bg-[#020e07] border border-[#d4af37]/30 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                          <span className="text-emerald-300">
+                            Total Hadir: <b>{previewScore.totalHadir}</b> • Sesi: <b>{previewScore.totalSesi}</b>
+                          </span>
+                          <span className="text-[#f3e5ab]">
+                            Persentase Penilaian: <b className="text-gold-3d font-extrabold text-sm text-emerald-400">{previewScore.persentasePenilaian}%</b>
+                          </span>
                         </div>
                       );
                     })()}
@@ -6185,96 +6217,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* BAGIAN UJIAN: 3 TAB TERPISAH (TAB MUHAFAZHOH, TAB BACA KITAB, TAB KOREKSIAN KITAB) */}
-        {(activeTab === 'ujian-muhafadzoh' || activeTab === 'ujian-baca-kitab' || activeTab === 'ujian-koreksian-kitab' || activeTab === 'ujian-kitab') && (
-          <div className="space-y-6">
-            {/* SUBTAB SWITCHER BAR DI ATAS KETIGA TAB */}
-            <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-gradient-to-r from-[#03150c] via-[#020e08] to-[#041d11] border-2 border-[#d4af37]/50 shadow-xl">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black text-[#f5e298] uppercase tracking-wider flex items-center gap-1.5 px-2">
-                  <Award className="w-4 h-4 text-[#d4af37]" />
-                  <span>MENU BAGIAN UJIAN:</span>
-                </span>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('ujian-muhafadzoh')}
-                    className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow ${
-                      activeTab === 'ujian-muhafadzoh' || activeTab === 'ujian-kitab'
-                        ? 'bg-gradient-to-r from-[#d4af37] via-[#f5e298] to-[#c59e2b] text-black ring-2 ring-[#f5e298]/80 scale-102 font-extrabold'
-                        : 'bg-black/50 text-[#f3e5ab]/80 hover:bg-[#d4af37]/20 hover:text-white border border-[#d4af37]/30'
-                    }`}
-                  >
-                    <Award className="w-3.5 h-3.5" />
-                    <span>1. TAB MUHAFAZHOH</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('ujian-baca-kitab')}
-                    className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow ${
-                      activeTab === 'ujian-baca-kitab'
-                        ? 'bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white ring-2 ring-blue-300 scale-102 font-extrabold'
-                        : 'bg-black/50 text-blue-200/80 hover:bg-blue-500/20 hover:text-white border border-blue-500/30'
-                    }`}
-                  >
-                    <BookOpen className="w-3.5 h-3.5" />
-                    <span>2. TAB BACA KITAB</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('ujian-koreksian-kitab')}
-                    className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition cursor-pointer shadow ${
-                      activeTab === 'ujian-koreksian-kitab'
-                        ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-black ring-2 ring-amber-300 scale-102 font-extrabold'
-                        : 'bg-black/50 text-amber-200/80 hover:bg-amber-500/20 hover:text-white border border-amber-500/30'
-                    }`}
-                  >
-                    <CheckSquare className="w-3.5 h-3.5" />
-                    <span>3. TAB KOREKSIAN KITAB</span>
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('pengaturan');
-                  setActiveControlSection('kelola_ujian_kitab');
-                }}
-                className="px-3.5 py-1.5 rounded-xl bg-[#0b3824] hover:bg-[#0e482e] border border-[#d4af37]/50 text-[#f5e298] text-xs font-bold flex items-center gap-1.5 transition shadow"
-              >
-                <Sliders className="w-3.5 h-3.5 text-[#d4af37]" />
-                <span>Pengaturan Nilai (Option Panel)</span>
-              </button>
-            </div>
-
-            {/* KONTEN MASING-MASING TAB */}
-            {(activeTab === 'ujian-muhafadzoh' || activeTab === 'ujian-kitab') && (
-              <TabUjianMuhafadzoh
-                santriList={santriList}
-                onOpenInputModal={(s) => setUjianModalTarget({ santri: s, type: 'muhafadzoh' })}
-              />
-            )}
-
-            {activeTab === 'ujian-baca-kitab' && (
-              <TabUjianBacaKitab
-                santriList={santriList}
-                onOpenInputModal={(s) => setUjianModalTarget({ santri: s, type: 'baca' })}
-              />
-            )}
-
-            {activeTab === 'ujian-koreksian-kitab' && (
-              <TabUjianKoreksianKitab
-                santriList={santriList}
-                onOpenInputModal={(s) => setUjianModalTarget({ santri: s, type: 'koreksian' })}
-              />
-            )}
-          </div>
+        {/* TAB UJIAN TERPISAH 1: MUHAFADZOH */}
+        {(activeTab === 'ujian-muhafadzoh' || activeTab === 'ujian-kitab') && (
+          <TabUjianMuhafadzoh
+            santriList={santriList}
+            config={ujianExamConfig}
+            settings={settings}
+            onOpenInputModal={(s) => setUjianModalTarget({ santri: s, type: 'muhafadzoh' })}
+            onOpenOptionPanel={() => {
+              setActiveTab('pengaturan');
+              setActiveControlSection('kelola_ujian_kitab');
+            }}
+            onUpdateSantriProfile={onUpdateSantriProfile}
+          />
         )}
 
-        {/* TAB PELANGGARAN SANTRI & SURAT TAKZIRAN OTOMATIS */}
+        {/* TAB UJIAN TERPISAH 2: BACA KITAB */}
+        {activeTab === 'ujian-baca-kitab' && (
+          <TabUjianBacaKitab
+            santriList={santriList}
+            config={ujianExamConfig}
+            settings={settings}
+            onOpenInputModal={(s) => setUjianModalTarget({ santri: s, type: 'baca' })}
+            onOpenOptionPanel={() => {
+              setActiveTab('pengaturan');
+              setActiveControlSection('kelola_ujian_kitab');
+            }}
+            onUpdateSantriProfile={onUpdateSantriProfile}
+          />
+        )}
+
+        {/* TAB UJIAN TERPISAH 3: KOREKSIAN KITAB */}
+        {activeTab === 'ujian-koreksian-kitab' && (
+          <TabUjianKoreksianKitab
+            santriList={santriList}
+            kurikulumList={kurikulumList}
+            config={ujianExamConfig}
+            settings={settings}
+            onOpenInputModal={(s) => setUjianModalTarget({ santri: s, type: 'koreksian' })}
+            onOpenOptionPanel={() => {
+              setActiveTab('pengaturan');
+              setActiveControlSection('kelola_ujian_kitab');
+            }}
+            onUpdateSantriProfile={onUpdateSantriProfile}
+          />
+        )}
+
+        {/* TAB INDIKATOR KEHADIRAN (TAKZIRAN SANTRI & PERINGATAN GURU) */}
         {activeTab === 'pelanggaran-santri' && (
           <TabPelanggaranSantri
             settings={settings}
@@ -6282,6 +6271,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             rekapBulananSantri={rekapBulananSantri}
             selectedBulanSantri={selectedBulanSantri}
             setSelectedBulanSantri={setSelectedBulanSantri}
+            guruList={guruList}
+            rekapBulananGuru={rekapBulananGuru}
+            selectedBulanGuru={selectedBulanGuru}
+            setSelectedBulanGuru={setSelectedBulanGuru}
             daftarBulan={DAFTAR_BULAN_REKAP}
             daftarTahun={DAFTAR_TAHUN_REKAP}
             currentUserRole="admin"
@@ -7010,7 +7003,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       Rekapitulasi Kehadiran Ustadz / Guru Bulanan (Tanggal 1 s/d 30)
                     </h4>
                     <p className="text-[11px] text-emerald-300">
-                      Rekapan akumulasi jumlah mengajar, izin, sakit/terlambat, dan alpha dari tanggal 1 sampai 30 setiap bulannya.
+                      Rekapan akumulasi jumlah mengajar, izin, telat, dan alpha dari tanggal 1 sampai 30 setiap bulannya.
                     </p>
                   </div>
                 </div>
@@ -7042,9 +7035,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3">NAMA USTADZ / USTADZAH</th>
                       <th className="p-3">MATA PELAJARAN / KITAB</th>
                       <th className="p-3 w-32">KELAS DIASUH</th>
-                      <th className="p-3 w-28 text-center text-emerald-300 font-bold bg-emerald-950/40">MENGAJAR ({selectedBulanGuru})</th>
+                      <th className="p-3 w-28 text-center text-emerald-300 font-bold bg-emerald-950/40">HADIR ({selectedBulanGuru})</th>
                       <th className="p-3 w-20 text-center text-amber-300 font-bold bg-amber-950/30">IZIN</th>
-                      <th className="p-3 w-24 text-center text-orange-300 font-bold bg-orange-950/30">SAKIT / TELAT</th>
+                      <th className="p-3 w-24 text-center text-orange-300 font-bold bg-orange-950/30">TELAT</th>
                       <th className="p-3 w-20 text-center text-red-300 font-bold bg-red-950/30">ALPHA</th>
                       <th className="p-3 w-28 text-center text-[#d4af37] font-bold">KEHADIRAN</th>
                       <th className="p-3 w-28 text-center">PREDIKAT</th>
@@ -7060,12 +7053,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <td className="p-3 text-[#d4af37] font-semibold">{g.kelas}</td>
                         <td className="p-3 text-center font-mono font-bold text-emerald-400 bg-emerald-950/20">
                           {g.hadir} kali
+                          {g.telat > 0 && (
+                            <span className="block text-[9px] text-emerald-300/75 font-normal">
+                              ({g.hadirTepatWaktu} tepat + {g.telat} telat)
+                            </span>
+                          )}
                         </td>
                         <td className="p-3 text-center font-mono text-amber-300 bg-amber-950/20">
                           {g.izin} kali
                         </td>
                         <td className="p-3 text-center font-mono text-orange-300 bg-orange-950/20">
-                          {g.sakitTelat} kali
+                          {g.telat} kali
                         </td>
                         <td className="p-3 text-center font-mono text-red-400 bg-red-950/20">
                           {g.alpha} kali
@@ -7094,9 +7092,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               mapel: g.mapel,
                               kelas: g.kelas,
                               bulan: selectedBulanGuru,
-                              hadir: g.hadir,
+                              hadir: g.hadirTepatWaktu,
                               izin: g.izin,
-                              sakitTelat: g.sakitTelat,
+                              sakitTelat: g.telat,
                               alpha: g.alpha
                             })}
                             className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center justify-center gap-1.5 mx-auto transition shadow hover:scale-105"
@@ -11288,7 +11286,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     { id: 'sosial_media', label: 'Media Sosial & WA', icon: MessageCircle },
                     { id: 'visual_branding', label: 'Logo & Visual', icon: Palette },
                     { id: 'keamanan', label: 'Kata Sandi Admin', icon: Lock },
-                    { id: 'pelanggaran_takziran', label: 'PENGATURAN PELANGGARAN & SURAT TAKZIRAN', icon: ShieldAlert }
+                    { id: 'pelanggaran_takziran', label: 'INDIKATOR KEHADIRAN & SURAT (TAKZIRAN / SP)', icon: ShieldAlert }
                   ].map(sec => {
                     const SecIcon = sec.icon;
                     const isSecActive = activeControlSection === sec.id;
@@ -11310,13 +11308,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   })}
                 </div>
 
-                {/* SECTION PENGATURAN PELANGGARAN & SURAT TAKZIRAN */}
+                {/* SECTION PENGATURAN INDIKATOR KEHADIRAN, TAKZIRAN & SURAT PERINGATAN GURU */}
                 {activeControlSection === 'pelanggaran_takziran' && (
                   <OptionPanelPelanggaranTakziran
                     settings={settings}
                     santriList={santriList}
                     rekapBulananSantri={rekapBulananSantri}
                     selectedBulanSantri={selectedBulanSantri}
+                    guruList={guruList}
+                    rekapBulananGuru={rekapBulananGuru}
+                    selectedBulanGuru={selectedBulanGuru}
                   />
                 )}
 
@@ -13557,280 +13558,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
-                {/* SECTION: KELOLA UJIAN MUHAFADZOH, KOREKSIAN KITAB, & BACA KITAB (TERKONEKSI KE WALI) */}
+                {/* SECTION: KELOLA UJIAN MUHAFADZOH, KOREKSIAN KITAB, BACA KITAB, & TAKZIRAN UJIAN */}
                 {activeControlSection === 'kelola_ujian_kitab' && (
-                  <div className="bg-[#052216]/90 border border-[#d4af37]/30 rounded-2xl p-5 space-y-6">
-                    <div className="flex items-center space-x-2 border-b border-[#d4af37]/20 pb-3">
-                      <Award className="w-5 h-5 text-[#d4af37]" />
-                      <div>
-                        <h4 className="text-sm font-bold text-white text-gold-3d">
-                          Atur Nilai Ujian Muhafadzoh, Koreksian Kitab, & Baca Kitab
-                        </h4>
-                        <p className="text-[11px] text-emerald-300">
-                          Sesuai permintaan Anda, seluruh penilaian ini diatur melalui Option Panel ini dan terhubung langsung ke kolom bawah profil anak di Dashboard Wali Santri.
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Pilih Santri Target */}
-                    <div className="bg-[#03140c] p-4 rounded-xl border border-[#d4af37]/20 space-y-2">
-                      <label className="text-xs font-bold text-[#d4af37] block">
-                        Pilih Santri Target Penilaian:
-                      </label>
-                      <select
-                        value={selectedUjianSantriId}
-                        onChange={(e) => setSelectedUjianSantriId(e.target.value)}
-                        className="w-full bg-[#052216] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
-                      >
-                        {santriList.map((s, idx) => (
-                          <option key={`${s.id}-${idx}`} value={s.id}>
-                            {s.nama} ({s.id} — {s.kelas})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Form 3 Kolom Penilaian */}
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (!currentUjianSantri) return;
-
-                        // 1. Perbarui profil santri dengan nilai ujian terbaru
-                        const updatedSantri: Santri = {
-                          ...currentUjianSantri,
-                          nilaiKoreksianKitab: Number(ujianKitabForm.nilaiKoreksianKitab),
-                          predikatKoreksianKitab: ujianKitabForm.predikatKoreksianKitab,
-                          nilaiMuhafadzoh: Number(ujianKitabForm.nilaiMuhafadzoh),
-                          predikatMuhafadzoh: ujianKitabForm.predikatMuhafadzoh,
-                          nilaiBacaKitab: Number(ujianKitabForm.nilaiBacaKitab),
-                          predikatBacaKitab: ujianKitabForm.predikatBacaKitab,
-                          ustadzPengujiKitab: ujianKitabForm.ustadzPenguji,
-                          tanggalUjianKitab: ujianKitabForm.tanggalUjian,
-                          catatanUjianKitab: ujianKitabForm.catatanKoreksianKitab
-                        };
-
-                        if (onUpdateSantriProfile) {
-                          onUpdateSantriProfile(updatedSantri);
-                        }
-
-                        // 2. Simpan juga ke log ujian record
-                        if (onSaveUjianSantri) {
-                          const newRecord: UjianSantriRecord = {
-                            id: `UJN-${Date.now().toString().slice(-4)}`,
-                            idSantri: currentUjianSantri.id,
-                            namaSantri: currentUjianSantri.nama,
-                            kelas: currentUjianSantri.kelas,
-                            semester: 'Semester Ganjil 2026/2027',
-                            tanggal: ujianKitabForm.tanggalUjian,
-                            nilaiKoreksianKitab: Number(ujianKitabForm.nilaiKoreksianKitab),
-                            predikatKoreksianKitab: ujianKitabForm.predikatKoreksianKitab,
-                            kitabKoreksian: ujianKitabForm.kitabKoreksian,
-                            catatanKoreksianKitab: ujianKitabForm.catatanKoreksianKitab,
-                            nilaiMuhafadzoh: Number(ujianKitabForm.nilaiMuhafadzoh),
-                            predikatMuhafadzoh: ujianKitabForm.predikatMuhafadzoh,
-                            kitabMuhafadzoh: ujianKitabForm.kitabMuhafadzoh,
-                            catatanMuhafadzoh: ujianKitabForm.catatanMuhafadzoh,
-                            nilaiBacaKitab: Number(ujianKitabForm.nilaiBacaKitab),
-                            predikatBacaKitab: ujianKitabForm.predikatBacaKitab,
-                            kitabBaca: ujianKitabForm.kitabBaca,
-                            catatanBacaKitab: ujianKitabForm.catatanBacaKitab,
-                            ustadzPenguji: ujianKitabForm.ustadzPenguji
-                          };
-                          onSaveUjianSantri(newRecord);
-                        }
-
-                        alert(`Nilai Ujian Santri ${currentUjianSantri.nama} berhasil diperbarui! Nilai Koreksian Kitab, Nilai Muhafadzoh, dan Nilai Baca Kitab langsung tampil di Dashboard Wali Santri.`);
-                      }}
-                      className="space-y-6"
-                    >
-                      {/* Meta Informasi Penguji & Tanggal */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[#03140c] p-4 rounded-xl border border-[#d4af37]/20">
-                        <div>
-                          <label className="text-xs font-bold text-white block mb-1">
-                            Ustadz Penguji / Pentashih:
-                          </label>
-                          <input
-                            type="text"
-                            value={ujianKitabForm.ustadzPenguji}
-                            onChange={(e) => setUjianKitabForm({ ...ujianKitabForm, ustadzPenguji: e.target.value })}
-                            className="w-full bg-[#02180e] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
-                            required
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-xs font-bold text-white block mb-1">
-                            Tanggal Ujian:
-                          </label>
-                          <input
-                            type="date"
-                            value={ujianKitabForm.tanggalUjian}
-                            onChange={(e) => setUjianKitabForm({ ...ujianKitabForm, tanggalUjian: e.target.value })}
-                            className="w-full bg-[#02180e] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white"
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      {/* 3 KOLOM SEPERTI PERMINTAAN USER */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                        {/* 1. Nilai Koreksian Kitab */}
-                        <div className="bg-[#031f13] border-2 border-[#d4af37]/40 rounded-2xl p-4 space-y-3 shadow-xl">
-                          <div className="flex items-center gap-2 text-[#d4af37] font-bold text-xs border-b border-[#d4af37]/20 pb-2">
-                            <BookOpen className="w-4 h-4" />
-                            <span>1. Nilai Koreksian Kitab</span>
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-emerald-300 block mb-1">Nilai Angka (0-100):</label>
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={ujianKitabForm.nilaiKoreksianKitab}
-                              onChange={(e) => setUjianKitabForm({ ...ujianKitabForm, nilaiKoreksianKitab: Number(e.target.value) })}
-                              className="w-full bg-[#02180e] border border-[#d4af37]/40 rounded-lg p-2 text-xs text-[#d4af37] font-bold font-mono"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-emerald-300 block mb-1">Predikat:</label>
-                            <input
-                              type="text"
-                              value={ujianKitabForm.predikatKoreksianKitab}
-                              onChange={(e) => setUjianKitabForm({ ...ujianKitabForm, predikatKoreksianKitab: e.target.value })}
-                              className="w-full bg-[#02180e] border border-[#d4af37]/40 rounded-lg p-2 text-xs text-white"
-                              placeholder="Mumtaz (Makna Lengkap & Sah)"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-emerald-300 block mb-1">Kitab Rujukan:</label>
-                            <input
-                              type="text"
-                              value={ujianKitabForm.kitabKoreksian}
-                              onChange={(e) => setUjianKitabForm({ ...ujianKitabForm, kitabKoreksian: e.target.value })}
-                              className="w-full bg-[#02180e] border border-[#d4af37]/40 rounded-lg p-2 text-xs text-white"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-emerald-300 block mb-1">Catatan Korektor:</label>
-                            <textarea
-                              rows={2}
-                              value={ujianKitabForm.catatanKoreksianKitab}
-                              onChange={(e) => setUjianKitabForm({ ...ujianKitabForm, catatanKoreksianKitab: e.target.value })}
-                              className="w-full bg-[#02180e] border border-[#d4af37]/40 rounded-lg p-2 text-xs text-white resize-none"
-                            />
-                          </div>
-                        </div>
-
-                        {/* 2. Nilai Muhafadzoh */}
-                        <div className="bg-[#031f13] border-2 border-emerald-500/40 rounded-2xl p-4 space-y-3 shadow-xl">
-                          <div className="flex items-center gap-2 text-emerald-300 font-bold text-xs border-b border-emerald-500/20 pb-2">
-                            <Award className="w-4 h-4" />
-                            <span>2. Nilai Muhafadzoh</span>
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-emerald-300 block mb-1">Nilai Angka (0-100):</label>
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={ujianKitabForm.nilaiMuhafadzoh}
-                              onChange={(e) => setUjianKitabForm({ ...ujianKitabForm, nilaiMuhafadzoh: Number(e.target.value) })}
-                              className="w-full bg-[#02180e] border border-emerald-500/40 rounded-lg p-2 text-xs text-emerald-300 font-bold font-mono"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-emerald-300 block mb-1">Predikat:</label>
-                            <input
-                              type="text"
-                              value={ujianKitabForm.predikatMuhafadzoh}
-                              onChange={(e) => setUjianKitabForm({ ...ujianKitabForm, predikatMuhafadzoh: e.target.value })}
-                              className="w-full bg-[#02180e] border border-emerald-500/40 rounded-lg p-2 text-xs text-white"
-                              placeholder="Mumtaz (Hafal Lancar 250 Bait)"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-emerald-300 block mb-1">Kitab Nadzhom:</label>
-                            <input
-                              type="text"
-                              value={ujianKitabForm.kitabMuhafadzoh}
-                              onChange={(e) => setUjianKitabForm({ ...ujianKitabForm, kitabMuhafadzoh: e.target.value })}
-                              className="w-full bg-[#02180e] border border-emerald-500/40 rounded-lg p-2 text-xs text-white"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-emerald-300 block mb-1">Catatan Evaluasi:</label>
-                            <textarea
-                              rows={2}
-                              value={ujianKitabForm.catatanMuhafadzoh}
-                              onChange={(e) => setUjianKitabForm({ ...ujianKitabForm, catatanMuhafadzoh: e.target.value })}
-                              className="w-full bg-[#02180e] border border-emerald-500/40 rounded-lg p-2 text-xs text-white resize-none"
-                            />
-                          </div>
-                        </div>
-
-                        {/* 3. Nilai Baca Kitab */}
-                        <div className="bg-[#031f13] border-2 border-blue-500/40 rounded-2xl p-4 space-y-3 shadow-xl">
-                          <div className="flex items-center gap-2 text-blue-300 font-bold text-xs border-b border-blue-500/20 pb-2">
-                            <GraduationCap className="w-4 h-4" />
-                            <span>3. Nilai Baca Kitab</span>
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-emerald-300 block mb-1">Nilai Angka (0-100):</label>
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={ujianKitabForm.nilaiBacaKitab}
-                              onChange={(e) => setUjianKitabForm({ ...ujianKitabForm, nilaiBacaKitab: Number(e.target.value) })}
-                              className="w-full bg-[#02180e] border border-blue-500/40 rounded-lg p-2 text-xs text-blue-300 font-bold font-mono"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-emerald-300 block mb-1">Predikat:</label>
-                            <input
-                              type="text"
-                              value={ujianKitabForm.predikatBacaKitab}
-                              onChange={(e) => setUjianKitabForm({ ...ujianKitabForm, predikatBacaKitab: e.target.value })}
-                              className="w-full bg-[#02180e] border border-blue-500/40 rounded-lg p-2 text-xs text-white"
-                              placeholder="Jayyid Jiddan (Fashih & Paham Tarkib)"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-emerald-300 block mb-1">Kitab & Fashol Bacaan:</label>
-                            <input
-                              type="text"
-                              value={ujianKitabForm.kitabBaca}
-                              onChange={(e) => setUjianKitabForm({ ...ujianKitabForm, kitabBaca: e.target.value })}
-                              className="w-full bg-[#02180e] border border-blue-500/40 rounded-lg p-2 text-xs text-white"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[11px] text-emerald-300 block mb-1">Catatan Evaluasi:</label>
-                            <textarea
-                              rows={2}
-                              value={ujianKitabForm.catatanBacaKitab}
-                              onChange={(e) => setUjianKitabForm({ ...ujianKitabForm, catatanBacaKitab: e.target.value })}
-                              className="w-full bg-[#02180e] border border-blue-500/40 rounded-lg p-2 text-xs text-white resize-none"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="text-right pt-2 border-t border-[#d4af37]/20">
-                        <button
-                          type="submit"
-                          className="btn-3d-gold text-black flex items-center gap-2 ml-auto"
-                        >
-                          <CheckCircle2 className="w-4 h-4 text-black" />
-                          <span>SIMPAN & SINKRONKAN KE DASHBOARD WALI SANTRI</span>
-                        </button>
-                      </div>
-                    </form>
-                  </div>
+                  <OptionPanelUjianKitab
+                    config={ujianExamConfig}
+                    onUpdateConfig={setUjianExamConfig}
+                    kurikulumList={kurikulumList}
+                    santriList={santriList}
+                    settings={settings}
+                    onUpdateSantriProfile={onUpdateSantriProfile}
+                    onSaveUjianSantri={onSaveUjianSantri}
+                  />
                 )}
 
                 {/* SECTION 2: INPUT MANUAL DATA SANTRI PER ANGKATAN (DENGAN GALERI & FOLDER) */}

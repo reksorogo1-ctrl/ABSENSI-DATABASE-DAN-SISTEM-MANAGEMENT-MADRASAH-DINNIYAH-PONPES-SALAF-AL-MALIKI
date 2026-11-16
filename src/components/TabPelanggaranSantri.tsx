@@ -5,8 +5,8 @@ import {
   Search, Filter, Calendar, UserCheck, Award, Download
 } from 'lucide-react';
 import {
-  Santri, AppSettings, TemplateSuratTakziran, PelanggaranSantriRecord,
-  PelanggaranAuditLog, StatusTakziran, KategoriPelanggaran
+  Santri, GuruPengajar, AppSettings, TemplateSuratTakziran, PelanggaranSantriRecord,
+  PelanggaranAuditLog, StatusTakziran, KategoriPelanggaran, RekapBulananGuruItem
 } from '../types';
 import {
   saveMasterDataToFirestore,
@@ -17,6 +17,7 @@ import {
 } from '../firebase';
 import { resolveLogos } from '../brand';
 import { compressImageFile } from '../lib/imageCompression';
+import { TabPeringatanGuruSection, OptionPanelPeringatanGuruSection } from './PeringatanGuruPanel';
 
 export const DEFAULT_TEMPLATE_SURAT_TAKZIRAN: TemplateSuratTakziran = {
   batasMinimalKehadiran: 60,
@@ -93,6 +94,10 @@ interface SharedPelanggaranProps {
   rekapBulananSantri: RekapBulananSantriItem[];
   selectedBulanSantri: string;
   setSelectedBulanSantri: (bulan: string) => void;
+  guruList?: GuruPengajar[];
+  rekapBulananGuru?: RekapBulananGuruItem[];
+  selectedBulanGuru?: string;
+  setSelectedBulanGuru?: (bulan: string) => void;
   daftarBulan: string[];
   daftarTahun: string[];
   currentUserRole?: 'admin' | 'pengurus';
@@ -803,10 +808,15 @@ export const TabPelanggaranSantri: React.FC<SharedPelanggaranProps> = ({
   rekapBulananSantri,
   selectedBulanSantri,
   setSelectedBulanSantri,
+  guruList = [],
+  rekapBulananGuru = [],
+  selectedBulanGuru,
+  setSelectedBulanGuru,
   daftarBulan,
   daftarTahun,
   currentUserName = 'Admin Madrasah'
 }) => {
+  const [activeIndikatorSubTab, setActiveIndikatorSubTab] = useState<'santri' | 'guru'>('santri');
   const [templateConfig, setTemplateConfig] = useState<TemplateSuratTakziran>(DEFAULT_TEMPLATE_SURAT_TAKZIRAN);
   const [pelanggaranRecords, setPelanggaranRecords] = useState<PelanggaranSantriRecord[]>([]);
   const [auditLogs, setAuditLogs] = useState<PelanggaranAuditLog[]>([]);
@@ -1237,7 +1247,7 @@ export const TabPelanggaranSantri: React.FC<SharedPelanggaranProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* HEADER MODUL PELANGGARAN SANTRI */}
+      {/* HEADER MODUL INDIKATOR KEHADIRAN */}
       <div className="card-3d rounded-3xl p-5 sm:p-6 border-2 border-[#d4af37]/50 bg-gradient-to-br from-[#072919] via-[#041a10] to-[#020e08] shadow-2xl space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-[#d4af37]/25">
           <div className="flex items-start sm:items-center gap-3.5">
@@ -1247,57 +1257,103 @@ export const TabPelanggaranSantri: React.FC<SharedPelanggaranProps> = ({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base sm:text-xl font-black text-white text-gold-3d uppercase tracking-wide">
-                  TAB PELANGGARAN SANTRI & SURAT TAKZIRAN OTOMATIS
+                  TAB INDIKATOR KEHADIRAN — TAKZIRAN SANTRI &amp; PERINGATAN GURU
                 </h2>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-950 border border-emerald-400/50 text-emerald-300 text-[10px] font-mono font-bold">
                   Firestore Real-Time Sync
                 </span>
               </div>
               <p className="text-xs text-emerald-200/90 mt-1">
-                Deteksi otomatis santri dengan persentase kehadiran bulanan di bawah <b className="text-[#f3e5ab]">{batasMinimal}%</b> pada Rekap Absensi Bulanan beserta penerbitan & pencetakan Surat Takziran resmi ukuran A4.
+                Pemantauan persentase kehadiran Santri di bawah <b className="text-[#f3e5ab]">{batasMinimal}%</b> (Takziran) serta evaluasi kehadiran &amp; kedisiplinan Ustadz / Guru pengajar beserta penerbitan Surat Peringatan Madrasah.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Pemilih Bulan & Tahun Terintegrasi dengan Rekap Absensi Bulanan */}
-            <div className="flex items-center gap-1.5 bg-[#03150d] px-3 py-1.5 rounded-xl border border-[#d4af37]/40">
-              <Calendar className="w-4 h-4 text-[#d4af37]" />
-              <select
-                value={currentMonthName}
-                onChange={(e) => setSelectedBulanSantri(`${e.target.value} ${currentYearName}`)}
-                className="bg-transparent text-xs font-bold text-[#f3e5ab] focus:outline-none cursor-pointer"
-              >
-                {daftarBulan.map((b) => (
-                  <option key={b} value={b} className="bg-[#03150d] text-white">
-                    {b}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={currentYearName}
-                onChange={(e) => setSelectedBulanSantri(`${currentMonthName} ${e.target.value}`)}
-                className="bg-transparent text-xs font-bold text-emerald-300 font-mono focus:outline-none cursor-pointer"
-              >
-                {daftarTahun.map((t) => (
-                  <option key={t} value={t} className="bg-[#03150d] text-white">
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {activeIndikatorSubTab === 'santri' && (
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Pemilih Bulan & Tahun Terintegrasi dengan Rekap Absensi Bulanan */}
+              <div className="flex items-center gap-1.5 bg-[#03150d] px-3 py-1.5 rounded-xl border border-[#d4af37]/40">
+                <Calendar className="w-4 h-4 text-[#d4af37]" />
+                <select
+                  value={currentMonthName}
+                  onChange={(e) => setSelectedBulanSantri(`${e.target.value} ${currentYearName}`)}
+                  className="bg-transparent text-xs font-bold text-[#f3e5ab] focus:outline-none cursor-pointer"
+                >
+                  {daftarBulan.map((b) => (
+                    <option key={b} value={b} className="bg-[#03150d] text-white">
+                      {b}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={currentYearName}
+                  onChange={(e) => setSelectedBulanSantri(`${currentMonthName} ${e.target.value}`)}
+                  className="bg-transparent text-xs font-bold text-emerald-300 font-mono focus:outline-none cursor-pointer"
+                >
+                  {daftarTahun.map((t) => (
+                    <option key={t} value={t} className="bg-[#03150d] text-white">
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <button
-              type="button"
-              onClick={() => setShowAuditModal(true)}
-              className="px-3.5 py-2 rounded-xl bg-[#083321] hover:bg-[#0b462e] border border-[#d4af37]/40 text-[#f3e5ab] font-bold text-xs flex items-center gap-1.5 transition shadow"
-            >
-              <History className="w-3.5 h-3.5 text-[#d4af37]" />
-              <span>Log Audit ({auditLogs.length})</span>
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => setShowAuditModal(true)}
+                className="px-3.5 py-2 rounded-xl bg-[#083321] hover:bg-[#0b462e] border border-[#d4af37]/40 text-[#f3e5ab] font-bold text-xs flex items-center gap-1.5 transition shadow"
+              >
+                <History className="w-3.5 h-3.5 text-[#d4af37]" />
+                <span>Log Audit ({auditLogs.length})</span>
+              </button>
+            </div>
+          )}
         </div>
 
+        {/* SUB-TAB SWITCHER: INDIKATOR SANTRI VS PERINGATAN GURU */}
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveIndikatorSubTab('santri')}
+            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition border flex items-center gap-2 ${
+              activeIndikatorSubTab === 'santri'
+                ? 'bg-amber-400 text-black border-amber-200 shadow-lg'
+                : 'bg-[#03150d] text-[#f3e5ab] border-[#d4af37]/35 hover:border-[#d4af37]'
+            }`}
+          >
+            <UserCheck className="w-4 h-4" />
+            <span>Indikator Kehadiran Santri (Takziran)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveIndikatorSubTab('guru')}
+            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition border flex items-center gap-2 ${
+              activeIndikatorSubTab === 'guru'
+                ? 'bg-amber-400 text-black border-amber-200 shadow-lg'
+                : 'bg-[#03150d] text-[#f3e5ab] border-[#d4af37]/35 hover:border-[#d4af37]'
+            }`}
+          >
+            <Award className="w-4 h-4" />
+            <span>Peringatan Guru (Kedisiplinan &amp; Surat Peringatan)</span>
+          </button>
+        </div>
+      </div>
+
+      {activeIndikatorSubTab === 'guru' ? (
+        <TabPeringatanGuruSection
+          settings={settings}
+          guruList={guruList}
+          rekapBulananGuru={rekapBulananGuru}
+          selectedBulanGuru={selectedBulanGuru || selectedBulanSantri}
+          setSelectedBulanGuru={setSelectedBulanGuru || setSelectedBulanSantri}
+          daftarBulan={daftarBulan}
+          daftarTahun={daftarTahun}
+          currentUserName={currentUserName}
+        />
+      ) : (
+        <>
+        <div className="card-3d rounded-3xl p-5 sm:p-6 border border-[#d4af37]/40 bg-[#041a10]/95 shadow-2xl space-y-4">
         {/* KARTU STATISTIK PELANGGARAN BULAN INI */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <div className="card-3d-deep p-3.5 rounded-2xl border border-[#d4af37]/30">
@@ -1862,6 +1918,8 @@ export const TabPelanggaranSantri: React.FC<SharedPelanggaranProps> = ({
           </div>
         </div>
       )}
+          </>
+        )}
     </div>
   );
 };
@@ -1875,7 +1933,19 @@ export const OptionPanelPelanggaranTakziran: React.FC<{
   santriList: Santri[];
   rekapBulananSantri: RekapBulananSantriItem[];
   selectedBulanSantri: string;
-}> = ({ settings, santriList, rekapBulananSantri, selectedBulanSantri }) => {
+  guruList?: GuruPengajar[];
+  rekapBulananGuru?: RekapBulananGuruItem[];
+  selectedBulanGuru?: string;
+}> = ({
+  settings,
+  santriList,
+  rekapBulananSantri,
+  selectedBulanSantri,
+  guruList = [],
+  rekapBulananGuru = [],
+  selectedBulanGuru
+}) => {
+  const [optionSubTab, setOptionSubTab] = useState<'santri' | 'guru'>('santri');
   const [formConfig, setFormConfig] = useState<TemplateSuratTakziran>(DEFAULT_TEMPLATE_SURAT_TAKZIRAN);
   const [isSaving, setIsSaving] = useState(false);
   const [saveBanner, setSaveBanner] = useState<string | null>(null);
@@ -2016,6 +2086,44 @@ export const OptionPanelPelanggaranTakziran: React.FC<{
   return (
     <div className="space-y-6">
       <div className="card-3d rounded-3xl p-5 sm:p-6 border-2 border-[#d4af37]/50 bg-[#03180f] space-y-6 shadow-2xl">
+        {/* Sub-Tab Pilihan: Indikator Santri vs Peringatan Guru */}
+        <div className="flex flex-wrap gap-2 pb-3 border-b border-[#d4af37]/25">
+          <button
+            type="button"
+            onClick={() => setOptionSubTab('santri')}
+            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition border flex items-center gap-2 ${
+              optionSubTab === 'santri'
+                ? 'bg-amber-400 text-black border-amber-200 shadow'
+                : 'bg-[#02100a] text-[#f3e5ab] border-[#d4af37]/30'
+            }`}
+          >
+            <UserCheck className="w-4 h-4" />
+            <span>1. Pengaturan Indikator Santri &amp; Surat Takziran</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setOptionSubTab('guru')}
+            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition border flex items-center gap-2 ${
+              optionSubTab === 'guru'
+                ? 'bg-amber-400 text-black border-amber-200 shadow'
+                : 'bg-[#02100a] text-[#f3e5ab] border-[#d4af37]/30'
+            }`}
+          >
+            <Award className="w-4 h-4" />
+            <span>2. Pengaturan Peringatan Guru &amp; Surat Peringatan (SP)</span>
+          </button>
+        </div>
+
+        {optionSubTab === 'guru' ? (
+          <OptionPanelPeringatanGuruSection
+            settings={settings}
+            guruList={guruList}
+            rekapBulananGuru={rekapBulananGuru}
+            selectedBulanGuru={selectedBulanGuru || selectedBulanSantri}
+          />
+        ) : (
+          <>
         {/* Header Option Panel Tab */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#d4af37]/30">
           <div className="flex items-center gap-3">
@@ -2024,10 +2132,10 @@ export const OptionPanelPelanggaranTakziran: React.FC<{
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-black text-white text-gold-3d uppercase">
-                PENGATURAN PELANGGARAN & SURAT TAKZIRAN
+                PENGATURAN INDIKATOR KEHADIRAN SANTRI & SURAT TAKZIRAN
               </h3>
               <p className="text-xs text-emerald-300">
-                Pusat pengaturan batas minimal kehadiran bulanan, durasi pengumpulan takziran, kriteria pelanggaran berat, serta editor penuh Kop, Logo & Format Surat Takziran A4.
+                Pusat pengaturan batas minimal kehadiran bulanan santri, durasi pengumpulan takziran, kriteria pelanggaran berat, serta editor penuh Kop, Logo & Format Surat Takziran A4.
               </p>
             </div>
           </div>
@@ -2695,6 +2803,8 @@ export const OptionPanelPelanggaranTakziran: React.FC<{
             </button>
           </div>
         </div>
+          </>
+        )}
       </div>
 
       {/* Pratinjau Surat dari Option Panel */}

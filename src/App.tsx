@@ -6,6 +6,7 @@ import {
   Pengurus, KalenderAkademikEvent, UjianSantriRecord, IzinMengajarRequest,
   SilabusMemaknaiRecord
 } from './types';
+import { calculateGuruAttendanceScore } from './lib/guruAttendanceScoring';
 import { 
   DEFAULT_SPREADSHEET_ID, DEFAULT_SETTINGS, INITIAL_SANTRI_LIST, 
   INITIAL_GURU_LIST, INITIAL_JADWAL_LIST, INITIAL_NADZHOM_LIST, 
@@ -708,7 +709,8 @@ export default function App() {
     const totalAbsensiGuru = absensiGuruList.length;
 
     const percentSantri = totalAbsensiSantri ? Math.round((hadirSantri / totalAbsensiSantri) * 100) : 0;
-    const percentGuru = totalAbsensiGuru ? Math.round((hadirGuru / totalAbsensiGuru) * 100) : 0;
+    const guruScoreSummary = calculateGuruAttendanceScore(hadirGuru, terlambatGuru, izinGuru, alphaGuru, 50);
+    const percentGuru = totalAbsensiGuru ? guruScoreSummary.persentasePenilaian : 0;
     const percentKeterlambatanGuru = totalAbsensiGuru ? Math.round((terlambatGuru / totalAbsensiGuru) * 100) : 0;
     const percentIzinGuru = totalAbsensiGuru ? Math.round((izinGuru / totalAbsensiGuru) * 100) : 0;
 

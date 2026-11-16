@@ -187,6 +187,16 @@ export const MASTER_COLLECTION_KEYS = [
   'pelanggaran_template',
   'pelanggaran_counter',
   'pelanggaran_audit',
+  'peringatan_guru_records',
+  'peringatan_guru_template',
+  'peringatan_guru_counter',
+  'peringatan_guru_audit',
+  'ujian_config',
+  'ujian_muhafadzoh_records',
+  'ujian_baca_kitab_records',
+  'ujian_koreksian_records',
+  'ujian_takziran_records',
+  'ujian_takziran_counter',
   'sync_meta'
 ];
 
@@ -384,4 +394,110 @@ export async function generateAtomicNomorSuratTakziran(
   const nomorSurat = formatNomorSuratFromCounter(nextUrutan, formatPattern, periodeBulan);
   return { nomorSurat, urutan: nextUrutan };
 }
+
+/**
+ * Penomoran Surat Peringatan (SP) Ustadz / Guru Otomatis & Atomik via Transaksi Firestore
+ */
+export async function generateAtomicNomorSuratPeringatanGuru(
+  formatPattern: string = '{NO}/SP-GURU/MD-ALMALIKI/{ROMAWI}/{TAHUN}',
+  periodeBulan?: string,
+  existingMaxUrutan: number = 0
+): Promise<{ nomorSurat: string; urutan: number }> {
+  const counterDocRef = doc(db, 'sim_master_data', 'peringatan_guru_counter');
+  let nextUrutan = existingMaxUrutan + 1;
+
+  try {
+    nextUrutan = await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(counterDocRef);
+      let currentSeq = 0;
+      if (snap.exists()) {
+        const data = snap.data();
+        const payloadSeq = typeof data?.payload?.lastSeq === 'number'
+          ? data.payload.lastSeq
+          : typeof data?.lastSeq === 'number'
+          ? data.lastSeq
+          : 0;
+        currentSeq = payloadSeq;
+      }
+      const nextSeq = Math.max(currentSeq, existingMaxUrutan) + 1;
+      transaction.set(counterDocRef, {
+        payload: {
+          lastSeq: nextSeq,
+          updatedAt: new Date().toISOString()
+        },
+        lastSeq: nextSeq,
+        collectionKey: 'peringatan_guru_counter',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      return nextSeq;
+    });
+  } catch (e) {
+    console.warn('Transaksi nomor SP Guru Firestore fallback ke urutan aman:', e);
+    try {
+      const localSeq = parseInt(localStorage.getItem('sim_peringatan_guru_last_seq') || '0', 10) || 0;
+      nextUrutan = Math.max(localSeq, existingMaxUrutan) + 1;
+    } catch {}
+  }
+
+  try {
+    localStorage.setItem('sim_peringatan_guru_last_seq', String(nextUrutan));
+  } catch {}
+
+  const nomorSurat = formatNomorSuratFromCounter(nextUrutan, formatPattern, periodeBulan);
+  return { nomorSurat, urutan: nextUrutan };
+}
+
+/**
+ * Penomoran Surat Takziran Ujian (Muhafadzoh / Baca Kitab / Koreksian) Otomatis & Atomik via Transaksi Firestore
+ */
+export async function generateAtomicNomorSuratUjianTakziran(
+  formatPattern: string = '{NO}/TKZ-UJIAN/MD-ALMALIKI/{ROMAWI}/{TAHUN}',
+  periodeBulan?: string,
+  existingMaxUrutan: number = 0
+): Promise<{ nomorSurat: string; urutan: number }> {
+  const counterDocRef = doc(db, 'sim_master_data', 'ujian_takziran_counter');
+  let nextUrutan = existingMaxUrutan + 1;
+
+  try {
+    nextUrutan = await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(counterDocRef);
+      let currentSeq = 0;
+      if (snap.exists()) {
+        const data = snap.data();
+        const payloadSeq = typeof data?.payload?.lastSeq === 'number'
+          ? data.payload.lastSeq
+          : typeof data?.lastSeq === 'number'
+          ? data.lastSeq
+          : 0;
+        currentSeq = payloadSeq;
+      }
+      const nextSeq = Math.max(currentSeq, existingMaxUrutan) + 1;
+      transaction.set(counterDocRef, {
+        payload: {
+          lastSeq: nextSeq,
+          updatedAt: new Date().toISOString()
+        },
+        lastSeq: nextSeq,
+        collectionKey: 'ujian_takziran_counter',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      return nextSeq;
+    });
+  } catch (e) {
+    console.warn('Transaksi nomor Surat Takziran Ujian Firestore fallback ke urutan aman:', e);
+    try {
+      const localSeq = parseInt(localStorage.getItem('sim_ujian_takziran_last_seq') || '0', 10) || 0;
+      nextUrutan = Math.max(localSeq, existingMaxUrutan) + 1;
+    } catch {}
+  }
+
+  try {
+    localStorage.setItem('sim_ujian_takziran_last_seq', String(nextUrutan));
+  } catch {}
+
+  const nomorSurat = formatNomorSuratFromCounter(nextUrutan, formatPattern, periodeBulan);
+  return { nomorSurat, urutan: nextUrutan };
+}
+
+
 

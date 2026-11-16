@@ -17,6 +17,7 @@ import { BrandLogos } from './BrandLogos';
 import { PWAInstallButton } from './PWAInstallButton';
 import { GoogleMapsGeofence } from './GoogleMapsGeofence';
 import { validateGeofence, DEFAULT_GEOFENCE_ZONE } from '../lib/geofencing';
+import { calculateGuruAttendanceScore } from '../lib/guruAttendanceScoring';
 import { 
   checkPresensiSchedule, getServerTime, setSimulatedServerTime, isSimulationActive,
   PresensiCheckResult, OFFICIAL_SCHEDULES, broadcastAttendanceUpdate,
@@ -197,12 +198,14 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     }).sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
   }, [absensiGuruList, rekapGuruHistoryList, pengurus.nama]);
 
-  const personalHadir = personalAbsensi.filter(a => a.status === 'Hadir').length;
+  const personalHadirTepat = personalAbsensi.filter(a => a.status === 'Hadir').length;
   const personalIzin = personalAbsensi.filter(a => a.status === 'Izin').length;
   const personalTerlambat = personalAbsensi.filter(a => a.status === 'Terlambat').length;
   const personalAlpha = personalAbsensi.filter(a => a.status === 'Alpha').length;
-  const personalTotal = personalHadir + personalIzin + personalTerlambat + personalAlpha;
-  const personalPercent = personalTotal > 0 ? Math.round(((personalHadir + personalTerlambat) / personalTotal) * 100) : 100;
+  const personalScore = calculateGuruAttendanceScore(personalHadirTepat, personalTerlambat, personalIzin, personalAlpha, 50);
+  const personalHadir = personalScore.totalHadir;
+  const personalTotal = personalScore.totalSesi;
+  const personalPercent = personalTotal > 0 ? personalScore.persentasePenilaian : 100;
 
   const [liveIzinList, setLiveIzinList] = useState<IzinMengajarRequest[]>(() => {
     return izinList && izinList.length > 0 ? izinList : (JSON.parse(localStorage.getItem('sim_izin_mengajar') || '[]'));
@@ -2604,7 +2607,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   <div className="card-3d-glass rounded-2xl p-3.5 border border-emerald-500/40 text-center space-y-0.5">
                     <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">Hadir</span>
                     <span className="text-2xl font-black text-emerald-300 font-mono">{personalHadir}</span>
-                    <span className="text-[10px] text-emerald-200/70 block">Pertemuan</span>
+                    <span className="text-[10px] text-emerald-200/70 block">
+                      {personalTerlambat > 0 ? `${personalHadirTepat} Tepat + ${personalTerlambat} Telat` : 'Pertemuan'}
+                    </span>
                   </div>
 
                   <div className="card-3d-glass rounded-2xl p-3.5 border border-amber-500/40 text-center space-y-0.5">

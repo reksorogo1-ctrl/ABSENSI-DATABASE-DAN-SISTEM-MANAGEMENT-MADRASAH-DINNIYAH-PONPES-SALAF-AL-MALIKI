@@ -644,3 +644,305 @@ export interface RiwayatStatusTakziran {
   keterangan: string;
 }
 
+// ==========================================
+// MODUL INDIKATOR KEHADIRAN & PERINGATAN GURU (SP)
+// ==========================================
+
+export interface RekapBulananGuruItem {
+  nama: string;
+  mapel: string;
+  kelas: string;
+  totalSesi: number;
+  hadir: number; // Total Hadir (termasuk Telat)
+  hadirTepatWaktu: number;
+  telat: number;
+  sakitTelat: number; // Alias kompatibilitas untuk nilai telat
+  izin: number;
+  alpha: number;
+  persentase: number;
+  predikat: string;
+}
+
+export type StatusPeringatanGuru =
+  | 'Belum Diterbitkan'
+  | 'SP Diterbitkan'
+  | 'Pembinaan Selesai';
+
+export interface TemplateSuratPeringatanGuru {
+  batasMinimalKehadiranGuru: number; // default 75 (%)
+  bobotNilaiTelatPersen: number; // default 50 (% nilai dari hadir tepat waktu)
+  sertakanGuruTanpaSesi?: boolean; // default false
+  namaLembaga: string;
+  namaMadrasah: string;
+  subKopSurat: string;
+  alamatLembaga: string;
+  logoUrl: string;
+  gunakanLogoUtama: boolean;
+  formatNomorSurat: string; // e.g. "{NO}/SP-GURU/MD-ALMALIKI/{ROMAWI}/{TAHUN}"
+  lampiranSurat: string;
+  perihalSurat: string;
+  judulSurat: string;
+  isiPembukaan: string;
+  isiTeguranDisiplin: string;
+  isiTindakLanjut: string;
+  isiPenutup: string;
+  kotaTanggalSurat: string;
+  kalimatTandaTangan: string;
+  jabatanPenandatangan1: string;
+  namaPenandatangan1: string;
+  jabatanPenandatangan2: string;
+  namaPenandatangan2: string;
+  jabatanPenandatangan3: string;
+  namaPenandatangan3: string;
+  ukuranKertas: 'A4' | 'F4';
+  marginAtasMm: number;
+  marginBawahMm: number;
+  marginKiriMm: number;
+  marginKananMm: number;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface PeringatanGuruRecord {
+  id: string; // `${namaGuruSlug}_${periodeBulan.replace(/\s+/g, '_')}`
+  namaGuru: string;
+  mapel: string;
+  kelas: string;
+  periodeBulan: string;
+  hadir: number; // Total Hadir (termasuk Telat)
+  hadirTepatWaktu: number;
+  telat: number;
+  izin: number;
+  alpha: number;
+  totalSesi: number;
+  persentaseKehadiran: number;
+  batasMinimalSaatItu: number;
+  statusPeringatan: StatusPeringatanGuru;
+  nomorSurat?: string;
+  urutanNomorSurat?: number;
+  tanggalTerbitSurat?: string;
+  tanggalPembinaanSelesai?: string;
+  dikonfirmasiOleh?: string;
+  catatanPembinaan?: string;
+  customIsiSurat?: Partial<TemplateSuratPeringatanGuru>;
+  riwayatStatus: Array<{
+    tanggal: string;
+    status: StatusPeringatanGuru;
+    oleh: string;
+    keterangan: string;
+  }>;
+  updatedAt: string;
+}
+
+export interface PeringatanGuruAuditLog {
+  id: string;
+  timestamp: string;
+  aksi:
+    | 'UBAH_BATAS_GURU'
+    | 'UBAH_TEMPLATE_SP'
+    | 'TERBITKAN_SP'
+    | 'EDIT_SP'
+    | 'KONFIRMASI_PEMBINAAN';
+  aktor: string;
+  namaGuru?: string;
+  periodeBulan?: string;
+  nomorSurat?: string;
+  detail: string;
+}
+
+// ==========================================
+// MODUL UJIAN TERPISAH: MUHAFADZOH, BACA KITAB, KOREKSIAN KITAB & TAKZIRAN
+// ==========================================
+
+export type KelasMadrasah =
+  | '1 TSANAWIYAH'
+  | '2 TSANAWIYAH'
+  | '3 TSANAWIYAH'
+  | '1 ALIYAH'
+  | '2 ALIYAH'
+  | '3 ALIYAH';
+
+export interface MuhafadzohClassTargetConfig {
+  kelas: string;
+  namaNadzhomGanjil: string;
+  targetGanjil: number; // jumlah bait target Semester Ganjil
+  namaNadzhomGenap: string;
+  targetGenap: number; // jumlah bait target Semester Genap
+  catatan?: string;
+}
+
+export interface MuhafadzohRekapRowConfig {
+  id: string;
+  tahunAjaran: string;
+  kelas: string;
+  namaNadzhom: string;
+  targetBait: number;
+  totalSantri: number;
+  putra: number;
+  putri: number;
+  jayyid: number;
+  mutawasit: number;
+  rodi: number;
+  persentaseLulus: number;
+  keterangan?: string;
+  isManualOverride?: boolean;
+}
+
+export interface MuhafadzohAngkatanRankingRow {
+  id: string;
+  angkatan: string;
+  kelas: string;
+  tahunAjaran: string;
+  namaNadzhom: string;
+  totalSantri: number;
+  putra: number;
+  putri: number;
+  jayyid: number;
+  mutawasit: number;
+  rodi: number;
+  rataRataHafalan: number;
+  persentaseCapaian: number;
+  gelarPrestasi: string;
+  catatan?: string;
+  isManualOverride?: boolean;
+}
+
+export interface KoreksianBatasMateriRow {
+  id: string;
+  kelas: string;
+  no: number;
+  pelajaran: string; // Terkoneksi ke mapel & kitab Kurikulum
+  kitab?: string;
+  mulaiMateri: string;
+  batasAkhir: string;
+  kurikulumId?: string;
+}
+
+export interface BacaKitabClassConfig {
+  kelas: string;
+  kitabStandar: string;
+  nilaiRataRataMinimal: number;
+}
+
+export interface UjianTakziranSettings {
+  durasiPengumpulanHari: number;
+  tanggalBatasDefault?: string; // Opsional tanggal spesifik YYYY-MM-DD
+  tingkatAwal: 'Ringan' | 'Sedang' | 'Berat';
+  tingkatJikaTerlambat: 'Sedang' | 'Berat';
+  namaLembaga: string;
+  namaMadrasah: string;
+  subKopSurat: string;
+  alamatLembaga: string;
+  formatNomorSurat: string;
+  judulSurat: string;
+  ketentuanTakziranMuhafadzoh: string;
+  ketentuanTakziranBacaKitab: string;
+  ketentuanTakziranKoreksian: string;
+  isiPeringatanBatasAkhir: string;
+  jabatanPenandatangan1: string;
+  namaPenandatangan1: string;
+  jabatanPenandatangan2: string;
+  namaPenandatangan2: string;
+  jabatanPenandatangan3: string;
+  namaPenandatangan3: string;
+  kotaSurat: string;
+  ukuranKertas: 'A4' | 'F4';
+}
+
+export interface UjianExamGlobalConfig {
+  muhafadzohTargets: MuhafadzohClassTargetConfig[];
+  muhafadzohRekapRows: MuhafadzohRekapRowConfig[];
+  muhafadzohAngkatanRanking: MuhafadzohAngkatanRankingRow[];
+  bacaKitabRataRataGlobal: number;
+  bacaKitabPerKelas: BacaKitabClassConfig[];
+  koreksianBatasMateri: KoreksianBatasMateriRow[];
+  takziranSettings: UjianTakziranSettings;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface MuhafadzohSemesterRecord {
+  id: string; // `${idSantri}__${tahunAjaran}`
+  idSantri: string;
+  namaSantri: string;
+  kelas: string;
+  tahunAjaran: string;
+  hafalanGanjil: number;
+  hafalanGenap: number;
+  nilaiKelancaran?: number;
+  statusHerGanjil?: 'Belum Her' | 'Sedang Her' | 'Lulus Her';
+  statusHerGenap?: 'Belum Her' | 'Sedang Her' | 'Lulus Her';
+  catatan?: string;
+  updatedAt: string;
+}
+
+export interface BacaKitabRecord {
+  id: string; // `${idSantri}__${tahunAjaran}`
+  idSantri: string;
+  namaSantri: string;
+  kelas: string;
+  tahunAjaran: string;
+  kitab: string;
+  nilai: number;
+  predikat?: string;
+  penguji?: string;
+  tanggal?: string;
+  catatan?: string;
+  updatedAt: string;
+}
+
+export type KoreksianStatus = 'Tam' | 'Naqish';
+
+export interface KoreksianKitabRecord {
+  id: string; // `${idSantri}__${tahunAjaran}`
+  idSantri: string;
+  namaSantri: string;
+  kelas: string;
+  tahunAjaran: string;
+  kitab: string;
+  statusKoreksian: KoreksianStatus; // 'Tam' (Makna Komplit) | 'Naqish' (Makna Kurang)
+  nilaiAngka?: number;
+  catatanKekurangan?: string;
+  pengoreksi?: string;
+  tanggal?: string;
+  statusHer?: 'Belum Her' | 'Sedang Her' | 'Lulus Her';
+  updatedAt: string;
+}
+
+export type KategoriUjianTakziran = 'muhafadzoh' | 'baca_kitab' | 'koreksian';
+
+export type StatusUjianTakziran =
+  | 'Belum Diterbitkan'
+  | 'Sedang Dikerjakan'
+  | 'Selesai'
+  | 'Tidak Mengumpulkan (Terlambat)';
+
+export type TingkatTakziranUjian = 'Ringan' | 'Sedang' | 'Berat';
+
+export interface UjianTakziranRecord {
+  id: string; // `${kategori}__${idSantri}__${periodeTag}`
+  kategori: KategoriUjianTakziran;
+  idSantri: string;
+  namaSantri: string;
+  nis: string;
+  kelas: string;
+  namaWaliKelas?: string;
+  periodeTag: string; // e.g. '2026/2027' or 'Ganjil 2026/2027'
+  alasanTakziran: string; // e.g. 'Nilai Rodi (Hafalan 80/125 Bait)', 'Naqish (Makna Kurang)', 'Nilai Baca Kitab 68 < Rata-rata 75'
+  detailNilai: string;
+  statusTakziran: StatusUjianTakziran;
+  tingkatTakziran: TingkatTakziranUjian;
+  kartuBerlaku: boolean;
+  nomorSurat?: string;
+  urutanNomorSurat?: number;
+  tanggalDicetak?: string; // ISO
+  batasAkhirPengumpulan?: string; // YYYY-MM-DD or ISO
+  tanggalDikumpulkan?: string; // ISO
+  dikonfirmasiOleh?: string;
+  tanggalNaikTingkat?: string; // ISO
+  catatan?: string;
+  updatedAt: string;
+}
+
+
+
