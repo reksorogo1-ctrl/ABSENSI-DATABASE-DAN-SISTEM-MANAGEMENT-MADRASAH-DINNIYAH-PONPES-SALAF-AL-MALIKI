@@ -1411,7 +1411,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
   return (
     <div 
-      className="min-h-screen bg-[#03140c] bg-cover bg-center text-[#f3e5ab] flex flex-col md:flex-row transition-all duration-300 w-full overflow-x-hidden font-sans selection:bg-[#d4af37] selection:text-black"
+      className="min-h-screen bg-[#03140c] bg-cover bg-center text-[#f3e5ab] flex flex-col md:flex-row transition-all duration-300 w-full overflow-x-clip font-sans selection:bg-[#d4af37] selection:text-black"
       style={settings.background_url ? { backgroundImage: `linear-gradient(rgba(3, 20, 12, 0.94), rgba(3, 20, 12, 0.97)), url(${settings.background_url})` } : undefined}
     >
       {/* MOBILE TOP BAR (Phone & Small Screens: iOS & Android) - Compact Sticky Header dengan Tombol Garis 3 */}
@@ -1546,8 +1546,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
         </div>
       )}
 
-      {/* DESKTOP & LAPTOP SIDEBAR (Mode PC, Laptop & Tablet) */}
-      <aside className="hidden md:flex build-sidebar w-64 lg:w-72 bg-[#052216]/95 border-r border-[#d4af37]/30 p-4 lg:p-5 flex-col justify-between shrink-0 shadow-2xl backdrop-blur-md md:sticky md:top-0 md:h-screen md:overflow-y-auto z-30">
+      {/* DESKTOP & LAPTOP SIDEBAR (Mode PC, Laptop & Tablet - Penuh Sampai Bawah Halaman) */}
+      <aside className="hidden md:flex build-sidebar w-64 lg:w-72 bg-[#052216]/95 border-r border-[#d4af37]/30 p-4 lg:p-5 flex-col shrink-0 self-stretch min-h-screen shadow-2xl backdrop-blur-md z-30">
+        <div className="flex flex-col justify-between md:sticky md:top-4 lg:top-5 md:min-h-[calc(100vh-2.5rem)] md:max-h-[calc(100vh-2.5rem)] md:overflow-y-auto no-scrollbar">
         <div className="space-y-5">
           {/* Logo & Identitas Pesantren di Sidebar */}
           <div className="flex items-center gap-3 pb-4 border-b border-[#d4af37]/25">
@@ -1643,6 +1644,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
             <LogOut className="w-3.5 h-3.5 shrink-0" />
             <span>Keluar Panel</span>
           </button>
+        </div>
         </div>
       </aside>
 
