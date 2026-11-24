@@ -296,7 +296,7 @@ export const Storage5TBManager: React.FC<Storage5TBManagerProps> = ({
           <div className="space-y-1">
             <div className="w-full h-2.5 rounded-full bg-black/60 overflow-hidden p-0.5 border border-[#d4af37]/30">
               <div 
-                className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-400 to-[#d4af37] transition-all duration-700 shadow-sm"
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-400 to-[#d4af37] transition-transform duration-150 shadow-sm"
                 style={{ width: `${Math.min(100, Math.max(2, usedPercentage))}%` }}
               />
             </div>
@@ -502,7 +502,7 @@ export const Storage5TBManager: React.FC<Storage5TBManagerProps> = ({
             </div>
             <div className="w-full h-3 rounded-full bg-zinc-800 overflow-hidden">
               <div 
-                className="h-full rounded-full bg-gradient-to-r from-amber-400 to-[#d4af37] transition-all duration-300"
+                className="h-full rounded-full bg-gradient-to-r from-amber-400 to-[#d4af37] transition-transform duration-150"
                 style={{ width: `${uploadProgress}%` }}
               />
             </div>

@@ -98,7 +98,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
       style={settings?.background_url ? { backgroundImage: `linear-gradient(rgba(4, 26, 19, 0.92), rgba(4, 26, 19, 0.96)), url(${settings.background_url})` } : undefined}
     >
       {/* Top Banner / Navigation for Guardian */}
-      <header className="build-header bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-emerald-400/30 border-b-2 border-black/60 sticky top-0 z-30 px-4 py-3 sm:px-6 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5),0_4px_10px_-2px_rgba(16,185,129,0.08)]">
+      <header className="build-header bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-emerald-400/25 border-b-2 border-black/60 sticky top-0 z-30 px-4 py-3 sm:px-6 shadow-md">
         <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
             <BrandLogos settings={settings} size="xs" gap="gap-1.5" idPrefix="wali-header" />
@@ -327,7 +327,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
           {/* 3 KOLOM SEPERTI PERMINTAAN USER: (NILAI KOREKSIAN KITAB), (NILAI MUHAFADZOH), (NILAI BACA KITAB) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
             {/* 1. KOLOM NILAI KOREKSIAN KITAB */}
-            <div className="card-3d-deep rounded-2xl p-4 sm:p-5 border border-[#d4af37]/35 flex flex-col justify-between space-y-3 bg-[#031d12]/90 shadow-xl relative overflow-hidden group hover:border-[#d4af37] transition-all">
+            <div className="card-3d-deep rounded-2xl p-4 sm:p-5 border-t border-l border-emerald-400/25 border-b-2 border-r border-black/60 flex flex-col justify-between space-y-3 shadow-md relative overflow-hidden group md:hover:border-[#d4af37] transition-colors duration-150">
               <div className="space-y-2">
                 <div className="flex items-center justify-between border-b border-[#d4af37]/20 pb-2.5">
                   <span className="text-[10px] uppercase font-black tracking-wider text-[#d4af37] flex items-center gap-1.5">
@@ -370,7 +370,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
             </div>
 
             {/* 2. KOLOM NILAI MUHAFADZOH (HAFALAN) */}
-            <div className="card-3d-deep rounded-2xl p-4 sm:p-5 border border-emerald-500/40 flex flex-col justify-between space-y-3 bg-[#031d12]/90 shadow-xl relative overflow-hidden group hover:border-emerald-400 transition-all">
+            <div className="card-3d-deep rounded-2xl p-4 sm:p-5 border-t border-l border-emerald-400/25 border-b-2 border-r border-black/60 flex flex-col justify-between space-y-3 shadow-md relative overflow-hidden group md:hover:border-emerald-400 transition-colors duration-150">
               <div className="space-y-2">
                 <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2.5">
                   <span className="text-[10px] uppercase font-black tracking-wider text-emerald-300 flex items-center gap-1.5">
@@ -413,7 +413,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
             </div>
 
             {/* 3. KOLOM NILAI BACA KITAB */}
-            <div className="card-3d-deep rounded-2xl p-4 sm:p-5 border border-blue-500/40 flex flex-col justify-between space-y-3 bg-[#031d12]/90 shadow-xl relative overflow-hidden group hover:border-blue-400 transition-all">
+            <div className="card-3d-deep rounded-2xl p-4 sm:p-5 border-t border-l border-emerald-400/25 border-b-2 border-r border-black/60 flex flex-col justify-between space-y-3 shadow-md relative overflow-hidden group md:hover:border-blue-400 transition-colors duration-150">
               <div className="space-y-2">
                 <div className="flex items-center justify-between border-b border-blue-500/20 pb-2.5">
                   <span className="text-[10px] uppercase font-black tracking-wider text-blue-300 flex items-center gap-1.5">

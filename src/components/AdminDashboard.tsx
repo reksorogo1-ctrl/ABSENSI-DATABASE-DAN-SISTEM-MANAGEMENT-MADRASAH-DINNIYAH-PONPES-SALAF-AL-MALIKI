@@ -26,7 +26,6 @@ import { getOrCreateSantriHistory } from '../lib/kenaikanKelasService';
 import { queryPaginatedData } from '../lib/scalableDatabase';
 import { formatBytes, TOTAL_CAPACITY_5TB } from '../lib/scalableStorage';
 import { PWAInstallButton } from './PWAInstallButton';
-import { motion } from 'motion/react';
 import {
   Kpi3DCard,
   Pie3DChart,
@@ -3088,11 +3087,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   return (
     <div 
-      className="min-h-screen bg-[#041A13] bg-cyber-emerald-grid bg-cover bg-center text-[#D1FAE5] flex flex-col md:flex-row transition-all duration-300 w-full overflow-x-hidden"
+      className="min-h-screen bg-[#041A13] bg-cyber-emerald-grid bg-cover bg-center text-[#D1FAE5] flex flex-col md:flex-row w-full overflow-x-hidden"
       style={settings.background_url ? { backgroundImage: `linear-gradient(rgba(4, 26, 19, 0.92), rgba(4, 26, 19, 0.96)), url(${settings.background_url})` } : undefined}
     >
       {/* MOBILE TOP BAR (Phone & Small Screens) */}
-      <div className="md:hidden flex items-center justify-between p-3.5 bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-b-2 border-black/60 sticky top-0 z-40 w-full shadow-[0_10px_25px_-5px_rgba(0,0,0,0.55),0_4px_10px_-2px_rgba(16,185,129,0.08)]">
+      <div className="md:hidden flex items-center justify-between p-3.5 bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-b-2 border-black/60 sticky top-0 z-40 w-full shadow-md">
         <div className="flex items-center gap-2.5 overflow-hidden">
           <BrandLogos settings={settings} size="xs" idPrefix="admin-mob-header" />
           <div className="overflow-hidden">
@@ -3106,20 +3105,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <PWAInstallButton />
-          <motion.button
+          <button
             type="button"
-            whileTap={{ scale: 0.98 }}
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-gradient-to-b from-emerald-500/20 to-emerald-950/70 border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 text-[#D4AF37] hover:text-white shadow-inner transition"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-gradient-to-b from-emerald-500/20 to-emerald-950/70 border-t border-l border-emerald-400/25 border-b-2 border-r border-black/60 text-[#D4AF37] md:hover:text-white active:scale-95 transition-transform duration-75 select-none touch-manipulation shadow-inner"
             aria-label="Toggle Menu Navigasi"
           >
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </motion.button>
+          </button>
         </div>
       </div>
 
       {/* SIDEBAR */}
-      <aside className={`build-sidebar w-full md:w-72 bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-r border-black/60 border-t border-emerald-400/25 p-4 sm:p-5 flex flex-col justify-between shrink-0 shadow-[10px_0_28px_-6px_rgba(0,0,0,0.58)] ${isMobileMenuOpen ? 'flex' : 'hidden md:flex'}`}>
+      <aside className={`build-sidebar w-full md:w-72 bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-r border-black/60 border-t border-emerald-400/25 p-4 sm:p-5 flex flex-col justify-between shrink-0 shadow-md ${isMobileMenuOpen ? 'flex' : 'hidden md:flex'}`}>
         <div className="space-y-6">
           {/* Logo & Header */}
           <div className="flex items-center gap-3 pb-4 border-b border-[#d4af37]/20">
@@ -3398,7 +3396,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               />
             </div>
 
-            {/* Sub Metrics Grid - Physical 3D Bevel Micro Chips */}
+            {/* Sub Metrics Grid - 60 FPS Physical 3D Bevel Micro Chips (Zero Motion List Overhead) */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
               {[
                 { label: 'HADIR SANTRI', val: stats.hadirSantri, color: 'text-emerald-300' },
@@ -3409,31 +3407,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 { label: 'TERLAMBAT GURU', val: stats.terlambatGuru, color: 'text-orange-300' },
                 { label: 'IZIN GURU', val: stats.izinGuru, color: 'text-[#F5D76E]' },
                 { label: 'ALPHA GURU', val: stats.alphaGuru, color: 'text-rose-400' },
-              ].map((chip, idx) => (
-                <motion.div
+              ].map((chip) => (
+                <div
                   key={chip.label}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.28, delay: 0.08 + idx * 0.03 }}
-                  className="bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 rounded-2xl p-3 text-center shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5),0_4px_10px_-2px_rgba(16,185,129,0.08)] hover:-translate-y-1 hover:shadow-[0_15px_30px_-5px_rgba(16,185,129,0.18)] active:scale-[0.98] transition-all duration-300 ease-out"
+                  className="bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/25 border-b-2 border-r border-black/60 rounded-2xl p-3 text-center shadow-md md:hover:-translate-y-1 active:scale-95 transition-transform duration-75 select-none touch-manipulation"
                 >
                   <div className="text-[10px] font-bold text-[#D1FAE5] tracking-wider">{chip.label}</div>
-                  <div className={`text-xl font-extrabold mt-0.5 font-mono tabular-nums drop-shadow-[0_2px_4px_rgba(0,0,0,0.7)] ${chip.color}`}>
+                  <div className={`text-xl font-extrabold mt-0.5 font-mono tabular-nums ${chip.color}`}>
                     {chip.val}
                   </div>
-                </motion.div>
+                </div>
               ))}
             </div>
 
             {/* 3D ANALYTICS SUITE ROW 1: FLOATING 3D SPLINE LINE CHART + 3D ISOMETRIC BAR CHART */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* 3D Floating Glowing Line Chart Card */}
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: 0.12 }}
-                className="surface-3d-bevel group p-5 sm:p-6 rounded-2xl overflow-hidden relative flex flex-col justify-between"
-              >
+              <div className="surface-3d-bevel group p-5 sm:p-6 rounded-2xl overflow-hidden relative flex flex-col justify-between">
                 <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#10B981]/80 to-transparent pointer-events-none" />
 
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 pb-3.5 border-b border-emerald-500/20 relative z-10">
@@ -3442,7 +3432,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <TrendingUp className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="text-sm sm:text-base font-extrabold text-white tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]">
+                      <h3 className="text-sm sm:text-base font-extrabold text-white tracking-wide">
                         Tren Kehadiran 3D Real-Time
                       </h3>
                       <p className="text-[11px] text-[#D1FAE5] font-medium">
@@ -3488,15 +3478,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="w-full relative z-10">
                   <Line3DChart data={trendData} />
                 </div>
-              </motion.div>
+              </div>
 
               {/* 3D Isometric Bar Chart Card */}
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: 0.18 }}
-                className="surface-3d-bevel group p-5 sm:p-6 rounded-2xl space-y-4 flex flex-col justify-between overflow-hidden relative"
-              >
+              <div className="surface-3d-bevel group p-5 sm:p-6 rounded-2xl space-y-4 flex flex-col justify-between overflow-hidden relative">
                 <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#D4AF37]/80 to-transparent pointer-events-none" />
 
                 <div className="relative z-10">
@@ -3505,7 +3490,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <BarChart3 className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="text-sm sm:text-base font-extrabold text-white tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]">
+                      <h3 className="text-sm sm:text-base font-extrabold text-white tracking-wide">
                         Distribusi Absensi 3D Isometrik
                       </h3>
                       <p className="text-[11px] text-[#D1FAE5] font-medium">
@@ -3531,29 +3516,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span className="w-2 h-2 rounded-full bg-[#D4AF37]" />
                     <span>Persentase Hadir Total:</span>
                   </span>
-                  <span className="font-extrabold text-[#F5D76E] font-mono tabular-nums text-sm px-3 py-1 rounded-lg bg-gradient-to-b from-[#082E22] to-[#03140E] border-t border-l border-amber-400/35 border-b border-r border-black/60 drop-shadow-[0_2px_4px_rgba(0,0,0,0.7)]">
+                  <span className="font-extrabold text-[#F5D76E] font-mono tabular-nums text-sm px-3 py-1 rounded-lg bg-gradient-to-b from-[#082E22] to-[#03140E] border-t border-l border-amber-400/35 border-b border-r border-black/60">
                     {Math.round(((stats.percentSantri || 0) + (stats.percentGuru || 0)) / 2)}%
                   </span>
                 </div>
-              </motion.div>
+              </div>
             </div>
 
             {/* 3D ANALYTICS SUITE ROW 2: REALISTIC 3D PERSPECTIVE PIE CHARTS (SANTRI & USTADZ) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* 3D Pie Chart 1: Santri */}
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: 0.22 }}
-                className="surface-3d-bevel group p-5 sm:p-6 rounded-2xl space-y-3 relative overflow-hidden"
-              >
+              <div className="surface-3d-bevel group p-5 sm:p-6 rounded-2xl space-y-3 relative overflow-hidden">
                 <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#10B981]/80 to-transparent pointer-events-none" />
                 <div className="flex items-center space-x-3 pb-3 border-b border-emerald-500/20">
                   <div className="w-9 h-9 rounded-xl bg-gradient-to-b from-emerald-500/20 to-emerald-950/60 border-t border-l border-emerald-300/30 border-b border-r border-black/60 shadow-inner flex items-center justify-center text-[#10B981]">
                     <PieChartIcon className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="text-sm sm:text-base font-extrabold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]">Komposisi Presensi Santri 3D (%)</h3>
+                    <h3 className="text-sm sm:text-base font-extrabold text-white">Komposisi Presensi Santri 3D (%)</h3>
                     <p className="text-[11px] text-[#D1FAE5]">Proporsi interaktif Hadir, Izin, Sakit, & Alpha</p>
                   </div>
                 </div>
@@ -3569,22 +3549,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     ]}
                   />
                 </div>
-              </motion.div>
+              </div>
 
               {/* 3D Pie Chart 2: Guru / Ustadz */}
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: 0.26 }}
-                className="surface-3d-bevel group p-5 sm:p-6 rounded-2xl space-y-3 relative overflow-hidden"
-              >
+              <div className="surface-3d-bevel group p-5 sm:p-6 rounded-2xl space-y-3 relative overflow-hidden">
                 <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#D4AF37]/80 to-transparent pointer-events-none" />
                 <div className="flex items-center space-x-3 pb-3 border-b border-emerald-500/20">
                   <div className="w-9 h-9 rounded-xl bg-gradient-to-b from-emerald-500/20 to-emerald-950/60 border-t border-l border-emerald-300/30 border-b border-r border-black/60 shadow-inner flex items-center justify-center text-[#D4AF37]">
                     <PieChartIcon className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="text-sm sm:text-base font-extrabold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]">Komposisi Presensi Ustadz / Guru 3D (%)</h3>
+                    <h3 className="text-sm sm:text-base font-extrabold text-white">Komposisi Presensi Ustadz / Guru 3D (%)</h3>
                     <p className="text-[11px] text-[#D1FAE5]">Proporsi interaktif Hadir, Terlambat, Izin, & Alpha</p>
                   </div>
                 </div>
@@ -3600,7 +3575,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     ]}
                   />
                 </div>
-              </motion.div>
+              </div>
             </div>
 
             {/* ========================================================================= */}
@@ -6861,7 +6836,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 });
                                 setShowAddJadwalModal(true);
                               }}
-                              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-600/30 hover:from-[#d4af37] hover:to-amber-400 text-amber-300 hover:text-black font-extrabold border border-amber-400/50 flex items-center justify-center gap-1.5 transition-all shadow-md hover:scale-105 mx-auto text-xs"
+                              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-600/30 md:hover:from-[#d4af37] md:hover:to-amber-400 text-amber-300 md:hover:text-black font-extrabold border border-amber-400/50 flex items-center justify-center gap-1.5 transition-transform duration-150 active:scale-95 select-none touch-manipulation shadow-md md:hover:scale-105 mx-auto text-xs"
                               title="Setting / Revisi Jadwal Ini"
                             >
                               <Settings2 className="w-3.5 h-3.5" />
@@ -7061,7 +7036,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 });
                                 setShowAddJadwalModal(true);
                               }}
-                              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-600/30 hover:from-[#d4af37] hover:to-amber-400 text-amber-300 hover:text-black font-extrabold border border-amber-400/50 flex items-center justify-center gap-1.5 transition-all shadow-md hover:scale-105 mx-auto text-xs"
+                              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-600/30 md:hover:from-[#d4af37] md:hover:to-amber-400 text-amber-300 md:hover:text-black font-extrabold border border-amber-400/50 flex items-center justify-center gap-1.5 transition-transform duration-150 active:scale-95 select-none touch-manipulation shadow-md md:hover:scale-105 mx-auto text-xs"
                               title="Setting / Revisi Jadwal Ini"
                             >
                               <Settings2 className="w-3.5 h-3.5" />
@@ -7997,10 +7972,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     key={kls}
                     type="button"
                     onClick={() => setSelectedAngkatanSantri(kls)}
-                    className={`px-4 py-2.5 rounded-xl text-xs font-black tracking-wide transition-all transform active:scale-95 flex items-center space-x-2 border ${
+                    className={`px-4 py-2.5 rounded-xl text-xs font-black tracking-wide transition-transform duration-75 active:scale-95 select-none touch-manipulation flex items-center space-x-2 border ${
                       isSel
-                        ? 'btn-3d-gold text-black border-[#f5e298] shadow-[0_6px_20px_rgba(212,175,55,0.45),inset_0_2px_2px_rgba(255,255,255,0.6)] scale-105 ring-2 ring-[#f5e298]'
-                        : 'btn-3d-dark text-[#f3e5ab] border-[#d4af37]/40 hover:border-[#d4af37] hover:scale-102'
+                        ? 'btn-3d-gold text-black border-[#f5e298] shadow-md scale-105 ring-2 ring-[#f5e298]'
+                        : 'btn-3d-dark text-[#f3e5ab] border-[#d4af37]/40 md:hover:border-[#d4af37]'
                     }`}
                   >
                     <span className={isSel ? 'text-black font-extrabold' : 'text-[#f3e5ab]'}>{kls}</span>

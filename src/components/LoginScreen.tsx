@@ -74,20 +74,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
   ];
 
   const roleBtn = (m: LoginMode, label: string, Icon: React.ElementType, colSpanCls = '') => (
-    <motion.button
+    <button
       type="button"
-      whileTap={{ scale: 0.98 }}
       data-testid={`login-role-${m}`}
       onClick={() => pickMode(m)}
-      className={`login-role-btn w-full min-h-[48px] flex flex-row sm:flex-col items-center justify-center gap-2 sm:gap-1.5 py-3 sm:py-3.5 px-3 rounded-2xl transition-all duration-300 ease-out uppercase text-[11px] sm:text-xs font-black tracking-wider box-border ${colSpanCls} ${
+      className={`login-role-btn w-full min-h-[48px] flex flex-row sm:flex-col items-center justify-center gap-2 sm:gap-1.5 py-3 sm:py-3.5 px-3 rounded-2xl transition-transform duration-75 active:scale-95 select-none touch-manipulation uppercase text-[11px] sm:text-xs font-black tracking-wider box-border ${colSpanCls} ${
         loginMode === m
-          ? 'btn-3d-gold text-black border-[#faebaa] shadow-[0_8px_22px_rgba(212,175,55,0.42)] ring-2 ring-[#faebaa]/90'
-          : 'bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 text-[#D1FAE5] shadow-[0_8px_20px_-5px_rgba(0,0,0,0.5)] hover:-translate-y-1 hover:shadow-[0_14px_26px_-5px_rgba(16,185,129,0.18)]'
+          ? 'btn-3d-gold text-black border-[#faebaa] shadow-md ring-2 ring-[#faebaa]/90'
+          : 'bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/25 border-b-2 border-r border-black/60 text-[#D1FAE5] shadow-md md:hover:-translate-y-1'
       }`}
     >
       <Icon className="w-5 h-5 shrink-0" />
       <span className="whitespace-normal text-center leading-tight">{label}</span>
-    </motion.button>
+    </button>
   );
 
   const eyeBtn = (
@@ -141,11 +140,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
         <div className="flex flex-col justify-between gap-8 login-left">
           {/* top pills */}
           <div className="flex flex-wrap items-center gap-3 login-reveal" style={{ animationDelay: '0.05s' }}>
-            <div className="flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5),0_4px_10px_-2px_rgba(16,185,129,0.08)]">
+            <div className="flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/25 border-b-2 border-r border-black/60 shadow-md">
               <Star className="w-4 h-4 text-[#D4AF37]" />
               <span className="text-[11px] sm:text-xs font-bold tracking-[0.18em] text-[#D1FAE5]">Sistem Informasi Akademik & Manajemen</span>
             </div>
-            <div className="flex items-center gap-2.5 px-5 py-2.5 rounded-2xl bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5),0_4px_10px_-2px_rgba(16,185,129,0.08)]">
+            <div className="flex items-center gap-2.5 px-5 py-2.5 rounded-2xl bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/25 border-b-2 border-r border-black/60 shadow-md">
               <Calendar className="w-4 h-4 text-[#D4AF37]" />
               <span className="text-[11px] sm:text-xs font-bold tracking-[0.14em] text-[#D1FAE5]">TA 1447-1448 H / 2026-2027 M</span>
             </div>
@@ -179,7 +178,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
           </div>
 
           {/* bottom values */}
-          <div className="login-reveal rounded-2xl bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 px-6 sm:px-10 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-0 sm:divide-x divide-emerald-500/20 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5),0_4px_10px_-2px_rgba(16,185,129,0.08)]" style={{ animationDelay: '0.15s' }}>
+          <div className="login-reveal rounded-2xl bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/25 border-b-2 border-r border-black/60 px-6 sm:px-10 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-0 sm:divide-x divide-emerald-500/20 shadow-md" style={{ animationDelay: '0.15s' }}>
             {[
               { Icon: BookOpen, t: 'Ilmu', s: 'Sebagai Landasan' },
               { Icon: HeartHandshake, t: 'Akhlak', s: 'Sebagai Tujuan' },
@@ -320,10 +319,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
                   <button type="button" data-testid="forgot-password-btn" onClick={() => setShowForgotPasswordModal(true)} className="text-[#faebaa] hover:text-white underline underline-offset-2 font-bold tracking-wider">Lupa Kata Sandi?</button>
                 </div>
 
-                <motion.button type="submit" whileTap={{ scale: 0.97 }} data-testid="login-submit-btn" className="login-gold-btn w-full min-h-[48px] py-4 rounded-2xl text-black font-black text-sm sm:text-base tracking-[0.12em] flex items-center justify-center gap-3 hover:scale-[1.015] transition-transform mt-2">
+                <button type="submit" data-testid="login-submit-btn" className="login-gold-btn w-full min-h-[48px] py-4 rounded-2xl text-black font-black text-sm sm:text-base tracking-[0.12em] flex items-center justify-center gap-3 md:hover:scale-[1.015] active:scale-95 transition-transform duration-75 select-none touch-manipulation mt-2">
                   <span>Masuk ke Sistem</span>
                   <ArrowRight className="w-5 h-5 stroke-[3]" />
-                </motion.button>
+                </button>
 
                 {loginMode === 'admin' && (
                   <div className="pt-2">

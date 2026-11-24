@@ -110,11 +110,11 @@ export const Kpi3DCard: React.FC<Kpi3DCardProps> = ({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.32, delay: index * 0.05, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.22, delay: index * 0.04, ease: [0.16, 1, 0.3, 1] }}
       onClick={onClick}
-      className={`cyber-kpi-card group relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5),0_4px_10px_-2px_rgba(16,185,129,0.08)] hover:-translate-y-1 hover:shadow-[0_15px_30px_-5px_rgba(16,185,129,0.18)] active:scale-[0.98] transition-all duration-300 ease-out p-5 ${
+      className={`cyber-kpi-card group relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/25 border-b-2 border-r border-black/60 shadow-md md:hover:-translate-y-1 active:scale-95 transition-transform duration-75 select-none touch-manipulation p-5 ${
         onClick ? 'cursor-pointer' : ''
       }`}
     >

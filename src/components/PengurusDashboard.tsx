@@ -1411,11 +1411,11 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
   return (
     <div 
-      className="min-h-screen bg-[#041A13] bg-cyber-emerald-grid bg-cover bg-center text-[#D1FAE5] flex flex-col md:flex-row transition-all duration-300 w-full overflow-x-clip font-sans selection:bg-[#D4AF37] selection:text-black"
+      className="min-h-screen bg-[#041A13] bg-cyber-emerald-grid bg-cover bg-center text-[#D1FAE5] flex flex-col md:flex-row w-full overflow-x-clip font-sans selection:bg-[#D4AF37] selection:text-black"
       style={settings.background_url ? { backgroundImage: `linear-gradient(rgba(4, 26, 19, 0.92), rgba(4, 26, 19, 0.96)), url(${settings.background_url})` } : undefined}
     >
       {/* MOBILE TOP BAR (Phone & Small Screens: iOS & Android) - Compact Sticky Header dengan Tombol Garis 3 */}
-      <div className="md:hidden flex items-center justify-between px-3.5 py-2.5 min-h-[56px] bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-b-2 border-black/60 sticky top-0 z-50 w-full shadow-[0_10px_25px_-5px_rgba(0,0,0,0.55),0_4px_10px_-2px_rgba(16,185,129,0.08)]">
+      <div className="md:hidden flex items-center justify-between px-3.5 py-2.5 min-h-[56px] bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-b-2 border-black/60 sticky top-0 z-50 w-full shadow-md">
         <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
           <BrandLogos settings={settings} size="xs" idPrefix="pengurus-mob-header" />
           <div className="min-w-0 flex-1">
@@ -1547,7 +1547,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       )}
 
       {/* DESKTOP & LAPTOP SIDEBAR (Mode PC, Laptop & Tablet - Penuh Sampai Bawah Halaman) */}
-      <aside className="hidden md:flex build-sidebar w-64 lg:w-72 bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-r border-black/60 border-t border-emerald-400/25 p-4 lg:p-5 flex-col shrink-0 self-stretch min-h-screen shadow-[10px_0_28px_-6px_rgba(0,0,0,0.58)] z-30">
+      <aside className="hidden md:flex build-sidebar w-64 lg:w-72 bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-r border-black/60 border-t border-emerald-400/25 p-4 lg:p-5 flex-col shrink-0 self-stretch min-h-screen shadow-md z-30">
         <div className="flex flex-col justify-between md:sticky md:top-4 lg:top-5 md:min-h-[calc(100vh-2.5rem)] md:max-h-[calc(100vh-2.5rem)] md:overflow-y-auto no-scrollbar">
         <div className="space-y-5">
           {/* Logo & Identitas Pesantren di Sidebar */}
@@ -2218,7 +2218,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                         <button
                           type="button"
                           onClick={handleHadirNormal}
-                          className="btn-3d-hadir-yellow w-full max-w-xs sm:max-w-sm text-center flex items-center justify-center gap-2.5 py-3 px-5 rounded-2xl shadow-xl transition-all"
+                          className="btn-3d-hadir-yellow w-full max-w-xs sm:max-w-sm text-center flex items-center justify-center gap-2.5 py-3 px-5 rounded-2xl shadow-md transition-transform duration-75 active:scale-95 select-none touch-manipulation"
                         >
                           <Check className="w-5 h-5 stroke-[3.5] text-[#1a1202]" />
                           <span className="text-base font-black tracking-wider uppercase text-[#1a1202]">
@@ -3281,7 +3281,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                           key={kls}
                           type="button"
                           onClick={() => setJadwalTsAngkatan(kls)}
-                          className={`text-xs font-black transition-all shadow-md ${
+                          className={`text-xs font-black transition-transform duration-75 active:scale-95 select-none touch-manipulation shadow-md ${
                             active
                               ? 'btn-pill-gold-3d scale-102'
                               : 'btn-pill-dark-3d'
@@ -3304,7 +3304,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                           key={day}
                           type="button"
                           onClick={() => setJadwalTsDay(day)}
-                          className={`text-xs font-black transition-all shadow-md ${
+                          className={`text-xs font-black transition-transform duration-75 active:scale-95 select-none touch-manipulation shadow-md ${
                             active
                               ? 'btn-pill-gold-3d scale-102'
                               : 'btn-pill-dark-3d'
@@ -3401,7 +3401,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                           key={kls}
                           type="button"
                           onClick={() => setJadwalAlAngkatan(kls)}
-                          className={`text-xs font-black transition-all shadow-md ${
+                          className={`text-xs font-black transition-transform duration-75 active:scale-95 select-none touch-manipulation shadow-md ${
                             active
                               ? 'btn-pill-gold-3d scale-102'
                               : 'btn-pill-dark-3d'
@@ -3424,7 +3424,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                           key={malam}
                           type="button"
                           onClick={() => setJadwalAlDay(malam)}
-                          className={`text-xs font-black transition-all shadow-md ${
+                          className={`text-xs font-black transition-transform duration-75 active:scale-95 select-none touch-manipulation shadow-md ${
                             active
                               ? 'btn-pill-gold-3d scale-102'
                               : 'btn-pill-dark-3d'
@@ -3508,7 +3508,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => setSilabusSemester('Semester 1')}
-                      className={`text-xs font-black transition-all shadow-md ${
+                      className={`text-xs font-black transition-transform duration-75 active:scale-95 select-none touch-manipulation shadow-md ${
                         silabusSemester === 'Semester 1'
                           ? 'btn-pill-gold-3d scale-102'
                           : 'btn-pill-dark-3d'
@@ -3519,7 +3519,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => setSilabusSemester('Semester 2')}
-                      className={`text-xs font-black transition-all shadow-md ${
+                      className={`text-xs font-black transition-transform duration-75 active:scale-95 select-none touch-manipulation shadow-md ${
                         silabusSemester === 'Semester 2'
                           ? 'btn-pill-gold-3d scale-102'
                           : 'btn-pill-dark-3d'
@@ -3568,7 +3568,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                         key={kls}
                         type="button"
                         onClick={() => setSilabusAngkatanFilter(kls)}
-                        className={`text-xs font-black transition-all shadow-md ${
+                        className={`text-xs font-black transition-transform duration-75 active:scale-95 select-none touch-manipulation shadow-md ${
                           active
                             ? 'btn-pill-gold-3d scale-102'
                             : 'btn-pill-dark-3d'
@@ -3872,13 +3872,13 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                         <button
                           type="button"
                           onClick={() => setShowAddSilabusModal(false)}
-                          className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 transition-all"
+                          className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold md:hover:bg-slate-700 transition-colors duration-150 active:scale-95 select-none touch-manipulation"
                         >
                           Batal
                         </button>
                         <button
                           type="submit"
-                          className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] to-amber-500 text-black font-extrabold hover:shadow-lg hover:shadow-[#d4af37]/30 transition-all"
+                          className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#d4af37] to-amber-500 text-black font-extrabold shadow-md transition-transform duration-75 active:scale-95 select-none touch-manipulation"
                         >
                           💾 Simpan Silabus
                         </button>
@@ -3929,7 +3929,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                   <button
                     type="button"
                     onClick={() => handleOpenAddNadzhom()}
-                    className="btn-3d-gold px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center gap-1.5 shadow-lg transition-all"
+                    className="btn-3d-gold px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center gap-1.5 shadow-md transition-transform duration-75 active:scale-95 select-none touch-manipulation"
                   >
                     <Plus className="w-4 h-4 stroke-[3]" />
                     <span>+ Input Setoran Santri</span>

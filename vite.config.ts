@@ -13,6 +13,9 @@ export default defineConfig({
       includeAssets: [
         'favicon.png',
         'apple-touch-icon.png',
+        'pwa-192x192.png',
+        'pwa-512x512.png',
+        'pwa-maskable-512x512.png',
         'assets/logo_pondok_almaliki.jpg',
         'assets/logo_madrasah_diniyah.jpg',
       ],
@@ -82,7 +85,8 @@ export default defineConfig({
         ],
       },
       devOptions: {
-        enabled: false,
+        enabled: true,
+        type: 'module',
       },
     }),
   ],
