@@ -31,19 +31,19 @@ export default defineConfig({
         scope: '/',
         icons: [
           {
-            src: '/pwa-192x192.png',
+            src: 'https://cdn.phototourl.com/member/2026-11-24-116db5fa-d3c6-4579-b15c-3728e16b05b8.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any',
           },
           {
-            src: '/pwa-512x512.png',
+            src: 'https://cdn.phototourl.com/member/2026-11-24-116db5fa-d3c6-4579-b15c-3728e16b05b8.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any',
           },
           {
-            src: '/pwa-maskable-512x512.png',
+            src: 'https://cdn.phototourl.com/member/2026-11-24-116db5fa-d3c6-4579-b15c-3728e16b05b8.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
