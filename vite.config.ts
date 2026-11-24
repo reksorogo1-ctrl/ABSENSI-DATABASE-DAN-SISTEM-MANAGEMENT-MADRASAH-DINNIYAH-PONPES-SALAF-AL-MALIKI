@@ -31,19 +31,19 @@ export default defineConfig({
         scope: '/',
         icons: [
           {
-            src: 'https://cdn.phototourl.com/member/2026-11-24-116db5fa-d3c6-4579-b15c-3728e16b05b8.png',
+            src: 'https://cdn.phototourl.com/member/2026-11-24-cf78346d-63c9-44eb-99d6-25e243ba1e51.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any',
           },
           {
-            src: 'https://cdn.phototourl.com/member/2026-11-24-116db5fa-d3c6-4579-b15c-3728e16b05b8.png',
+            src: 'https://cdn.phototourl.com/member/2026-11-24-cf78346d-63c9-44eb-99d6-25e243ba1e51.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any',
           },
           {
-            src: 'https://cdn.phototourl.com/member/2026-11-24-116db5fa-d3c6-4579-b15c-3728e16b05b8.png',
+            src: 'https://cdn.phototourl.com/member/2026-11-24-cf78346d-63c9-44eb-99d6-25e243ba1e51.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
