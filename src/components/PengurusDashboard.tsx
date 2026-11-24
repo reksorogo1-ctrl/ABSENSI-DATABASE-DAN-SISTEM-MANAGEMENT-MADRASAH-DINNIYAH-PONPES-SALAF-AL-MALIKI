@@ -1411,18 +1411,18 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
   return (
     <div 
-      className="min-h-screen bg-[#03140c] bg-cover bg-center text-[#f3e5ab] flex flex-col md:flex-row transition-all duration-300 w-full overflow-x-clip font-sans selection:bg-[#d4af37] selection:text-black"
-      style={settings.background_url ? { backgroundImage: `linear-gradient(rgba(3, 20, 12, 0.94), rgba(3, 20, 12, 0.97)), url(${settings.background_url})` } : undefined}
+      className="min-h-screen bg-[#041A13] bg-cyber-emerald-grid bg-cover bg-center text-[#D1FAE5] flex flex-col md:flex-row transition-all duration-300 w-full overflow-x-clip font-sans selection:bg-[#D4AF37] selection:text-black"
+      style={settings.background_url ? { backgroundImage: `linear-gradient(rgba(4, 26, 19, 0.92), rgba(4, 26, 19, 0.96)), url(${settings.background_url})` } : undefined}
     >
       {/* MOBILE TOP BAR (Phone & Small Screens: iOS & Android) - Compact Sticky Header dengan Tombol Garis 3 */}
-      <div className="md:hidden flex items-center justify-between px-3.5 py-2.5 min-h-[56px] bg-[#052216]/98 border-b border-[#d4af37]/30 backdrop-blur-md sticky top-0 z-50 w-full shadow-lg">
+      <div className="md:hidden flex items-center justify-between px-3.5 py-2.5 min-h-[56px] bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-b-2 border-black/60 sticky top-0 z-50 w-full shadow-[0_10px_25px_-5px_rgba(0,0,0,0.55),0_4px_10px_-2px_rgba(16,185,129,0.08)]">
         <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
           <BrandLogos settings={settings} size="xs" idPrefix="pengurus-mob-header" />
           <div className="min-w-0 flex-1">
-            <h2 className="font-bold text-xs text-[#d4af37] truncate uppercase font-serif leading-tight">
+            <h2 className="font-bold text-xs text-white truncate uppercase font-serif leading-tight">
               {settings.portal_title || settings.nama_pesantren || 'SIM Pondok Pesantren'}
             </h2>
-            <p className="text-[10px] text-emerald-300 truncate leading-tight mt-0.5">
+            <p className="text-[10px] text-[#D1FAE5] truncate leading-tight mt-0.5">
               {pengurus.nama} • {
                 activeTab === 'dashboard' ? 'Dasbor Utama' :
                 activeTab === 'izin-mengajar' ? 'Izin Mengajar' :
@@ -1457,11 +1457,11 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       {/* MOBILE MENU DRAWER OVERLAY (Tampil rapi tepat di bawah tombol garis 3 di posisi scroll manapun) */}
       {showMobileMenu && (
         <div
-          className="md:hidden fixed inset-x-0 top-[56px] bottom-0 z-40 bg-black/75 backdrop-blur-sm flex flex-col"
+          className="md:hidden fixed inset-x-0 top-[56px] bottom-0 z-40 bg-black/80 flex flex-col"
           onClick={() => setShowMobileMenu(false)}
         >
           <div
-            className="bg-[#041c12]/98 border-b border-[#d4af37]/35 backdrop-blur-xl p-4 space-y-3.5 shadow-2xl max-h-[82vh] overflow-y-auto"
+            className="bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-amber-400/35 border-b-2 border-black/65 p-4 space-y-3.5 shadow-[0_18px_36px_-8px_rgba(0,0,0,0.78)] max-h-[82vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-2 pb-3 border-b border-[#d4af37]/20">
@@ -1547,7 +1547,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       )}
 
       {/* DESKTOP & LAPTOP SIDEBAR (Mode PC, Laptop & Tablet - Penuh Sampai Bawah Halaman) */}
-      <aside className="hidden md:flex build-sidebar w-64 lg:w-72 bg-[#052216]/95 border-r border-[#d4af37]/30 p-4 lg:p-5 flex-col shrink-0 self-stretch min-h-screen shadow-2xl backdrop-blur-md z-30">
+      <aside className="hidden md:flex build-sidebar w-64 lg:w-72 bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-r border-black/60 border-t border-emerald-400/25 p-4 lg:p-5 flex-col shrink-0 self-stretch min-h-screen shadow-[10px_0_28px_-6px_rgba(0,0,0,0.58)] z-30">
         <div className="flex flex-col justify-between md:sticky md:top-4 lg:top-5 md:min-h-[calc(100vh-2.5rem)] md:max-h-[calc(100vh-2.5rem)] md:overflow-y-auto no-scrollbar">
         <div className="space-y-5">
           {/* Logo & Identitas Pesantren di Sidebar */}
@@ -1651,7 +1651,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       {/* MAIN CONTENT AREA - Responsive Grid & Ergonomis di Semua Perangkat (iOS, Android, Tablet, Laptop, PC) */}
       <main className={`${building ? 'build-sequence' : ''} flex-1 min-w-0 px-3 py-3.5 sm:p-5 lg:p-6 space-y-4 sm:space-y-5 w-full max-w-[1600px] mx-auto pb-10`}>
         {/* Top Header - Logo Madrasah Diperbesar + Ucapan Selamat Datang Guru/Pengurus + Tombol Rapi */}
-        <header className="build-header header-3d-banner rounded-2xl p-3.5 sm:p-5 backdrop-blur flex flex-col xl:flex-row justify-between items-start xl:items-center gap-3.5 sm:gap-4 w-full shadow-2xl">
+        <header className="build-header header-3d-banner rounded-2xl p-3.5 sm:p-5 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-3.5 sm:gap-4 w-full shadow-md">
           <div className="flex items-center gap-3.5 sm:gap-4 min-w-0 w-full xl:w-auto">
             <BrandLogos settings={settings} size="md" idPrefix="pengurus-main-header" />
             <div className="min-w-0 flex-1 space-y-1">
@@ -1659,7 +1659,7 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 {settings.header_title || settings.portal_title || settings.nama_pesantren || 'SIM Pondok Pesantren Salaf Al-Maliki'}
               </h1>
               <p className="text-xs sm:text-sm text-emerald-100 mt-1 flex items-center gap-2 flex-wrap leading-snug">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block shrink-0" />
+                <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block shrink-0" />
                 <span className="font-semibold text-white">
                   Selamat Datang, <span className="text-[#fde047] font-extrabold">{pengurus.nama}</span>
                 </span>
@@ -2197,9 +2197,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                           </p>
                         </div>
                       ) : (sessionMismatchInfo.isMismatch && !settings.bypass_jam_presensi_testing) ? (
-                        <div className="w-full max-w-lg text-center p-4 rounded-2xl bg-amber-950/80 border-2 border-amber-500/70 text-amber-100 text-xs font-semibold space-y-2 shadow-2xl backdrop-blur-md">
+                        <div className="w-full max-w-lg text-center p-4 rounded-2xl bg-amber-950/90 border border-amber-500/60 text-amber-100 text-xs font-semibold space-y-2 shadow-md">
                           <div className="flex items-center justify-center gap-2 font-black text-amber-300 text-sm uppercase tracking-wide">
-                            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 animate-pulse" />
+                            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
                             <span>{sessionMismatchInfo.title}</span>
                           </div>
                           <p className="text-xs text-amber-200/90 leading-relaxed font-normal">

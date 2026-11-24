@@ -1,12 +1,12 @@
 import React from 'react';
+import { motion } from 'motion/react';
 import {
-  User, Users, Lock, Eye, EyeOff, ArrowRight, Play, Film, X, HelpCircle, MessageCircle,
+  User, Users, Lock, Eye, EyeOff, ArrowRight, X, HelpCircle, MessageCircle,
   BookOpen, HeartHandshake, Star, ShieldCheck, Calendar, Instagram, Youtube, Music2, Globe
 } from 'lucide-react';
 import { Santri, Pengurus, AppSettings } from '../types';
 import { resolveLogos } from '../brand';
 import { LogoFrame } from './BrandLogos';
-import { saveVideoFile } from '../lib/videoStorage';
 import { PWAInstallButton } from './PWAInstallButton';
 
 type LoginMode = 'wali' | 'pengurus' | 'admin';
@@ -31,7 +31,6 @@ interface LoginScreenProps {
   onSubmit: (e: React.FormEvent) => void;
   onGoogleSignIn: () => void;
   onSyncSheets?: () => void;
-  onReplayIntro: () => void;
 }
 
 const inputCls =
@@ -44,7 +43,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
     pengurusNamaInput, setPengurusNamaInput, pengurusPasswordInput, setPengurusPasswordInput,
     adminUsername, setAdminUsername, adminPassword, setAdminPassword,
     showPassword, setShowPassword, rememberMe, setRememberMe,
-    showForgotPasswordModal, setShowForgotPasswordModal, onSubmit, onGoogleSignIn, onSyncSheets, onReplayIntro,
+    showForgotPasswordModal, setShowForgotPasswordModal, onSubmit, onGoogleSignIn, onSyncSheets,
   } = p;
 
   const logos = resolveLogos(settings);
@@ -75,19 +74,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
   ];
 
   const roleBtn = (m: LoginMode, label: string, Icon: React.ElementType, colSpanCls = '') => (
-    <button
+    <motion.button
       type="button"
+      whileTap={{ scale: 0.98 }}
       data-testid={`login-role-${m}`}
       onClick={() => pickMode(m)}
-      className={`login-role-btn w-full flex flex-row sm:flex-col items-center justify-center gap-2 sm:gap-1.5 py-3 sm:py-3.5 px-3 rounded-2xl border transition-all duration-200 uppercase text-[11px] sm:text-xs font-black tracking-wider box-border ${colSpanCls} ${
+      className={`login-role-btn w-full min-h-[48px] flex flex-row sm:flex-col items-center justify-center gap-2 sm:gap-1.5 py-3 sm:py-3.5 px-3 rounded-2xl transition-all duration-300 ease-out uppercase text-[11px] sm:text-xs font-black tracking-wider box-border ${colSpanCls} ${
         loginMode === m
-          ? 'btn-3d-gold text-black border-[#faebaa] shadow-[0_6px_20px_rgba(212,175,55,0.45)] ring-2 ring-[#faebaa]/90'
-          : 'bg-[#03140c]/85 border-[#d4af37]/40 text-emerald-100 hover:border-[#d4af37] hover:bg-[#052216]'
+          ? 'btn-3d-gold text-black border-[#faebaa] shadow-[0_8px_22px_rgba(212,175,55,0.42)] ring-2 ring-[#faebaa]/90'
+          : 'bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 text-[#D1FAE5] shadow-[0_8px_20px_-5px_rgba(0,0,0,0.5)] hover:-translate-y-1 hover:shadow-[0_14px_26px_-5px_rgba(16,185,129,0.18)]'
       }`}
     >
       <Icon className="w-5 h-5 shrink-0" />
       <span className="whitespace-normal text-center leading-tight">{label}</span>
-    </button>
+    </motion.button>
   );
 
   const eyeBtn = (
@@ -98,20 +98,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
 
   return (
     <div
-      className="login-screen min-h-screen w-full relative text-[#faebaa] font-sans overflow-x-hidden uppercase"
+      className="login-screen min-h-screen w-full relative text-[#D1FAE5] font-sans overflow-x-hidden uppercase bg-[#041A13]"
       data-testid="login-screen"
       style={{
-        backgroundImage: `linear-gradient(rgba(1,14,8,0.55), rgba(1,14,8,0.72)), url('/assets/islamic_library_login_bg.jpg')`,
-        backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed',
+        backgroundImage: `linear-gradient(rgba(4,26,19,0.68), rgba(4,26,19,0.82)), url('/assets/islamic_library_login_bg.jpg')`,
+        backgroundSize: 'cover', backgroundPosition: 'center',
       }}
     >
-      <div className="absolute inset-0 opacity-[0.08] pointer-events-none bg-[radial-gradient(#faebaa_1px,transparent_1px)] [background-size:28px_28px]" />
-      <div className="absolute -top-20 left-1/4 w-96 h-96 bg-[#d4af37]/15 rounded-full blur-[120px] pointer-events-none animate-pulse" />
-      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-emerald-600/15 rounded-full blur-[120px] pointer-events-none animate-pulse" style={{ animationDelay: '2s' }} />
+      <div className="absolute inset-0 opacity-[0.06] pointer-events-none bg-cyber-emerald-grid" />
 
       {showForgotPasswordModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn normal-case" data-testid="forgot-password-modal">
-          <div className="w-full max-w-md card-3d rounded-3xl p-6 border-2 border-[#d4af37]/50 shadow-2xl bg-[#02180e] relative text-left">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 normal-case" data-testid="forgot-password-modal">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            className="w-full max-w-md rounded-2xl p-6 bg-gradient-to-br from-[#093426] via-[#052017] to-[#03140E] border-t border-l border-amber-400/40 border-b-2 border-r border-black/65 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.82),0_10px_25px_-5px_rgba(16,185,129,0.14)] relative text-left"
+          >
             <button type="button" data-testid="forgot-close-x" onClick={() => setShowForgotPasswordModal(false)} className="absolute top-4 right-4 p-2 rounded-xl bg-black/40 text-emerald-300 hover:text-white transition"><X className="w-4 h-4" /></button>
             <div className="flex items-center space-x-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-[#0b3824] border border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow"><HelpCircle className="w-5 h-5" /></div>
@@ -129,7 +132,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
               <a href={`${resolveWaUrl(settings.link_wa)}?text=Assalamu%27alaikum%20Admin%20Pesantren%20Salaf,%20saya%20butuh%20bantuan%20sandi%20login%20SIM`} target="_blank" rel="noreferrer" className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow uppercase"><MessageCircle className="w-4 h-4" /><span>Hubungi Admin via WA</span></a>
               <button type="button" data-testid="forgot-close-btn" onClick={() => setShowForgotPasswordModal(false)} className="w-full sm:w-auto px-4 py-2.5 rounded-xl btn-3d-dark text-[#faebaa] font-bold text-xs uppercase">Tutup Panduan</button>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
 
@@ -137,32 +140,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
         {/* ================= LEFT: BRAND SHOWCASE ================= */}
         <div className="flex flex-col justify-between gap-8 login-left">
           {/* top pills */}
-          <div className="flex flex-wrap items-center gap-3 login-reveal" style={{ animationDelay: '0.1s' }}>
-            <div className="flex items-center gap-3 px-5 py-2.5 rounded-full border border-[#d4af37]/60 bg-[#031d12]/70 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.6)]">
-              <Star className="w-4 h-4 text-[#d4af37]" />
-              <span className="text-[11px] sm:text-xs font-bold tracking-[0.18em] text-[#faebaa]">Sistem Informasi Akademik & Manajemen</span>
+          <div className="flex flex-wrap items-center gap-3 login-reveal" style={{ animationDelay: '0.05s' }}>
+            <div className="flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5),0_4px_10px_-2px_rgba(16,185,129,0.08)]">
+              <Star className="w-4 h-4 text-[#D4AF37]" />
+              <span className="text-[11px] sm:text-xs font-bold tracking-[0.18em] text-[#D1FAE5]">Sistem Informasi Akademik & Manajemen</span>
             </div>
-            <div className="flex items-center gap-2.5 px-5 py-2.5 rounded-full border border-[#d4af37]/60 bg-[#031d12]/70 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.6)]">
-              <Calendar className="w-4 h-4 text-[#d4af37]" />
-              <span className="text-[11px] sm:text-xs font-bold tracking-[0.14em] text-[#faebaa]">TA 1447-1448 H / 2026-2027 M</span>
+            <div className="flex items-center gap-2.5 px-5 py-2.5 rounded-2xl bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5),0_4px_10px_-2px_rgba(16,185,129,0.08)]">
+              <Calendar className="w-4 h-4 text-[#D4AF37]" />
+              <span className="text-[11px] sm:text-xs font-bold tracking-[0.14em] text-[#D1FAE5]">TA 1447-1448 H / 2026-2027 M</span>
             </div>
             <div className="flex items-center gap-2 ml-auto">
               <PWAInstallButton />
-              <button type="button" data-testid="replay-intro-btn" onClick={onReplayIntro} title="Tonton Intro" className="w-10 h-10 rounded-full border border-[#d4af37]/60 bg-[#031d12]/70 backdrop-blur-md text-[#d4af37] hover:bg-[#d4af37] hover:text-black transition flex items-center justify-center"><Play className="w-4 h-4 fill-current" /></button>
-              <label title="Pilih Video Intro MP4" className="w-10 h-10 rounded-full border border-[#d4af37]/60 bg-[#031d12]/70 backdrop-blur-md text-[#d4af37] hover:bg-[#d4af37] hover:text-black transition flex items-center justify-center cursor-pointer">
-                <Film className="w-4 h-4" />
-                <input type="file" accept="video/mp4,video/webm" className="hidden" onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (file) { 
-                    try {
-                      await saveVideoFile(file, file.name);
-                    } catch (err) {
-                      console.warn('Could not save to IndexedDB:', err);
-                    }
-                    onReplayIntro(); 
-                  }
-                }} />
-              </label>
             </div>
           </div>
 
@@ -191,14 +179,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
           </div>
 
           {/* bottom values */}
-          <div className="login-reveal rounded-full border border-[#d4af37]/60 bg-[#031d12]/70 backdrop-blur-md px-6 sm:px-10 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-0 sm:divide-x divide-[#d4af37]/40 shadow-[0_15px_40px_rgba(0,0,0,0.65)]" style={{ animationDelay: '0.55s' }}>
+          <div className="login-reveal rounded-2xl bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 px-6 sm:px-10 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-0 sm:divide-x divide-emerald-500/20 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5),0_4px_10px_-2px_rgba(16,185,129,0.08)]" style={{ animationDelay: '0.15s' }}>
             {[
               { Icon: BookOpen, t: 'Ilmu', s: 'Sebagai Landasan' },
               { Icon: HeartHandshake, t: 'Akhlak', s: 'Sebagai Tujuan' },
               { Icon: Star, t: 'Ukhuwah', s: 'Sebagai Kekuatan' },
             ].map(({ Icon, t, s }) => (
               <div key={t} className="flex items-center gap-3.5 sm:justify-center">
-                <div className="w-11 h-11 rounded-full border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow-[0_0_16px_rgba(212,175,55,0.35)] shrink-0"><Icon className="w-5 h-5" /></div>
+                <div className="w-11 h-11 rounded-full bg-gradient-to-b from-emerald-500/20 to-emerald-950/60 border-t border-l border-emerald-300/35 border-b border-r border-black/60 shadow-inner flex items-center justify-center text-[#D4AF37] shrink-0"><Icon className="w-5 h-5" /></div>
                 <div className="text-left leading-tight">
                   <div className="text-sm font-black tracking-widest text-white">{t}</div>
                   <div className="text-[10px] text-[#faebaa]/85 tracking-wider">{s}</div>
@@ -332,10 +320,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
                   <button type="button" data-testid="forgot-password-btn" onClick={() => setShowForgotPasswordModal(true)} className="text-[#faebaa] hover:text-white underline underline-offset-2 font-bold tracking-wider">Lupa Kata Sandi?</button>
                 </div>
 
-                <button type="submit" data-testid="login-submit-btn" className="login-gold-btn w-full py-4 rounded-xl text-black font-black text-sm sm:text-base tracking-[0.12em] flex items-center justify-center gap-3 hover:scale-[1.015] active:scale-95 transition-transform mt-2">
+                <motion.button type="submit" whileTap={{ scale: 0.97 }} data-testid="login-submit-btn" className="login-gold-btn w-full min-h-[48px] py-4 rounded-2xl text-black font-black text-sm sm:text-base tracking-[0.12em] flex items-center justify-center gap-3 hover:scale-[1.015] transition-transform mt-2">
                   <span>Masuk ke Sistem</span>
                   <ArrowRight className="w-5 h-5 stroke-[3]" />
-                </button>
+                </motion.button>
 
                 {loginMode === 'admin' && (
                   <div className="pt-2">
@@ -389,9 +377,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
                 {socialLinks.map(({ href, Icon, t, id }) => (
                   <a key={t} href={href} target="_blank" rel="noreferrer" title={t} data-testid={id} className="w-10 h-10 rounded-full border-2 border-[#d4af37]/70 bg-[#031d12]/60 text-[#faebaa] hover:bg-[#d4af37] hover:text-black flex items-center justify-center transition shadow"><Icon className="w-4 h-4" /></a>
                 ))}
-                <div title="Sistem Terintegrasi Real-Time Cloud Firestore" className="px-3 h-10 rounded-full border-2 border-emerald-500/60 bg-[#031d12]/80 text-emerald-300 flex items-center gap-2 text-[10px] font-bold shadow">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                  <span>Cloud Real-Time</span>
+                <div title="Sistem Terintegrasi Real-Time Supabase" className="px-3 h-10 rounded-xl bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 text-[#D1FAE5] flex items-center gap-2 text-[10px] font-bold shadow-[0_8px_18px_-4px_rgba(0,0,0,0.5)]">
+                  <span className="w-2 h-2 rounded-full bg-[#10B981] cyber-node-pulse shrink-0" />
+                  <span>Supabase Real-Time</span>
                 </div>
               </div>
             </div>

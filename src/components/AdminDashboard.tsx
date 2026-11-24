@@ -6,7 +6,7 @@ import {
   Settings, Settings2, ToggleLeft, ToggleRight, Sparkles, Check, PieChart as PieChartIcon,
   Type, Megaphone, Copy, FileSpreadsheet, Newspaper, CheckCheck, RotateCcw,
   CreditCard, Wallet, AlertTriangle, Phone, MessageCircle, ArrowDownLeft, ArrowUpRight, Trash2, GraduationCap,
-  Download, Printer, FileText, Send, QrCode, ShieldCheck, X, Film, Upload, Play,
+  Download, Printer, FileText, Send, ShieldCheck, X, Upload,
   ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine, MapPin, Compass, Crosshair, Shield, Navigation,
   Instagram, Youtube, Music2, Globe, Unlock, Menu, Mail,
   Folder, FolderPlus, FolderCheck, CheckSquare, Square, Layers, FileUp, Camera,
@@ -20,18 +20,19 @@ import { TabUjianMuhafadzoh } from './TabUjianMuhafadzoh';
 import { TabUjianBacaKitab } from './TabUjianBacaKitab';
 import { TabUjianKoreksianKitab } from './TabUjianKoreksianKitab';
 import { OptionPanelUjianKitab } from './OptionPanelUjianKitab';
-import { TabGmail } from './TabGmail';
 import { ModalInputNilaiUjian } from './ModalInputNilaiUjian';
 import { TabPelanggaranSantri, OptionPanelPelanggaranTakziran } from './TabPelanggaranSantri';
 import { getOrCreateSantriHistory } from '../lib/kenaikanKelasService';
 import { queryPaginatedData } from '../lib/scalableDatabase';
 import { formatBytes, TOTAL_CAPACITY_5TB } from '../lib/scalableStorage';
 import { PWAInstallButton } from './PWAInstallButton';
-import { 
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Legend, 
-  BarChart, Bar, CartesianGrid, PieChart, Pie, Cell 
-} from 'recharts';
-import { Donut3D } from './Chart3D';
+import { motion } from 'motion/react';
+import {
+  Kpi3DCard,
+  Pie3DChart,
+  Line3DChart,
+  Bar3DIsometricChart,
+} from './Analytics3DSuite';
 import { BrandLogos, LogoFrame } from './BrandLogos';
 import { resolveLogos } from '../brand';
 import { GoogleMapsGeofence } from './GoogleMapsGeofence';
@@ -50,22 +51,16 @@ import {
 } from '../lib/ujianExamHelpers';
 import { calculateGuruAttendanceScore } from '../lib/guruAttendanceScoring';
 import { 
-  saveVideoFile, saveVideoUrl, resetVideoToDefault, resolveActiveVideo, type VideoInfo 
-} from '../lib/videoStorage';
-import { 
   checkPresensiSchedule, getServerTime, subscribeAttendanceUpdates, 
   RealtimeAttendancePayload, OFFICIAL_SCHEDULES,
   getMalamDaySubtitle, getPesantrenDayInfo,
   subscribeIzinMengajarUpdates, isTeacherNameMatch
 } from '../serverTime';
 import { INITIAL_KURIKULUM_LIST } from '../data';
-import { 
-  exportFirestoreBackup, 
-  restoreFirestoreBackup, 
-  safeFirebaseConfig,
-  loadMasterDataFromFirestore,
-  subscribeMasterDataFromFirestore
-} from '../firebase';
+import {
+  loadMasterDataFromSupabase,
+  subscribeMasterDataFromSupabase
+} from '../services/supabase';
 
 
 interface AdminDashboardProps {
@@ -88,12 +83,7 @@ interface AdminDashboardProps {
   izinList?: IzinMengajarRequest[];
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  spreadsheetId: string;
-  setSpreadsheetId: (id: string) => void;
-  isSyncing: boolean;
-  onSyncWithSheets: () => void;
   onLogout: () => void;
-  onTestIntro?: () => void;
   // Mutations
   onSaveAbsensiSantri: (records: AbsensiSantriRecord[]) => void;
   onSaveAbsensiGuru: (records: AbsensiGuruRecord[]) => void;
@@ -132,10 +122,6 @@ interface AdminDashboardProps {
   rekapGuruHistoryList?: AbsensiGuruRecord[];
   onSaveRekapSantriHistory?: (records: AbsensiSantriRecord[]) => Promise<void> | void;
   onSaveRekapGuruHistory?: (records: AbsensiGuruRecord[]) => Promise<void> | void;
-  sheetsService?: any;
-  isGoogleConnected?: boolean;
-  setIsGoogleConnected?: (connected: boolean) => void;
-  onOpenSheetsModal?: () => void;
   onDataImported?: (data: any) => void;
 }
 
@@ -163,15 +149,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   izinList = [],
   activeTab,
   setActiveTab,
-  spreadsheetId,
-  setSpreadsheetId,
-  isSyncing,
-  onSyncWithSheets,
   onLogout,
-  sheetsService,
-  isGoogleConnected = false,
-  setIsGoogleConnected,
-  onOpenSheetsModal,
   onDataImported,
   onSaveAbsensiSantri,
   onSaveAbsensiGuru,
@@ -205,8 +183,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onApproveIzinMengajar,
   onSubmitIzinMengajar,
   onDeleteIzinMengajar,
-  onDeleteSantri,
-  onTestIntro
+  onDeleteSantri
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const classList = ['1 TSANAWIYAH', '2 TSANAWIYAH', '3 TSANAWIYAH', '1 ALIYAH', '2 ALIYAH', '3 ALIYAH'];
@@ -339,16 +316,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [rekapGuruHistoryList, rekapSantriHistoryList]);
 
-  // Sinkronisasi bobot nilai Telat Ustadz / Guru dari Option Panel (Firestore)
+  // Sinkronisasi bobot nilai Telat Ustadz / Guru dari Option Panel (Supabase Realtime)
   const [bobotNilaiTelatGuru, setBobotNilaiTelatGuru] = useState<number>(50);
   useEffect(() => {
     let mounted = true;
-    loadMasterDataFromFirestore<TemplateSuratPeringatanGuru>('peringatan_guru_template').then((tpl) => {
+    loadMasterDataFromSupabase<TemplateSuratPeringatanGuru>('peringatan_guru_template').then((tpl) => {
       if (mounted && tpl && typeof tpl.bobotNilaiTelatPersen === 'number') {
         setBobotNilaiTelatGuru(tpl.bobotNilaiTelatPersen);
       }
     });
-    const unsub = subscribeMasterDataFromFirestore<TemplateSuratPeringatanGuru>('peringatan_guru_template', (tpl) => {
+    const unsub = subscribeMasterDataFromSupabase<TemplateSuratPeringatanGuru>('peringatan_guru_template', (tpl) => {
       if (mounted && tpl && typeof tpl.bobotNilaiTelatPersen === 'number') {
         setBobotNilaiTelatGuru(tpl.bobotNilaiTelatPersen);
       }
@@ -1382,9 +1359,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return santriList.filter(s => Number(s.nilaiMuhafadzoh ?? 88) < 75).length;
   }, [santriList]);
 
-  // State untuk QR Code Presensi Terpadu
-  const [qrAngkatan, setQrAngkatan] = useState<string>('SEMUA');
-  const [simulasiScanMsg, setSimulasiScanMsg] = useState<string | null>(null);
   const [dashboardRekapTab, setDashboardRekapTab] = useState<'santri' | 'guru'>('santri');
   const [muhafadzohYear, setMuhafadzohYear] = useState<string>('2026/2027');
 
@@ -2176,84 +2150,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [activeControlSection, setActiveControlSection] = useState<
     'kelola_storage_5tb' | 'kenaikan_kelas' | 'input_santri' | 'input_guru' | 'input_jadwal' | 'simpan_absensi' | 'geofencing_absensi' | 'kontrol_tombol' | 
     'visual_branding' | 'keamanan' | 'profil_santri' | 'kelola_syahriyah' | 'kelola_uang_saku' | 'kelola_kurikulum' |
-    'kelola_pengurus' | 'kelola_kalender' | 'kelola_ujian_kitab' | 'kelola_berita' | 'video_intro' | 'sosial_media' | 'firebase_central' | 'pelanggaran_takziran'
-  >(() => {
-    const target = localStorage.getItem('sim_target_control_section');
-    if (target === 'video_intro') {
-      localStorage.removeItem('sim_target_control_section');
-      return 'video_intro';
-    }
-    return 'simpan_absensi';
-  });
-
-  // State Pusat Kontrol Database Firebase Firestore (Single Source of Truth)
-  const [isExportingBackup, setIsExportingBackup] = useState<boolean>(false);
-  const [backupExportStatus, setBackupExportStatus] = useState<string | null>(null);
-  const [isRestoringBackup, setIsRestoringBackup] = useState<boolean>(false);
-  const [restoreConfirmData, setRestoreConfirmData] = useState<any | null>(null);
-  const [restoreStatusMessage, setRestoreStatusMessage] = useState<string | null>(null);
-  const restoreFileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleDownloadBackup = async () => {
-    try {
-      setIsExportingBackup(true);
-      setBackupExportStatus('Menyiapkan snapshot utuh Firestore produksi...');
-      const pkg = await exportFirestoreBackup();
-      const jsonStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(pkg, null, 2));
-      const downloadAnchor = document.createElement('a');
-      const nowStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      downloadAnchor.setAttribute("href", jsonStr);
-      downloadAnchor.setAttribute("download", `BACKUP_FIREBASE_PONPES_ALMALIKI_${nowStr}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-      setBackupExportStatus(`Alhamdulillah! Backup berhasil diunduh (${Object.keys(pkg.summary).length} modul data terarsip).`);
-      setTimeout(() => setBackupExportStatus(null), 6000);
-    } catch (err: any) {
-      alert(`Gagal mengunduh snapshot Firestore: ${err?.message || err}`);
-      setBackupExportStatus(null);
-    } finally {
-      setIsExportingBackup(false);
-    }
-  };
-
-  const handleFileSelectForRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const parsed = JSON.parse(event.target?.result as string);
-        if (!parsed || typeof parsed !== 'object') {
-          alert('Format berkas JSON tidak valid.');
-          return;
-        }
-        setRestoreConfirmData(parsed);
-      } catch (err) {
-        alert('Gagal membaca isi berkas JSON. Pastikan format berkas valid.');
-      }
-    };
-    reader.readAsText(file);
-    if (e.target) e.target.value = '';
-  };
-
-  const handleExecuteRestore = async () => {
-    if (!restoreConfirmData) return;
-    try {
-      setIsRestoringBackup(true);
-      setRestoreStatusMessage('Memulihkan dokumen ke Firestore produksi...');
-      const res = await restoreFirestoreBackup(restoreConfirmData);
-      setRestoreStatusMessage(res.message);
-      setRestoreConfirmData(null);
-      setTimeout(() => setRestoreStatusMessage(null), 8000);
-    } catch (err: any) {
-      alert(`Gagal memulihkan database: ${err?.message || err}`);
-      setRestoreStatusMessage(null);
-    } finally {
-      setIsRestoringBackup(false);
-    }
-  };
+    'kelola_pengurus' | 'kelola_kalender' | 'kelola_ujian_kitab' | 'kelola_berita' | 'sosial_media' | 'pelanggaran_takziran'
+  >('simpan_absensi');
 
 
   // Modal Kenaikan Kelas Otomatis & Detail Riwayat Santri
@@ -2265,17 +2163,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Modal Input / Edit Nilai Ujian Santri
   const [ujianModalTarget, setUjianModalTarget] = useState<{ santri: Santri; type: 'muhafadzoh' | 'baca' | 'koreksian' | 'all' } | null>(null);
-
-  // Video Intro Management States in Option Panel
-  const [adminVideoInfo, setAdminVideoInfo] = useState<VideoInfo>({
-    src: settings.intro_video_url || '/assets/intro_salaf_almaliki.mp4',
-    name: settings.intro_video_name || 'The Journey of Knowledge — Salaf Al-Maliki (Bawaan)',
-    isCustom: false,
-    sourceType: 'default',
-  });
-  const [videoUrlInput, setVideoUrlInput] = useState<string>('');
-  const [videoStatusMessage, setVideoStatusMessage] = useState<string>('');
-  const videoFileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Fitur Rapat Pleno Dewan Pengurus & Evaluasi Absensi di Option Panel (Fitur Absensi Ustadz/Ustadzah)
   const [showRapatPlenoModal, setShowRapatPlenoModal] = useState<boolean>(false);
@@ -2396,19 +2283,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTimeout(() => setJamPresensiMsg(''), 4500);
   };
 
-  useEffect(() => {
-    let isMounted = true;
-    resolveActiveVideo(settings.intro_video_url || '/assets/intro_salaf_almaliki.mp4').then(res => {
-      if (isMounted) {
-        setAdminVideoInfo(res);
-        if (res.sourceType === 'url') {
-          setVideoUrlInput(res.src);
-        }
-      }
-    });
-    return () => { isMounted = false; };
-  }, [settings.intro_video_url]);
-
   // State Pengurus di Option Panel (Nama & Kata Sandi Login Pengurus)
   const [selectedPengurusId, setSelectedPengurusId] = useState<string>(
     pengurusList[0]?.id || 'PGR-01'
@@ -2463,19 +2337,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     sasaran: 'Seluruh Dewan Asatidz & Pengurus'
   });
 
-  // Konfigurasi Terpusat Ujian Muhafadzoh, Baca Kitab, Koreksian Kitab & Takziran (Firestore)
+  // Konfigurasi Terpusat Ujian Muhafadzoh, Baca Kitab, Koreksian Kitab & Takziran (Supabase Realtime)
   const [ujianExamConfig, setUjianExamConfig] = useState<UjianExamGlobalConfig>(() =>
     createDefaultUjianConfig(kurikulumList)
   );
 
   useEffect(() => {
     let active = true;
-    loadMasterDataFromFirestore<Partial<UjianExamGlobalConfig>>('ujian_config').then((data) => {
+    loadMasterDataFromSupabase<Partial<UjianExamGlobalConfig>>('ujian_config').then((data) => {
       if (active) {
         setUjianExamConfig(mergeUjianConfigWithDefaults(data, kurikulumList));
       }
     });
-    const unsub = subscribeMasterDataFromFirestore<Partial<UjianExamGlobalConfig>>(
+    const unsub = subscribeMasterDataFromSupabase<Partial<UjianExamGlobalConfig>>(
       'ujian_config',
       (data) => {
         if (active) {
@@ -2577,24 +2451,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   }, [santriList, boyongSearch, boyongPage, boyongPageSize]);
 
-  // State untuk Tab Integrasi Google Sheets
-  const [sheetsPreviewTab, setSheetsPreviewTab] = useState<'santri' | 'guru' | 'absensi-guru' | 'absensi-santri' | 'jadwal' | 'nadzhom' | 'nilai' | 'syahriyah'>('absensi-guru');
-  const [sheetsInputId, setSheetsInputId] = useState<string>(spreadsheetId);
-  const [sheetsStatusMsg, setSheetsStatusMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
-  const [isSheetsBusy, setIsSheetsBusy] = useState<boolean>(false);
-  const [sheetsConfirmModal, setSheetsConfirmModal] = useState<{
-    isOpen: boolean;
-    action: 'exportAll' | 'importAll' | 'createSheet' | 'exportTab';
-    tabName?: string;
-    title: string;
-    desc: string;
-  }>({
-    isOpen: false,
-    action: 'exportAll',
-    title: '',
-    desc: ''
-  });
-
   // State untuk Edit Profil Anak & Password Wali (NIS) di Option Panel
   const [selectedProfileSantriId, setSelectedProfileSantriId] = useState<string>(
     santriList[0]?.id || 'S-1001'
@@ -2683,8 +2539,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     background_url: settings.background_url || '',
     logo_pondok: settings.logo_pondok || '',
     logo_madrasah: settings.logo_madrasah || '',
-    intro_video_url: settings.intro_video_url || '/assets/intro_salaf_almaliki.mp4',
-    intro_video_name: settings.intro_video_name || 'The Journey of Knowledge — Salaf Al-Maliki (Bawaan)',
     password_admin: settings.password_admin || 'salaf123',
     password_option_panel: settings.password_option_panel || 'admin123',
     email_admin: settings.email_admin || settings.email_pesantren || 'reksorogo1@gmail.com',
@@ -2737,7 +2591,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       background_url: settings.background_url || '',
       logo_pondok: settings.logo_pondok || '',
       logo_madrasah: settings.logo_madrasah || '',
-      intro_video_url: settings.intro_video_url || localStorage.getItem('sim_intro_video') || 'Camera_moving_through_Islamic_li…_20260925184519.mp4',
       password_admin: settings.password_admin || 'salaf123',
       password_option_panel: settings.password_option_panel || 'admin123',
       email_admin: settings.email_admin || settings.email_pesantren || 'reksorogo1@gmail.com',
@@ -3129,12 +2982,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Submit Simpan Pengaturan Visual & Password
   const handleSaveVisualAndSecurity = (e: React.FormEvent) => {
     e.preventDefault();
-    if (visualForm.intro_video_url) {
-      localStorage.setItem('sim_intro_video', visualForm.intro_video_url);
-      localStorage.setItem('sim_intro_video_name', visualForm.intro_video_url);
-    }
     onSaveSettings(visualForm);
-    alert('Pusat Kontrol Visual, Video Intro Opening, Background, Logo, dan Kata Sandi berhasil diperbarui dan disimpan!');
+    alert('Pusat Kontrol Visual, Background, Logo, dan Kata Sandi berhasil diperbarui dan disimpan!');
   };
 
   // Data Tren untuk Recharts yang terkoneksi langsung secara Real-Time ke absensi santri & ustadz
@@ -3239,37 +3088,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   return (
     <div 
-      className="min-h-screen bg-[#03140c] bg-cover bg-center text-[#f3e5ab] flex flex-col md:flex-row transition-all duration-300 w-full overflow-x-hidden"
-      style={settings.background_url ? { backgroundImage: `linear-gradient(rgba(3, 20, 12, 0.94), rgba(3, 20, 12, 0.97)), url(${settings.background_url})` } : undefined}
+      className="min-h-screen bg-[#041A13] bg-cyber-emerald-grid bg-cover bg-center text-[#D1FAE5] flex flex-col md:flex-row transition-all duration-300 w-full overflow-x-hidden"
+      style={settings.background_url ? { backgroundImage: `linear-gradient(rgba(4, 26, 19, 0.92), rgba(4, 26, 19, 0.96)), url(${settings.background_url})` } : undefined}
     >
       {/* MOBILE TOP BAR (Phone & Small Screens) */}
-      <div className="md:hidden flex items-center justify-between p-3.5 bg-[#052216]/98 border-b border-[#d4af37]/30 backdrop-blur-md sticky top-0 z-40 w-full">
+      <div className="md:hidden flex items-center justify-between p-3.5 bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-b-2 border-black/60 sticky top-0 z-40 w-full shadow-[0_10px_25px_-5px_rgba(0,0,0,0.55),0_4px_10px_-2px_rgba(16,185,129,0.08)]">
         <div className="flex items-center gap-2.5 overflow-hidden">
           <BrandLogos settings={settings} size="xs" idPrefix="admin-mob-header" />
           <div className="overflow-hidden">
-            <h2 className="font-bold text-xs text-[#d4af37] truncate uppercase font-serif">
+            <h2 className="font-bold text-xs text-white truncate uppercase font-serif">
               {settings.nama_pondok}
             </h2>
-            <p className="text-[10px] text-emerald-300 truncate">
+            <p className="text-[10px] text-[#D1FAE5] truncate">
               Panel Admin • {activeTab.replace('-', ' ').toUpperCase()}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <PWAInstallButton />
-          <button
+          <motion.button
             type="button"
+            whileTap={{ scale: 0.98 }}
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-2 rounded-xl bg-[#03140c] border border-[#d4af37]/50 text-[#d4af37] hover:text-white transition"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-gradient-to-b from-emerald-500/20 to-emerald-950/70 border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 text-[#D4AF37] hover:text-white shadow-inner transition"
             aria-label="Toggle Menu Navigasi"
           >
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
+          </motion.button>
         </div>
       </div>
 
       {/* SIDEBAR */}
-      <aside className={`build-sidebar w-full md:w-72 bg-[#052216]/95 border-r border-[#d4af37]/30 p-4 sm:p-5 flex flex-col justify-between shrink-0 shadow-2xl backdrop-blur-md ${isMobileMenuOpen ? 'flex' : 'hidden md:flex'}`}>
+      <aside className={`build-sidebar w-full md:w-72 bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-r border-black/60 border-t border-emerald-400/25 p-4 sm:p-5 flex flex-col justify-between shrink-0 shadow-[10px_0_28px_-6px_rgba(0,0,0,0.58)] ${isMobileMenuOpen ? 'flex' : 'hidden md:flex'}`}>
         <div className="space-y-6">
           {/* Logo & Header */}
           <div className="flex items-center gap-3 pb-4 border-b border-[#d4af37]/20">
@@ -3300,8 +3150,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               { id: 'santri', label: settings.text_santri_title || 'Data Santri & Foto', icon: Users },
               { id: 'nadzhom', label: 'Setoran Nadzhom', icon: BookOpen },
               { id: 'nilai', label: 'Nilai Ujian', icon: Award },
-              { id: 'google-sheets', label: 'Google Sheets & Drive', icon: FileSpreadsheet, badge: isGoogleConnected ? 'Sync' : 'Cloud' },
-              { id: 'gmail', label: 'Gmail & Surat Menyurat', icon: Mail, badge: isGoogleConnected ? 'Gmail' : 'Workspace' },
               { id: 'pengaturan', label: 'Option Panel (Pusat Kontrol)', icon: Sliders, badge: 'Password' }
             ].map(tab => {
               const Icon = tab.icon;
@@ -3334,20 +3182,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </nav>
         </div>
 
-        {/* Sync & Logout */}
+        {/* Logout */}
         <div className="pt-4 border-t border-[#d4af37]/20 space-y-3">
-          {settings.show_quick_sync_button !== false && (
-            <button
-              onClick={onSyncWithSheets}
-              disabled={isSyncing}
-              style={{ color: settings.btn_sync_sheets_color || '#d4af37' }}
-              className="w-full py-2.5 px-3 rounded-xl btn-3d-dark text-xs font-bold flex items-center justify-center space-x-2 border border-[#d4af37]/40"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Sinkronisasi Sheets...' : (settings.btn_sync_sheets_text || 'Sinkron Google Sheets')}</span>
-            </button>
-          )}
-
           <button
             onClick={onLogout}
             className="w-full py-2.5 px-3 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs font-bold flex items-center justify-center space-x-2 hover:bg-red-900 transition shadow"
@@ -3406,7 +3242,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
         {/* Top Header - 3D Luxury Beveled Banner (Semua Teks Bisa Diatur via Option Panel) */}
-        <header className="build-header header-3d-banner rounded-2xl p-5 backdrop-blur flex flex-col md:flex-row justify-between items-center gap-4">
+        <header className="build-header header-3d-banner rounded-2xl p-5 flex flex-col md:flex-row justify-between items-center gap-4">
           <div>
             <h1 className="text-xl md:text-2xl font-bold font-serif text-[#d4af37] text-gold-3d tracking-wide">
               {settings.header_title || settings.judul_aplikasi || 'SIM Pondok Pesantren Salaf Al-Maliki'}
@@ -3419,16 +3255,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           <div className="flex flex-wrap items-center gap-2.5 text-right justify-end">
             <PWAInstallButton variant="button" />
-            <button
-              onClick={() => onOpenSheetsModal ? onOpenSheetsModal() : setActiveTab('google-sheets')}
-              className="px-3.5 py-2 rounded-xl bg-[#031c10] border border-[#d4af37]/60 text-xs font-bold text-[#f3e5ab] flex items-center gap-2 hover:bg-[#062c1b] transition shadow"
-              title="Kelola Google Sheets & Drive"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-              <span>Google Sheets</span>
-              <span className={`w-2 h-2 rounded-full ${isGoogleConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-            </button>
-
             <button
               onClick={() => setActiveTab('pengaturan')}
               className="btn-3d-gold px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center gap-2"
@@ -3473,7 +3299,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
 
-                <div className="md:col-span-7 p-5 sm:p-6 flex flex-col justify-between space-y-3 bg-[#031c12]/80 backdrop-blur-md">
+                <div className="md:col-span-7 p-5 sm:p-6 flex flex-col justify-between space-y-3 bg-emerald-950/90">
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-1.5">
@@ -3519,98 +3345,115 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* 4 Main Stat Cards - 3D Beveled Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="card-3d p-5 rounded-2xl border-t-2 border-t-emerald-400">
-                <span className="text-xs text-emerald-300 font-extrabold uppercase tracking-wider">KEHADIRAN SANTRI</span>
-                <div className="text-3xl font-extrabold text-emerald-400 mt-1 font-mono">{stats.percentSantri}%</div>
-                <p className="text-[10px] text-emerald-200/80 mt-1">Persentase Tingkat Kehadiran Harian</p>
-              </div>
+            {/* 4 Main Stat Cards - 3D Futuristic KPI Counters with Count-Up & Trend Badges */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              <Kpi3DCard
+                index={0}
+                label="KEHADIRAN SANTRI"
+                value={Number(stats.percentSantri) || 0}
+                suffix="%"
+                subtitle="Persentase Tingkat Kehadiran Harian"
+                delta={Number((Number(stats.percentSantri || 0) - 85).toFixed(1))}
+                deltaLabel="vs target 85%"
+                theme="emerald"
+                icon={<UserCheck className="w-5 h-5" />}
+                onClick={() => setActiveTab('absensi-santri')}
+              />
 
-              <div className="card-3d p-5 rounded-2xl border-t-2 border-t-amber-400">
-                <span className="text-xs text-emerald-300 font-extrabold uppercase tracking-wider">KEHADIRAN USTADZ/AH</span>
-                <div className="text-3xl font-extrabold text-amber-300 mt-1 font-mono">{stats.percentGuru}%</div>
-                <p className="text-[10px] text-emerald-200/80 mt-1">Kehadiran Pengajar di Madrasah</p>
-              </div>
+              <Kpi3DCard
+                index={1}
+                label="KEHADIRAN USTADZ/AH"
+                value={Number(stats.percentGuru) || 0}
+                suffix="%"
+                subtitle="Kehadiran Pengajar di Madrasah"
+                delta={Number((Number(stats.percentGuru || 0) - 90).toFixed(1))}
+                deltaLabel="vs target 90%"
+                theme="gold"
+                icon={<Clock className="w-5 h-5" />}
+                onClick={() => setActiveTab('absensi-guru')}
+              />
 
-              <div className="card-3d p-5 rounded-2xl border-t-2 border-t-[#d4af37]">
-                <span className="text-xs text-emerald-300 font-extrabold uppercase tracking-wider">TOTAL SANTRI</span>
-                <div className="text-3xl font-extrabold text-[#d4af37] text-gold-3d mt-1 font-mono">{stats.totalSantri}</div>
-                <p className="text-[10px] text-emerald-200/80 mt-1">Terdaftar Dalam Google Sheets</p>
-              </div>
+              <Kpi3DCard
+                index={2}
+                label="TOTAL SANTRI"
+                value={Number(stats.totalSantri) || 0}
+                subtitle="Terdaftar Real-Time Supabase"
+                delta={(stats.hadirSantri ?? 0) > 0 ? Number((((stats.hadirSantri ?? 0) / Math.max(1, stats.totalSantri)) * 100).toFixed(1)) : 0}
+                deltaLabel="hadir hari ini"
+                theme="amber"
+                icon={<Users className="w-5 h-5" />}
+                onClick={() => setActiveTab('santri')}
+              />
 
-              <div className="card-3d p-5 rounded-2xl border-t-2 border-t-blue-400">
-                <span className="text-xs text-emerald-300 font-extrabold uppercase tracking-wider">TOTAL GURU & USTADZ</span>
-                <div className="text-3xl font-extrabold text-blue-300 mt-1 font-mono">{stats.totalGuru}</div>
-                <p className="text-[10px] text-emerald-200/80 mt-1">Pengajar Tsanawiyah & Aliyah</p>
-              </div>
+              <Kpi3DCard
+                index={3}
+                label="TOTAL GURU & USTADZ"
+                value={Number(stats.totalGuru) || 0}
+                subtitle="Pengajar Tsanawiyah & Aliyah"
+                delta={(stats.hadirGuru ?? 0) > 0 ? Number((((stats.hadirGuru ?? 0) / Math.max(1, stats.totalGuru)) * 100).toFixed(1)) : 0}
+                deltaLabel="aktif hari ini"
+                theme="cyan"
+                icon={<Award className="w-5 h-5" />}
+                onClick={() => setActiveTab('guru')}
+              />
             </div>
 
-            {/* Sub Metrics Grid - 3D Micro Chips */}
+            {/* Sub Metrics Grid - Physical 3D Bevel Micro Chips */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-              <div className="card-3d-deep p-3 rounded-xl text-center">
-                <div className="text-[10px] font-bold text-emerald-300">HADIR SANTRI</div>
-                <div className="text-lg font-bold text-emerald-400 mt-0.5 font-mono">{stats.hadirSantri}</div>
-              </div>
-              <div className="card-3d-deep p-3 rounded-xl text-center">
-                <div className="text-[10px] font-bold text-emerald-300">IZIN SANTRI</div>
-                <div className="text-lg font-bold text-amber-300 mt-0.5 font-mono">{stats.izinSantri}</div>
-              </div>
-              <div className="card-3d-deep p-3 rounded-xl text-center">
-                <div className="text-[10px] font-bold text-emerald-300">SAKIT SANTRI</div>
-                <div className="text-lg font-bold text-blue-300 mt-0.5 font-mono">{stats.sakitSantri}</div>
-              </div>
-              <div className="card-3d-deep p-3 rounded-xl text-center">
-                <div className="text-[10px] font-bold text-emerald-300">ALPHA SANTRI</div>
-                <div className="text-lg font-bold text-red-400 mt-0.5 font-mono">{stats.alphaSantri}</div>
-              </div>
-              <div className="card-3d-deep p-3 rounded-xl text-center">
-                <div className="text-[10px] font-bold text-emerald-300">HADIR GURU</div>
-                <div className="text-lg font-bold text-emerald-400 mt-0.5 font-mono">{stats.hadirGuru}</div>
-              </div>
-              <div className="card-3d-deep p-3 rounded-xl text-center">
-                <div className="text-[10px] font-bold text-emerald-300">TERLAMBAT GURU</div>
-                <div className="text-lg font-bold text-orange-300 mt-0.5 font-mono">{stats.terlambatGuru}</div>
-              </div>
-              <div className="card-3d-deep p-3 rounded-xl text-center">
-                <div className="text-[10px] font-bold text-emerald-300">IZIN GURU</div>
-                <div className="text-lg font-bold text-amber-300 mt-0.5 font-mono">{stats.izinGuru}</div>
-              </div>
-              <div className="card-3d-deep p-3 rounded-xl text-center">
-                <div className="text-[10px] font-bold text-emerald-300">ALPHA GURU</div>
-                <div className="text-lg font-bold text-red-400 mt-0.5 font-mono">{stats.alphaGuru}</div>
-              </div>
+              {[
+                { label: 'HADIR SANTRI', val: stats.hadirSantri, color: 'text-emerald-300' },
+                { label: 'IZIN SANTRI', val: stats.izinSantri, color: 'text-amber-300' },
+                { label: 'SAKIT SANTRI', val: stats.sakitSantri, color: 'text-sky-300' },
+                { label: 'ALPHA SANTRI', val: stats.alphaSantri, color: 'text-rose-400' },
+                { label: 'HADIR GURU', val: stats.hadirGuru, color: 'text-emerald-300' },
+                { label: 'TERLAMBAT GURU', val: stats.terlambatGuru, color: 'text-orange-300' },
+                { label: 'IZIN GURU', val: stats.izinGuru, color: 'text-[#F5D76E]' },
+                { label: 'ALPHA GURU', val: stats.alphaGuru, color: 'text-rose-400' },
+              ].map((chip, idx) => (
+                <motion.div
+                  key={chip.label}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.28, delay: 0.08 + idx * 0.03 }}
+                  className="bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 rounded-2xl p-3 text-center shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5),0_4px_10px_-2px_rgba(16,185,129,0.08)] hover:-translate-y-1 hover:shadow-[0_15px_30px_-5px_rgba(16,185,129,0.18)] active:scale-[0.98] transition-all duration-300 ease-out"
+                >
+                  <div className="text-[10px] font-bold text-[#D1FAE5] tracking-wider">{chip.label}</div>
+                  <div className={`text-xl font-extrabold mt-0.5 font-mono tabular-nums drop-shadow-[0_2px_4px_rgba(0,0,0,0.7)] ${chip.color}`}>
+                    {chip.val}
+                  </div>
+                </motion.div>
+              ))}
             </div>
 
-            {/* INTEGRASI KOMPONEN RECHARTS: GRAFIK TREN */}
-            {/* Grafis Tren & Komparasi Recharts - 3D Luxury Glass Panels */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* AreaChart Glass Card */}
-              <div className="card-3d-glass p-6 sm:p-7 rounded-3xl lg:col-span-2 overflow-hidden relative group">
-                {/* 3D Specular Light Rim & Ambient Glow Accents */}
-                <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#f5e298]/70 to-transparent pointer-events-none" />
-                <div className="absolute -top-16 -right-16 w-48 h-48 bg-[#d4af37]/12 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+            {/* 3D ANALYTICS SUITE ROW 1: FLOATING 3D SPLINE LINE CHART + 3D ISOMETRIC BAR CHART */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* 3D Floating Glowing Line Chart Card */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.12 }}
+                className="surface-3d-bevel group p-5 sm:p-6 rounded-2xl overflow-hidden relative flex flex-col justify-between"
+              >
+                <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#10B981]/80 to-transparent pointer-events-none" />
 
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 pb-3.5 border-b border-[#d4af37]/25 relative z-10">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 pb-3.5 border-b border-emerald-500/20 relative z-10">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-[#114b32] to-[#072418] border border-[#d4af37]/50 flex items-center justify-center text-[#d4af37] shadow-[0_4px_12px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,235,170,0.4)] shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-emerald-500/20 to-emerald-950/60 border-t border-l border-emerald-300/30 border-b border-r border-black/60 shadow-inner flex items-center justify-center text-[#D4AF37] shrink-0">
                       <TrendingUp className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="text-sm sm:text-base font-extrabold text-white text-gold-3d tracking-wide">
-                        Grafik Tren Persentase Kehadiran Guru & Santri
+                      <h3 className="text-sm sm:text-base font-extrabold text-white tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]">
+                        Tren Kehadiran 3D Real-Time
                       </h3>
-                      <p className="text-[11px] text-emerald-300 font-medium">
-                        Visualisasi analitik performa kehadiran harian real-time bulan <b className="text-amber-300">{trendMonth}</b>
+                      <p className="text-[11px] text-[#D1FAE5] font-medium">
+                        Performa harian bulan <b className="text-[#D4AF37]">{trendMonth}</b>
                       </p>
                     </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    {/* Selector Bulan & Tahun Real-Time */}
-                    <div className="flex items-center gap-1.5 bg-[#031d11] border border-[#d4af37]/50 rounded-xl px-2.5 py-1 shadow-inner">
-                      <Calendar className="w-3.5 h-3.5 text-[#d4af37]" />
+                    <div className="flex items-center gap-1.5 bg-[#041A13] border-t border-l border-emerald-400/25 border-b border-r border-black/60 rounded-xl px-2.5 py-1.5 shadow-inner">
+                      <Calendar className="w-3.5 h-3.5 text-[#D4AF37]" />
                       <select
                         value={trendMonth}
                         onChange={(e) => {
@@ -3618,237 +3461,146 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           setSelectedBulanSantri(e.target.value);
                           setSelectedBulanGuru(e.target.value);
                         }}
-                        className="bg-transparent text-xs text-[#f3e5ab] font-bold focus:outline-none cursor-pointer"
+                        className="bg-transparent text-xs text-white font-bold focus:outline-none cursor-pointer"
                       >
                         {DAFTAR_TAHUN_REKAP.flatMap(th => DAFTAR_BULAN_REKAP.map(bln => `${bln} ${th}`)).map(opt => (
-                          <option key={opt} value={opt} className="bg-[#02130b] text-[#f3e5ab]">{opt}</option>
+                          <option key={opt} value={opt} className="bg-[#041A13] text-[#D1FAE5]">{opt}</option>
                         ))}
                       </select>
                     </div>
 
-                    <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-gradient-to-b from-[#0a3523] to-[#041a11] border border-[#d4af37]/45 shadow-[inset_0_1px_2px_rgba(0,0,0,0.6),0_2px_8px_rgba(212,175,55,0.15)]">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]" />
-                      <span className="text-[11px] font-mono font-bold text-[#f3e5ab] tracking-wider uppercase">
-                        Live Real-Time
+                    <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-[#041A13] border-t border-l border-emerald-400/30 border-b border-r border-black/60 shadow-inner">
+                      <span className="w-2 h-2 rounded-full bg-[#10B981] cyber-node-pulse" />
+                      <span className="text-[11px] font-mono font-bold text-[#D1FAE5] tracking-wider uppercase">
+                        Live
                       </span>
                     </div>
                   </div>
                 </div>
 
                 {trendData.every(d => d.hadirSantri === 0 && d.hadirGuru === 0) && (
-                  <div className="mb-3 px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-200 text-[11px] flex items-center gap-2 relative z-10">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                    <span>Bulan baru ({trendMonth}): Grafik tren kehadiran otomatis dimulai dari 0% dan terkoneksi ke absensi real-time.</span>
+                  <div className="mb-3 px-3 py-2 rounded-xl bg-[#041A13]/85 border border-emerald-500/30 text-[#D1FAE5] text-[11px] flex items-center gap-2 relative z-10">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                    <span>Bulan baru ({trendMonth}): Grafik tren otomatis mulai dari 0% dan tersinkronisasi ke Supabase.</span>
                   </div>
                 )}
 
-                <div className="h-72 w-full relative z-10">
-                  <div className="chart-3d-grid" />
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={trendData} margin={{ top: 12, right: 12, left: -20, bottom: 0 }}>
-                      <defs>
-                        {/* Glow Filter for High-End 3D Lines */}
-                        <filter id="glowSantriLine" x="-20%" y="-20%" width="140%" height="140%">
-                          <feDropShadow dx="0" dy="0" stdDeviation="2.5" floodColor="#34d399" floodOpacity="0.75" />
-                        </filter>
-                        <filter id="glowGuruLine" x="-20%" y="-20%" width="140%" height="140%">
-                          <feDropShadow dx="0" dy="0" stdDeviation="2.5" floodColor="#38bdf8" floodOpacity="0.75" />
-                        </filter>
-                        <linearGradient id="colorSantri" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#22c55e" stopOpacity={0.7} />
-                          <stop offset="60%" stopColor="#15803d" stopOpacity={0.25} />
-                          <stop offset="100%" stopColor="#052e16" stopOpacity={0.0} />
-                        </linearGradient>
-                        <linearGradient id="colorGuru" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.7} />
-                          <stop offset="60%" stopColor="#0284c7" stopOpacity={0.25} />
-                          <stop offset="100%" stopColor="#082f49" stopOpacity={0.0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(243,229,171,0.09)" vertical={false} />
-                      <XAxis dataKey="tanggal" stroke="#f3e5ab" fontSize={11} tickLine={false} axisLine={{ stroke: 'rgba(212,175,55,0.25)' }} />
-                      <YAxis stroke="#f3e5ab" fontSize={11} domain={[0, 100]} unit="%" tickLine={false} axisLine={{ stroke: 'rgba(212,175,55,0.25)' }} />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'rgba(5, 30, 20, 0.94)', 
-                          backdropFilter: 'blur(16px)', 
-                          WebkitBackdropFilter: 'blur(16px)',
-                          border: '1px solid rgba(212, 175, 55, 0.55)', 
-                          borderRadius: '16px', 
-                          color: '#ffffff', 
-                          fontSize: '12px',
-                          boxShadow: '0 16px 36px rgba(0, 0, 0, 0.85), 0 0 25px rgba(212, 175, 55, 0.25), inset 0 1px 1.5px rgba(255, 240, 180, 0.45)',
-                          padding: '12px 16px'
-                        }}
-                        itemStyle={{ color: '#ffffff', fontWeight: 600, padding: '2px 0' }}
-                        labelStyle={{ color: '#d4af37', fontWeight: 700, marginBottom: '6px', borderBottom: '1px solid rgba(212, 175, 55, 0.2)', paddingBottom: '4px' }}
-                        formatter={(value: any, name: any, entry: any) => {
-                          const isSantri = String(name).includes('Santri');
-                          const count = isSantri ? entry.payload.santriAbsen : entry.payload.guruAbsen;
-                          const total = isSantri ? entry.payload.totalSantri : entry.payload.totalGuru;
-                          return [`${value}% (Hadir: ${count}/${total})`, name];
-                        }}
-                      />
-                      <Legend 
-                        wrapperStyle={{ paddingTop: '12px', fontSize: '12px', fontWeight: 600 }}
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="hadirSantri" 
-                        name="Kehadiran Santri (%)" 
-                        stroke="#22c55e" 
-                        strokeWidth={3}
-                        filter="url(#glowSantriLine)"
-                        fillOpacity={1} 
-                        fill="url(#colorSantri)" 
-                        activeDot={{ r: 6, stroke: '#d4af37', strokeWidth: 2, fill: '#22c55e' }}
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="hadirGuru" 
-                        name="Kehadiran Guru/Ustadz (%)" 
-                        stroke="#38bdf8" 
-                        strokeWidth={3}
-                        filter="url(#glowGuruLine)"
-                        fillOpacity={1} 
-                        fill="url(#colorGuru)" 
-                        activeDot={{ r: 6, stroke: '#d4af37', strokeWidth: 2, fill: '#38bdf8' }}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                <div className="w-full relative z-10">
+                  <Line3DChart data={trendData} />
                 </div>
-              </div>
+              </motion.div>
 
-              {/* BarChart Glass Card */}
-              <div className="card-3d-glass p-6 sm:p-7 rounded-3xl space-y-4 flex flex-col justify-between overflow-hidden relative group">
-                {/* 3D Specular Light Rim & Ambient Glow Accents */}
-                <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#f5e298]/70 to-transparent pointer-events-none" />
-                <div className="absolute -top-14 -left-14 w-40 h-40 bg-[#d4af37]/12 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-14 -right-14 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+              {/* 3D Isometric Bar Chart Card */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.18 }}
+                className="surface-3d-bevel group p-5 sm:p-6 rounded-2xl space-y-4 flex flex-col justify-between overflow-hidden relative"
+              >
+                <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#D4AF37]/80 to-transparent pointer-events-none" />
 
                 <div className="relative z-10">
-                  <div className="flex items-center space-x-3 mb-2 pb-2.5 border-b border-[#d4af37]/25">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-b from-[#114b32] to-[#072418] border border-[#d4af37]/50 flex items-center justify-center text-[#d4af37] shadow-[0_4px_12px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,235,170,0.4)]">
-                      <BarChart3 className="w-4 h-4" />
+                  <div className="flex items-center space-x-3 pb-3.5 border-b border-emerald-500/20">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-b from-emerald-500/20 to-emerald-950/60 border-t border-l border-emerald-300/30 border-b border-r border-black/60 shadow-inner flex items-center justify-center text-[#D4AF37] shrink-0">
+                      <BarChart3 className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-extrabold text-white text-gold-3d tracking-wide">Distribusi Absensi Hari Ini</h3>
-                      <p className="text-[11px] text-emerald-300 font-medium">Komparasi status Santri vs Ustadz</p>
+                      <h3 className="text-sm sm:text-base font-extrabold text-white tracking-wide drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]">
+                        Distribusi Absensi 3D Isometrik
+                      </h3>
+                      <p className="text-[11px] text-[#D1FAE5] font-medium">
+                        Komparasi status Santri vs Ustadz hari ini
+                      </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="h-56 w-full relative z-10">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={[
-                        { name: 'Hadir', Santri: stats.hadirSantri || 38, Guru: stats.hadirGuru || 18 },
-                        { name: 'Izin', Santri: stats.izinSantri || 1, Guru: stats.izinGuru || 1 },
-                        { name: 'Telat/Skt', Santri: stats.sakitSantri || 1, Guru: stats.terlambatGuru || 1 },
-                        { name: 'Alpha', Santri: stats.alphaSantri || 0, Guru: stats.alphaGuru || 0 }
-                      ]}
-                      margin={{ top: 8, right: 10, left: -25, bottom: 5 }}
-                    >
-                      <defs>
-                        <linearGradient id="barGradientSantri" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#34d399" />
-                          <stop offset="100%" stopColor="#059669" />
-                        </linearGradient>
-                        <linearGradient id="barGradientGuru" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#fde047" />
-                          <stop offset="100%" stopColor="#d4af37" />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(243,229,171,0.07)" vertical={false} />
-                      <XAxis dataKey="name" stroke="#f3e5ab" fontSize={10} tickLine={false} axisLine={{ stroke: 'rgba(212,175,55,0.2)' }} />
-                      <YAxis stroke="#f3e5ab" fontSize={10} tickLine={false} axisLine={{ stroke: 'rgba(212,175,55,0.2)' }} />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'rgba(5, 30, 20, 0.94)', 
-                          backdropFilter: 'blur(16px)', 
-                          WebkitBackdropFilter: 'blur(16px)',
-                          border: '1px solid rgba(212, 175, 55, 0.55)', 
-                          borderRadius: '16px', 
-                          color: '#ffffff', 
-                          fontSize: '11px',
-                          boxShadow: '0 16px 36px rgba(0, 0, 0, 0.85), 0 0 20px rgba(212, 175, 55, 0.25), inset 0 1px 1.5px rgba(255, 240, 180, 0.45)',
-                          padding: '10px 14px'
-                        }}
-                        itemStyle={{ color: '#ffffff', fontWeight: 600 }}
-                        labelStyle={{ color: '#d4af37', fontWeight: 700, marginBottom: '4px' }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '11px', fontWeight: 600 }} />
-                      <Bar dataKey="Santri" fill="url(#barGradientSantri)" radius={[6, 6, 0, 0]} />
-                      <Bar dataKey="Guru" fill="url(#barGradientGuru)" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div className="card-3d-deep p-3.5 rounded-2xl text-[11px] flex justify-between items-center text-emerald-200 relative z-10 border border-[#d4af37]/35">
-                  <span className="font-bold flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#d4af37]" />
-                    <span>Persentase Hadir Total:</span>
-                  </span>
-                  <span className="font-extrabold text-[#d4af37] text-gold-3d font-mono text-sm px-2.5 py-0.5 rounded-lg bg-[#041d13] border border-[#d4af37]/30 shadow-inner">
-                    {Math.round(((stats.percentSantri || 0) + (stats.percentGuru || 0)) / 2)}%
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* PIE CHART VISUALISASI PERSENTASE KEHADIRAN (SANTRI & USTADZ) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Pie Chart 1: Santri */}
-              <div className="card-3d-glass p-6 rounded-3xl space-y-3 relative overflow-hidden">
-                <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#f5e298]/70 to-transparent pointer-events-none" />
-                <div className="flex items-center space-x-3 pb-3 border-b border-[#d4af37]/20">
-                  <div className="w-8 h-8 rounded-lg bg-[#0b3824] border border-[#d4af37]/40 flex items-center justify-center text-[#d4af37] shadow">
-                    <PieChartIcon className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-white text-gold-3d">Komposisi Presensi Santri (%)</h3>
-                    <p className="text-[11px] text-emerald-300">Persentase proporsi Hadir, Izin, Sakit, & Alpha</p>
-                  </div>
-                </div>
-
-                <div className="w-full relative flex justify-center py-2">
-                  <Donut3D
-                    unitLabel="Santri"
+                <div className="w-full relative z-10 flex-1 flex items-center">
+                  <Bar3DIsometricChart
                     data={[
-                      { name: 'Hadir', value: stats.hadirSantri || 38, fill: '#10b981' },
-                      { name: 'Izin', value: stats.izinSantri || 1, fill: '#f59e0b' },
-                      { name: 'Sakit', value: stats.sakitSantri || 1, fill: '#3b82f6' },
-                      { name: 'Alpha', value: stats.alphaSantri || 0, fill: '#ef4444' }
+                      { name: 'Hadir', Santri: stats.hadirSantri || 38, Guru: stats.hadirGuru || 18 },
+                      { name: 'Izin', Santri: stats.izinSantri || 1, Guru: stats.izinGuru || 1 },
+                      { name: 'Telat/Skt', Santri: stats.sakitSantri || 1, Guru: stats.terlambatGuru || 1 },
+                      { name: 'Alpha', Santri: stats.alphaSantri || 0, Guru: stats.alphaGuru || 0 },
                     ]}
                   />
                 </div>
-              </div>
 
-              {/* Pie Chart 2: Guru / Ustadz */}
-              <div className="card-3d-glass p-6 rounded-3xl space-y-3 relative overflow-hidden">
-                <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#f5e298]/70 to-transparent pointer-events-none" />
-                <div className="flex items-center space-x-3 pb-3 border-b border-[#d4af37]/20">
-                  <div className="w-8 h-8 rounded-lg bg-[#0b3824] border border-[#d4af37]/40 flex items-center justify-center text-[#d4af37] shadow">
+                <div className="bg-[#041A13] p-3.5 rounded-xl text-xs flex justify-between items-center text-[#D1FAE5] relative z-10 border-t border-l border-emerald-400/25 border-b border-r border-black/60 shadow-inner">
+                  <span className="font-bold flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#D4AF37]" />
+                    <span>Persentase Hadir Total:</span>
+                  </span>
+                  <span className="font-extrabold text-[#F5D76E] font-mono tabular-nums text-sm px-3 py-1 rounded-lg bg-gradient-to-b from-[#082E22] to-[#03140E] border-t border-l border-amber-400/35 border-b border-r border-black/60 drop-shadow-[0_2px_4px_rgba(0,0,0,0.7)]">
+                    {Math.round(((stats.percentSantri || 0) + (stats.percentGuru || 0)) / 2)}%
+                  </span>
+                </div>
+              </motion.div>
+            </div>
+
+            {/* 3D ANALYTICS SUITE ROW 2: REALISTIC 3D PERSPECTIVE PIE CHARTS (SANTRI & USTADZ) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* 3D Pie Chart 1: Santri */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.22 }}
+                className="surface-3d-bevel group p-5 sm:p-6 rounded-2xl space-y-3 relative overflow-hidden"
+              >
+                <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#10B981]/80 to-transparent pointer-events-none" />
+                <div className="flex items-center space-x-3 pb-3 border-b border-emerald-500/20">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-b from-emerald-500/20 to-emerald-950/60 border-t border-l border-emerald-300/30 border-b border-r border-black/60 shadow-inner flex items-center justify-center text-[#10B981]">
                     <PieChartIcon className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-white text-gold-3d">Komposisi Presensi Ustadz / Guru (%)</h3>
-                    <p className="text-[11px] text-emerald-300">Persentase proporsi Hadir, Terlambat, Izin, & Alpha</p>
+                    <h3 className="text-sm sm:text-base font-extrabold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]">Komposisi Presensi Santri 3D (%)</h3>
+                    <p className="text-[11px] text-[#D1FAE5]">Proporsi interaktif Hadir, Izin, Sakit, & Alpha</p>
                   </div>
                 </div>
 
                 <div className="w-full relative flex justify-center py-2">
-                  <Donut3D
+                  <Pie3DChart
+                    unitLabel="Santri"
+                    data={[
+                      { name: 'Hadir', value: stats.hadirSantri || 38, fill: '#10b981' },
+                      { name: 'Izin', value: stats.izinSantri || 1, fill: '#D4AF37' },
+                      { name: 'Sakit', value: stats.sakitSantri || 1, fill: '#38bdf8' },
+                      { name: 'Alpha', value: stats.alphaSantri || 0, fill: '#ef4444' },
+                    ]}
+                  />
+                </div>
+              </motion.div>
+
+              {/* 3D Pie Chart 2: Guru / Ustadz */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.26 }}
+                className="surface-3d-bevel group p-5 sm:p-6 rounded-2xl space-y-3 relative overflow-hidden"
+              >
+                <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#D4AF37]/80 to-transparent pointer-events-none" />
+                <div className="flex items-center space-x-3 pb-3 border-b border-emerald-500/20">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-b from-emerald-500/20 to-emerald-950/60 border-t border-l border-emerald-300/30 border-b border-r border-black/60 shadow-inner flex items-center justify-center text-[#D4AF37]">
+                    <PieChartIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-extrabold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.75)]">Komposisi Presensi Ustadz / Guru 3D (%)</h3>
+                    <p className="text-[11px] text-[#D1FAE5]">Proporsi interaktif Hadir, Terlambat, Izin, & Alpha</p>
+                  </div>
+                </div>
+
+                <div className="w-full relative flex justify-center py-2">
+                  <Pie3DChart
                     unitLabel="Pengajar"
                     data={[
                       { name: 'Hadir', value: stats.hadirGuru || 18, fill: '#10b981' },
                       { name: 'Terlambat', value: stats.terlambatGuru || 1, fill: '#f97316' },
-                      { name: 'Izin', value: stats.izinGuru || 1, fill: '#f59e0b' },
-                      { name: 'Alpha', value: stats.alphaGuru || 0, fill: '#ef4444' }
+                      { name: 'Izin', value: stats.izinGuru || 1, fill: '#D4AF37' },
+                      { name: 'Alpha', value: stats.alphaGuru || 0, fill: '#ef4444' },
                     ]}
                   />
                 </div>
-              </div>
+              </motion.div>
             </div>
 
             {/* ========================================================================= */}
@@ -4462,7 +4214,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Firestore Terpusat Single Source of Truth & Sinkronisasi Antar-Perangkat */}
+              {/* Supabase Realtime Single Source of Truth & Sinkronisasi Antar-Perangkat */}
               <div className="p-3 rounded-2xl bg-[#041a10] border border-[#d4af37]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-md">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center text-emerald-300 shrink-0">
@@ -4471,7 +4223,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-extrabold text-[#f3e5ab] text-xs">
-                        Firestore Single Source of Truth
+                        Supabase Realtime Single Source of Truth
                       </span>
                       <span className="px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/50 text-emerald-300 text-[10px] font-bold font-mono flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -4479,22 +4231,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </span>
                     </div>
                     <span className="text-[11px] text-emerald-300/80 block">
-                      Riwayat & rekapan dihitung seragam dari Firestore produksi (<span className="font-mono text-[#f5e298]">{rekapSantriHistoryList.length}</span> arsip santri, <span className="font-mono text-[#f5e298]">{rekapGuruHistoryList.length}</span> arsip guru).
+                      Riwayat &amp; rekapan disinkronkan murni dari Supabase produksi (<span className="font-mono text-[#f5e298]">{rekapSantriHistoryList.length}</span> arsip santri, <span className="font-mono text-[#f5e298]">{rekapGuruHistoryList.length}</span> arsip guru).
                     </span>
                   </div>
                 </div>
-
-                {localMigrationInfo.hasLocalData && (
-                  <button
-                    type="button"
-                    onClick={() => setShowMigrationModal(true)}
-                    className="btn-3d-gold px-3 py-1.5 text-black font-extrabold text-[11px] rounded-xl flex items-center gap-1.5 shrink-0 shadow animate-pulse hover:animate-none"
-                    title="Migrasikan arsip lokal perangkat ini ke Firestore terpusat"
-                  >
-                    <Upload className="w-3.5 h-3.5 text-black" />
-                    <span>Migrasikan LocalStorage ({localMigrationInfo.santriLocalCount + localMigrationInfo.guruLocalCount} Data)</span>
-                  </button>
-                )}
               </div>
 
               {/* Status Banner Bulan & Koneksi Real-Time */}
@@ -5396,106 +5136,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             )}
 
-            {/* MODAL MIGRASI LOCALSTORAGE KE FIRESTORE SINGLE SOURCE OF TRUTH (Sesuai Syarat C) */}
-            {showMigrationModal && (
-              <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-                <div className="card-3d rounded-3xl p-6 sm:p-7 max-w-xl w-full border-2 border-[#d4af37] bg-gradient-to-b from-[#18251b] via-[#0d1a10] to-[#051108] space-y-4 shadow-2xl">
-                  <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/30">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/50 flex items-center justify-center text-amber-300 shadow">
-                        <Upload className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h4 className="text-base font-extrabold text-white text-gold-3d">
-                          Migrasi LocalStorage ke Firestore Terpusat
-                        </h4>
-                        <p className="text-xs text-emerald-300">
-                          Jadikan Firestore satu-satunya sumber data permanen (Zero Data Loss)
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowMigrationModal(false)}
-                      className="p-1.5 rounded-xl bg-red-950/80 border border-red-500/40 text-red-300 hover:bg-red-900 transition"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  <div className="space-y-3 text-xs text-slate-300">
-                    <div className="p-3.5 rounded-2xl bg-[#041a10] border border-[#d4af37]/30 space-y-2">
-                      <span className="font-extrabold text-[#f3e5ab] text-xs block">
-                        📊 Audit Deteksi Data Perangkat Ini:
-                      </span>
-                      <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
-                        <div className="p-2.5 rounded-xl bg-black/40 border border-emerald-500/30">
-                          <span className="text-slate-400 block text-[10px]">Riwayat Santri Lokal:</span>
-                          <b className="text-emerald-300 text-sm">{localMigrationInfo.santriLocalCount} catatan</b>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-black/40 border border-emerald-500/30">
-                          <span className="text-slate-400 block text-[10px]">Riwayat Ustadz Lokal:</span>
-                          <b className="text-emerald-300 text-sm">{localMigrationInfo.guruLocalCount} catatan</b>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-black/40 border border-amber-500/30">
-                          <span className="text-slate-400 block text-[10px]">Arsip Firestore Santri:</span>
-                          <b className="text-amber-300 text-sm">{rekapSantriHistoryList.length} catatan</b>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-black/40 border border-amber-500/30">
-                          <span className="text-slate-400 block text-[10px]">Arsip Firestore Ustadz:</span>
-                          <b className="text-amber-300 text-sm">{rekapGuruHistoryList.length} catatan</b>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-[11px] text-emerald-200/90 space-y-1">
-                      <b className="text-[#f3e5ab] block">🛡️ Keamanan & Zero Data Loss:</b>
-                      <p>
-                        Sistem memvalidasi seluruh data lokal dan hanya menambahkan data yang belum ada di Firestore (deduplikasi otomatis). Data lokal di browser Anda TIDAK akan dihapus, melainkan tetap dipertahankan sebagai cadangan keselamatan.
-                      </p>
-                    </div>
-
-                    {migrationFeedback && (
-                      <div className="p-3 rounded-xl bg-[#03180f] border border-[#d4af37]/40 text-xs text-[#f5e298] font-medium">
-                        {migrationFeedback}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-[#d4af37]/30">
-                    <button
-                      type="button"
-                      onClick={handleDownloadLocalStorageBackup}
-                      className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-950/90 border border-emerald-500/50 hover:bg-emerald-900 text-emerald-300 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow"
-                      title="Unduh backup data lokal sebelum migrasi"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>1. Unduh Backup JSON</span>
-                    </button>
-
-                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                      <button
-                        type="button"
-                        onClick={() => setShowMigrationModal(false)}
-                        className="px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-white text-xs font-bold transition"
-                      >
-                        Tutup
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleExecuteLocalStorageMigration}
-                        disabled={isMigratingData}
-                        className="btn-3d-gold px-5 py-2.5 text-black font-extrabold text-xs shadow-lg flex items-center justify-center gap-1.5 disabled:opacity-50"
-                      >
-                        <Upload className="w-4 h-4 text-black" />
-                        <span>{isMigratingData ? 'Memproses Migrasi...' : '2. Simpan ke Firestore Terpusat'}</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* ========================================================================= */}
             <div className="card-3d rounded-3xl p-6 border border-[#d4af37]/30 space-y-4 bg-[#03150d]">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[#d4af37]/20">
@@ -5921,200 +5561,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </table>
               </div>
             </div>
-
-            {/* ========================================================================= */}
-            {/* 7. LINK QR CODE PER ANGKATAN UNTUK MENCOCOKKAN ABSENSI & JADWAL           */}
-            {/* ========================================================================= */}
-            <div className="card-3d rounded-3xl p-6 border-2 border-[#d4af37]/60 bg-gradient-to-r from-[#031e13] via-[#062c1c] to-[#031e13] shadow-2xl space-y-6">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-[#d4af37]/30">
-                <div className="flex items-center space-x-3.5">
-                  <div className="w-12 h-12 rounded-2xl bg-[#0b3824] border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow">
-                    <QrCode className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <h3 className="text-base sm:text-lg font-black text-white text-gold-3d flex items-center gap-2">
-                      <span>QR Code Presensi Cerdas Per Angkatan</span>
-                      <span className="px-2 py-0.5 rounded-full bg-[#d4af37] text-black font-extrabold text-[10px]">
-                        1 QR Code Untuk Semua
-                      </span>
-                    </h3>
-                    <p className="text-xs text-emerald-200 mt-0.5">
-                      Pindai QR Code untuk mencocokkan kehadiran santri dan ustadz secara instan sesuai jadwal pelajaran aktif hari ini.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Filter Angkatan QR Code */}
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    onClick={() => setQrAngkatan('SEMUA')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                      qrAngkatan === 'SEMUA' ? 'btn-3d-gold text-black shadow' : 'bg-[#03140c] text-slate-300 border border-[#d4af37]/30'
-                    }`}
-                  >
-                    1 QR Code Master (Semua)
-                  </button>
-                  {classList.map(c => (
-                    <button
-                      key={c}
-                      onClick={() => setQrAngkatan(c)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                        qrAngkatan === c ? 'btn-3d-gold text-black shadow' : 'bg-[#03140c] text-slate-300 border border-[#d4af37]/30'
-                      }`}
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Tampilan Visual QR Code & Koneksi Jadwal */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-                {/* QR Code Graphic Box */}
-                <div className="lg:col-span-4 flex flex-col items-center justify-center p-6 rounded-3xl bg-[#020e08] border-2 border-[#d4af37]/60 shadow-2xl relative">
-                  <div className="w-56 h-56 p-3 bg-white rounded-2xl shadow-xl flex items-center justify-center relative overflow-hidden">
-                    {/* SVG Authentic Vector QR Code */}
-                    <svg viewBox="0 0 200 200" className="w-full h-full">
-                      {/* Background */}
-                      <rect width="200" height="200" fill="#ffffff" />
-                      {/* Top-Left Finder */}
-                      <rect x="15" y="15" width="50" height="50" fill="#042014" rx="6" />
-                      <rect x="23" y="23" width="34" height="34" fill="#ffffff" rx="4" />
-                      <rect x="31" y="31" width="18" height="18" fill="#d4af37" rx="2" />
-                      {/* Top-Right Finder */}
-                      <rect x="135" y="15" width="50" height="50" fill="#042014" rx="6" />
-                      <rect x="143" y="23" width="34" height="34" fill="#ffffff" rx="4" />
-                      <rect x="151" y="31" width="18" height="18" fill="#d4af37" rx="2" />
-                      {/* Bottom-Left Finder */}
-                      <rect x="15" y="135" width="50" height="50" fill="#042014" rx="6" />
-                      <rect x="23" y="143" width="34" height="34" fill="#ffffff" rx="4" />
-                      <rect x="31" y="151" width="18" height="18" fill="#d4af37" rx="2" />
-                      {/* Data Pattern Modules */}
-                      <g fill="#042014">
-                        <rect x="75" y="20" width="10" height="10" />
-                        <rect x="95" y="20" width="10" height="10" />
-                        <rect x="115" y="20" width="10" height="10" />
-                        <rect x="75" y="40" width="10" height="10" />
-                        <rect x="85" y="50" width="10" height="10" />
-                        <rect x="105" y="40" width="10" height="10" />
-                        <rect x="20" y="75" width="10" height="10" />
-                        <rect x="40" y="85" width="10" height="10" />
-                        <rect x="55" y="75" width="10" height="10" />
-                        <rect x="75" y="75" width="12" height="12" fill="#d4af37" />
-                        <rect x="95" y="75" width="10" height="10" />
-                        <rect x="115" y="75" width="12" height="12" fill="#d4af37" />
-                        <rect x="135" y="75" width="10" height="10" />
-                        <rect x="155" y="85" width="10" height="10" />
-                        <rect x="175" y="75" width="10" height="10" />
-                        <rect x="75" y="95" width="10" height="10" />
-                        <rect x="85" y="105" width="10" height="10" />
-                        <rect x="105" y="95" width="10" height="10" />
-                        <rect x="115" y="105" width="10" height="10" />
-                        <rect x="135" y="95" width="10" height="10" />
-                        <rect x="75" y="115" width="12" height="12" fill="#d4af37" />
-                        <rect x="95" y="115" width="10" height="10" />
-                        <rect x="115" y="115" width="10" height="10" />
-                        <rect x="75" y="135" width="10" height="10" />
-                        <rect x="95" y="145" width="10" height="10" />
-                        <rect x="115" y="135" width="10" height="10" />
-                        <rect x="135" y="145" width="10" height="10" />
-                        <rect x="155" y="135" width="10" height="10" />
-                        <rect x="175" y="145" width="10" height="10" />
-                        <rect x="75" y="155" width="10" height="10" />
-                        <rect x="95" y="165" width="10" height="10" />
-                        <rect x="115" y="155" width="10" height="10" />
-                        <rect x="135" y="165" width="10" height="10" />
-                        <rect x="155" y="155" width="10" height="10" />
-                      </g>
-                      {/* Center Salaf Emblem */}
-                      <circle cx="100" cy="100" r="16" fill="#052e16" stroke="#d4af37" strokeWidth="2.5" />
-                      <text x="100" y="104" textAnchor="middle" fill="#d4af37" fontSize="9" fontWeight="bold">SIM</text>
-                    </svg>
-                  </div>
-
-                  <span className="mt-3 text-xs font-extrabold text-[#d4af37] font-mono tracking-wider">
-                    {qrAngkatan === 'SEMUA' ? '1 QR CODE UNTUK SEMUA ANGKATAN' : `QR CODE ${qrAngkatan}`}
-                  </span>
-                  <span className="text-[10px] text-emerald-300 font-mono">
-                    ID: QR-PP-SALAF-{qrAngkatan.replace(' ', '-')}
-                  </span>
-                </div>
-
-                {/* Detail Koneksi Jadwal & Tombol Scan */}
-                <div className="lg:col-span-8 space-y-4">
-                  <div className="bg-[#03140c] border border-[#d4af37]/30 rounded-2xl p-4 space-y-2">
-                    <span className="text-xs font-bold text-[#d4af37] flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-[#d4af37]" />
-                      <span>Koneksi Jadwal Pelajaran Hari Ini Terkait QR Code:</span>
-                    </span>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      Ketika santri atau ustadz memindai QR Code di atas, sistem secara otomatis mencocokkan waktu saat ini dengan jam ke- dan mata pelajaran di angkatan <b>{qrAngkatan}</b>.
-                    </p>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
-                      {jadwalList
-                        .filter(j => qrAngkatan === 'SEMUA' || j.kelas === qrAngkatan)
-                        .slice(0, 4)
-                        .map((j, i) => (
-                          <div key={i} className="p-2.5 rounded-xl bg-[#062417] border border-[#d4af37]/20 text-xs">
-                            <span className="font-bold text-white block">{j.mapel}</span>
-                            <span className="text-[11px] text-emerald-300 font-mono">{j.hari} • {j.waktu}</span>
-                            <span className="text-[10px] text-[#d4af37] block mt-0.5">Pengampu: {j.nama}</span>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-
-                  {/* Tombol Interaktif & Hasil Simulasi Scan */}
-                  <div className="flex flex-wrap items-center gap-3">
-                    <button
-                      onClick={() => {
-                        const targetCount = qrAngkatan === 'SEMUA' 
-                          ? santriList.length 
-                          : santriList.filter(s => s.kelas === qrAngkatan).length;
-                        setSimulasiScanMsg(`✅ Berhasil! QR Code ${qrAngkatan} berhasil dicocokkan dengan jadwal hari ini. ${targetCount} Santri & Ustadz Pengajar otomatis dicatat HADIR TEPAT WAKTU.`);
-                        setTimeout(() => setSimulasiScanMsg(null), 8000);
-                      }}
-                      className="btn-3d-gold px-5 py-2.5 rounded-xl text-black font-extrabold text-xs flex items-center gap-2 shadow-lg"
-                    >
-                      <QrCode className="w-4 h-4 text-black" />
-                      <span>Simulasi Scan QR Presensi Sekarang</span>
-                    </button>
-
-                    <button
-                      onClick={printTable}
-                      className="px-4 py-2.5 rounded-xl bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-bold text-xs flex items-center gap-1.5 hover:bg-emerald-900 transition"
-                    >
-                      <Printer className="w-4 h-4" />
-                      <span>Cetak Lembar QR Code</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        alert(`QR Code ${qrAngkatan} siap diunduh dan dipasang pada pintu kelas madrasah atau aula pondok.`);
-                      }}
-                      className="px-4 py-2.5 rounded-xl bg-blue-950 border border-blue-500/50 text-blue-200 font-bold text-xs flex items-center gap-1.5 hover:bg-blue-900 transition"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>Unduh Berkas QR</span>
-                    </button>
-                  </div>
-
-                  {simulasiScanMsg && (
-                    <div className="p-3.5 rounded-2xl bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 text-xs font-bold shadow-lg animate-bounce">
-                      {simulasiScanMsg}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
         {/* TAB: KALENDER AKADEMIK & AGENDA MADRASAH */}
         {activeTab === 'kalender' && (
           <div className="space-y-6">
-            <div className="card-3d rounded-3xl p-6 backdrop-blur flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border border-[#d4af37]/30">
+            <div className="card-3d rounded-3xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border border-emerald-500/20">
               <div>
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-xl bg-[#0b3824] border border-[#d4af37]/50 flex items-center justify-center text-[#d4af37] shadow">
@@ -6290,7 +5743,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* TAB 2: ABSENSI SANTRI */}
         {activeTab === 'absensi-santri' && (
-          <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-6">
+          <div className="card-3d rounded-3xl p-5 sm:p-6 space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pb-4 border-b border-[#d4af37]/20">
               <div>
                 <h3 className="text-lg font-bold text-[#d4af37] text-gold-3d">
@@ -6620,7 +6073,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* TAB 3: ABSENSI USTADZ / GURU (DENGAN TAMPILAN JADWAL, REKAPAN LENGKAP, DAN SIMPAN DI OPTION PANEL) */}
         {activeTab === 'absensi-guru' && (
-          <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-6">
+          <div className="card-3d rounded-3xl p-5 sm:p-6 space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-[#d4af37]/20">
               <div>
                 <h3 className="text-lg font-bold text-[#d4af37] text-gold-3d">
@@ -7196,7 +6649,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {activeTab === 'jadwal' && (
           <div className="space-y-8">
             {/* 1. KONTROL UTAMA: HEADER JADWAL & TOMBOL AKSI */}
-            <div className="card-3d rounded-3xl p-6 backdrop-blur space-y-4 border-2 border-[#d4af37]/40 shadow-2xl bg-gradient-to-br from-[#031c11] via-[#052919] to-[#02130c]">
+            <div className="card-3d rounded-3xl p-6 space-y-4 border border-emerald-500/25 shadow-md bg-emerald-950/90">
               <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                 <div className="flex items-center space-x-3.5">
                   <div className="w-12 h-12 rounded-2xl bg-[#0b422a] border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow-xl">
@@ -7268,7 +6721,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {/* ========================================================================= */}
 
             {/* TABEL 1: TINGKATAN TSANAWIYAH (KELAS 1 - 3 TSANAWIYAH | SABTU S/D KAMIS) */}
-            <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-5 border-2 border-emerald-500/40 shadow-xl bg-[#02160d]">
+            <div className="card-3d rounded-3xl p-5 sm:p-6 space-y-5 border border-emerald-500/30 shadow-md bg-emerald-950/90">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-emerald-500/30">
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-xl bg-emerald-950 border border-emerald-400 flex items-center justify-center text-emerald-300 font-bold shadow">
@@ -7434,7 +6887,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             {/* TABEL 2: TINGKATAN ALIYAH (KELAS 1 - 3 ALIYAH | MALAM SABTU S/D MALAM KAMIS) */}
-            <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-5 border-2 border-amber-500/50 shadow-xl bg-[#140b02]">
+            <div className="card-3d rounded-3xl p-5 sm:p-6 space-y-5 border border-amber-500/40 shadow-md bg-[#140b02]">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-amber-500/30">
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-xl bg-amber-950 border border-[#d4af37] flex items-center justify-center text-[#d4af37] font-bold shadow">
@@ -7636,7 +7089,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {/* ========================================================================= */}
             {/* 3. TABEL SILABUS MEMAKNAI (DI BAWAH TABEL JADWAL DENGAN SEMESTER 1 & 2)    */}
             {/* ========================================================================= */}
-            <div className="card-3d rounded-3xl p-6 backdrop-blur space-y-5 border-2 border-[#d4af37]/50 shadow-2xl bg-gradient-to-r from-[#031d12] via-[#062c1b] to-[#031d12]">
+            <div className="card-3d rounded-3xl p-6 space-y-5 border border-[#d4af37]/40 shadow-md bg-emerald-950/90">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-[#d4af37]/25">
                 <div className="flex items-center space-x-3.5">
                   <div className="w-12 h-12 rounded-2xl bg-[#0b422a] border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow-xl">
@@ -8361,7 +7814,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* TAB 5: DATA GURU PENGAJAR PER ANGKATAN DENGAN FITUR HAPUS MANUAL */}
         {activeTab === 'guru' && (
-          <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-6">
+          <div className="card-3d rounded-3xl p-5 sm:p-6 space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[#d4af37]/20">
               <div>
                 <h3 className="text-lg font-bold text-[#d4af37] text-gold-3d flex items-center gap-2">
@@ -8499,7 +7952,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* TAB 6: DATA SANTRI & FOTO PER ANGKATAN */}
         {activeTab === 'santri' && (
-          <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-6">
+          <div className="card-3d rounded-3xl p-5 sm:p-6 space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[#d4af37]/20">
               <div>
                 <h3 className="text-lg font-bold text-[#d4af37] text-gold-3d">
@@ -9124,7 +8577,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               /* ========================================================================= */
               /* 1. TABEL EDITABLE RINGKASAN HAFALAN SANTRI (TERKONEKSI REAL-TIME)         */
               /* ========================================================================= */
-              <div className="card-3d rounded-3xl p-4 sm:p-5 backdrop-blur space-y-4">
+              <div className="card-3d rounded-3xl p-4 sm:p-5 space-y-4">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-[#d4af37]/20">
                   <div>
                     <h4 className="text-base font-bold text-[#d4af37] text-gold-3d flex items-center gap-2">
@@ -9397,7 +8850,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               /* ========================================================================= */
               /* 2. LOG RIWAYAT SEMUA SETORAN                                              */
               /* ========================================================================= */
-              <div className="card-3d rounded-3xl p-4 sm:p-5 backdrop-blur space-y-4">
+              <div className="card-3d rounded-3xl p-4 sm:p-5 space-y-4">
                 <div className="flex justify-between items-center pb-3 border-b border-[#d4af37]/20">
                   <div>
                     <h4 className="text-base font-bold text-[#d4af37] text-gold-3d flex items-center gap-2">
@@ -10070,7 +9523,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             {/* TABEL NILAI EDITABLE TERKONEKSI REAL-TIME */}
-            <div className="card-3d rounded-3xl p-4 sm:p-5 backdrop-blur space-y-4">
+            <div className="card-3d rounded-3xl p-4 sm:p-5 space-y-4">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-[#d4af37]/20">
                 <div>
                   <h4 className="text-base font-bold text-[#d4af37] text-gold-3d flex items-center gap-2">
@@ -10533,712 +9986,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 8.5: INTEGRASI GOOGLE SHEETS & DRIVE CLOUD DATABASE */}
-        {activeTab === 'google-sheets' && (
-          <div className="space-y-6">
-            {/* Header Google Sheets Command Center */}
-            <div className="card-3d-glass rounded-3xl p-6 border border-[#d4af37]/40 shadow-2xl relative overflow-hidden">
-              <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-[#f5e298]/80 to-transparent pointer-events-none" />
-              
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-[#d4af37]/20">
-                <div className="flex items-center space-x-3.5">
-                  <div className="w-12 h-12 rounded-2xl bg-[#093d25] border-2 border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow-xl">
-                    <FileSpreadsheet className="w-7 h-7 text-emerald-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold font-serif text-[#d4af37] text-gold-3d flex items-center gap-2">
-                      Pusat Integrasi Google Sheets & Drive
-                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-sans font-bold">
-                        Cloud Sync Master
-                      </span>
-                    </h3>
-                    <p className="text-xs text-emerald-200/90 mt-1">
-                      Koneksi dua arah: Sinkronkan data kehadiran ustadz, santri, kurikulum, dan nilai raport ke Google Spreadsheet.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => onOpenSheetsModal ? onOpenSheetsModal() : null}
-                    className="px-4 py-2 bg-gradient-to-r from-[#d4af37] to-[#b8972e] text-black font-extrabold text-xs rounded-xl shadow-lg hover:brightness-110 transition flex items-center gap-2"
-                  >
-                    <Sliders className="w-3.5 h-3.5" />
-                    <span>Buka Panel Modal Drive</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Status Message Notification */}
-              {sheetsStatusMsg && (
-                <div className={`mt-4 p-3.5 rounded-xl border flex items-center gap-3 text-xs font-semibold animate-fadeIn ${
-                  sheetsStatusMsg.type === 'success'
-                    ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-200'
-                    : sheetsStatusMsg.type === 'error'
-                    ? 'bg-red-950/80 border-red-500/50 text-red-200'
-                    : 'bg-blue-950/80 border-blue-500/50 text-blue-200'
-                }`}>
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span className="flex-1">{sheetsStatusMsg.text}</span>
-                  <button onClick={() => setSheetsStatusMsg(null)} className="text-stone-400 hover:text-white">✕</button>
-                </div>
-              )}
-
-              {/* Grid 2 Kolom: Status Akun & File Spreadsheet Aktif */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                {/* 1. Status Akun Google */}
-                <div className="bg-[#02130a]/90 p-4 rounded-2xl border border-[#d4af37]/30 flex flex-col justify-between space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#d4af37] uppercase tracking-wider flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                      Status Akun Google Workspace
-                    </span>
-                    <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full border ${
-                      isGoogleConnected 
-                        ? 'bg-emerald-900/60 text-emerald-300 border-emerald-500/50' 
-                        : 'bg-stone-800 text-stone-400 border-stone-700'
-                    }`}>
-                      {isGoogleConnected ? '● Terhubung' : '○ Offline'}
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-stone-300 leading-relaxed">
-                    {isGoogleConnected
-                      ? 'Akun Google Anda terhubung aktif. Izin Google Sheets & Google Drive telah diberikan untuk sinkronisasi data.'
-                      : 'Hubungkan akun Google Anda untuk mengaktifkan sinkronisasi otomatis ke Google Spreadsheet.'}
-                  </p>
-
-                  <div className="pt-2">
-                    {isGoogleConnected ? (
-                      <button
-                        onClick={async () => {
-                          if (window.confirm('Keluar dari sambungan akun Google?')) {
-                            if (setIsGoogleConnected) setIsGoogleConnected(false);
-                            setSheetsStatusMsg({ type: 'info', text: 'Telah memutuskan sambungan dari akun Google.' });
-                          }
-                        }}
-                        className="px-3.5 py-1.5 text-xs bg-stone-900 hover:bg-stone-800 border border-stone-700 text-stone-300 rounded-lg transition"
-                      >
-                        Keluar Akun Google
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          if (onOpenSheetsModal) onOpenSheetsModal();
-                        }}
-                        className="px-4 py-2 bg-white text-gray-800 font-bold text-xs rounded-lg shadow hover:bg-gray-100 transition flex items-center gap-2"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24">
-                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                        </svg>
-                        <span>Sign in with Google</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* 2. File Spreadsheet Terhubung */}
-                <div className="bg-[#02130a]/90 p-4 rounded-2xl border border-[#d4af37]/30 flex flex-col justify-between space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#d4af37] uppercase tracking-wider flex items-center gap-1.5">
-                      <Database className="w-4 h-4 text-emerald-400" />
-                      Spreadsheet ID Terhubung
-                    </span>
-                    {spreadsheetId && (
-                      <a
-                        href={`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-emerald-400 hover:underline flex items-center gap-1 font-bold"
-                      >
-                        <span>Buka Sheets</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={sheetsInputId}
-                        onChange={(e) => setSheetsInputId(e.target.value)}
-                        placeholder="Masukkan ID Spreadsheet atau Link..."
-                        className="flex-1 px-3 py-1.5 rounded-lg bg-[#010a05] border border-[#d4af37]/40 text-white font-mono text-xs focus:outline-none"
-                      />
-                      <button
-                        onClick={() => {
-                          let clean = sheetsInputId.trim();
-                          if (clean.includes('/d/')) {
-                            const match = clean.match(/\/d\/([a-zA-Z0-9-_]+)/);
-                            if (match && match[1]) clean = match[1];
-                          }
-                          setSpreadsheetId(clean);
-                          setSheetsStatusMsg({ type: 'success', text: `Spreadsheet ID berhasil diperbarui: ${clean}` });
-                        }}
-                        className="px-3 py-1.5 bg-[#d4af37] text-black font-bold text-xs rounded-lg hover:brightness-110 transition"
-                      >
-                        Terapkan
-                      </button>
-                    </div>
-                    <span className="text-[10px] text-stone-400 block font-mono truncate">
-                      ID Aktif: {spreadsheetId || 'Belum diatur'}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <button
-                      onClick={() => {
-                        setSheetsConfirmModal({
-                          isOpen: true,
-                          action: 'createSheet',
-                          title: 'Buat Spreadsheet Baru di Google Drive?',
-                          desc: 'Sistem akan membuat Google Spreadsheet baru di Google Drive Anda dengan judul "SIM Pontren Salaf - Database Master" dan mengonfigurasi 10 sheet tab otomatis.'
-                        });
-                      }}
-                      className="px-3 py-1.5 bg-emerald-900/60 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Buat Spreadsheet Baru di Drive</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        if (onOpenSheetsModal) onOpenSheetsModal();
-                      }}
-                      className="px-3 py-1.5 bg-stone-900 hover:bg-stone-800 border border-stone-700 text-stone-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
-                    >
-                      <FolderOpen className="w-3.5 h-3.5 text-[#d4af37]" />
-                      <span>Pilih dari Drive</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Master Sync Action Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                {/* Export Card */}
-                <div className="p-4 rounded-2xl bg-gradient-to-br from-[#031d12] to-[#01140b] border border-emerald-500/40 flex flex-col justify-between space-y-3">
-                  <div>
-                    <div className="flex items-center gap-2 text-emerald-300 font-bold text-xs uppercase tracking-wider">
-                      <ArrowUpFromLine className="w-4 h-4 text-emerald-400" />
-                      Kirim Seluruh Data ke Google Sheets (Export)
-                    </div>
-                    <p className="text-xs text-stone-300 mt-1 leading-relaxed">
-                      Kirim data lokal aplikasi ({santriList.length} Santri, {guruList.length} Guru, {absensiGuruList.length} Presensi Ustadz, {absensiSantriList.length} Presensi Santri, Jadwal, Nilai) ke Google Spreadsheet terhubung.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setSheetsConfirmModal({
-                        isOpen: true,
-                        action: 'exportAll',
-                        title: 'Kirim / Ekspor Seluruh Data ke Google Sheets?',
-                        desc: `Tindakan ini akan menimpa seluruh lembar kerja pada Google Spreadsheet (${spreadsheetId}) dengan data terbaru yang ada di aplikasi saat ini.`
-                      });
-                    }}
-                    disabled={isSheetsBusy}
-                    className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition disabled:opacity-50"
-                  >
-                    <ArrowUpFromLine className="w-4 h-4" />
-                    <span>{isSheetsBusy ? 'Sedang Memproses...' : 'Ekspor Semua Data ke Google Sheets'}</span>
-                  </button>
-                </div>
-
-                {/* Import Card */}
-                <div className="p-4 rounded-2xl bg-gradient-to-br from-[#171203] to-[#0f0c02] border border-[#d4af37]/40 flex flex-col justify-between space-y-3">
-                  <div>
-                    <div className="flex items-center gap-2 text-[#d4af37] font-bold text-xs uppercase tracking-wider">
-                      <ArrowDownToLine className="w-4 h-4 text-[#d4af37]" />
-                      Tarik Data dari Google Sheets (Import)
-                    </div>
-                    <p className="text-xs text-stone-300 mt-1 leading-relaxed">
-                      Ambil data santri, guru, jadwal pelajaran, nadzhom, dan nilai ujian dari Google Spreadsheet master untuk disinkronkan ke aplikasi.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setSheetsConfirmModal({
-                        isOpen: true,
-                        action: 'importAll',
-                        title: 'Tarik / Impor Data dari Google Sheets?',
-                        desc: `Tindakan ini akan membaca Google Spreadsheet (${spreadsheetId}) dan memperbarui data lokal aplikasi dengan baris data dari spreadsheet.`
-                      });
-                    }}
-                    disabled={isSheetsBusy}
-                    className="w-full py-2.5 bg-gradient-to-r from-[#d4af37] to-[#b8972e] text-black font-extrabold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition disabled:opacity-50 hover:brightness-110"
-                  >
-                    <ArrowDownToLine className="w-4 h-4" />
-                    <span>{isSheetsBusy ? 'Sedang Memproses...' : 'Tarik Data dari Google Sheets'}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* TAB PREVIEW DATA SHEET */}
-            <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur-md space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-[#d4af37]/20">
-                <div>
-                  <h4 className="text-sm sm:text-base font-bold text-white text-gold-3d flex items-center gap-2">
-                    Pratinjau Lembar Kerja (Sheet Tabs)
-                  </h4>
-                  <p className="text-xs text-emerald-300">
-                    Pilih lembar kerja di bawah untuk meninjau data yang disinkronkan ke Google Spreadsheet.
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => {
-                    setSheetsConfirmModal({
-                      isOpen: true,
-                      action: 'exportTab',
-                      tabName: sheetsPreviewTab,
-                      title: `Ekspor Tab ${sheetsPreviewTab.toUpperCase()} ke Google Sheets?`,
-                      desc: `Tindakan ini akan menyinkronkan data kategori "${sheetsPreviewTab}" saja ke tab terkait di Google Spreadsheet.`
-                    });
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl btn-3d-gold text-black font-extrabold text-xs flex items-center gap-1.5 shadow"
-                >
-                  <ArrowUpFromLine className="w-3.5 h-3.5" />
-                  <span>Ekspor Tab Ini Saja</span>
-                </button>
-              </div>
-
-              {/* Subtab Selector */}
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { id: 'absensi-guru', label: `Presensi Ustadz (${combinedGuruLog.length})` },
-                  { id: 'absensi-santri', label: `Presensi Santri (${absensiSantriList.length})` },
-                  { id: 'santri', label: `Data Santri (${santriList.length})` },
-                  { id: 'guru', label: `Data Guru (${guruList.length})` },
-                  { id: 'jadwal', label: `Jadwal (${jadwalList.length})` },
-                  { id: 'nadzhom', label: `Nadzhom (${nadzhomList.length})` },
-                  { id: 'nilai', label: `Nilai Raport (${nilaiList.length})` },
-                  { id: 'syahriyah', label: `Syahriyah (${syahriyahList.length})` }
-                ].map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => setSheetsPreviewTab(t.id as any)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
-                      sheetsPreviewTab === t.id
-                        ? 'bg-[#d4af37] text-black font-extrabold shadow-md'
-                        : 'bg-[#03150d] text-emerald-200 hover:bg-[#072a1a] border border-[#d4af37]/25'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Table Render based on sheetsPreviewTab */}
-              <div className="overflow-x-auto rounded-xl border border-[#d4af37]/25 max-h-96 overflow-y-auto">
-                {sheetsPreviewTab === 'absensi-guru' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">TANGGAL</th>
-                        <th className="p-3">NAMA USTADZ</th>
-                        <th className="p-3">MAPEL & KELAS</th>
-                        <th className="p-3">STATUS</th>
-                        <th className="p-3">CATATAN / MATERI</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {combinedGuruLog.slice(0, 50).map((g, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-mono text-emerald-300">{g.tanggal}</td>
-                          <td className="p-3 font-bold text-white">{g.nama}</td>
-                          <td className="p-3 text-stone-300">{g.mapel} ({g.kelas})</td>
-                          <td className="p-3">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              g.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border border-emerald-600' :
-                              g.status === 'Terlambat' ? 'bg-amber-950 text-amber-300 border border-amber-600' :
-                              g.status === 'Izin' ? 'bg-blue-950 text-blue-300 border border-blue-600' :
-                              'bg-red-950 text-red-300 border border-red-600'
-                            }`}>
-                              {g.status}
-                            </span>
-                          </td>
-                          <td className="p-3 text-stone-300">{g.catatan || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-
-                {sheetsPreviewTab === 'absensi-santri' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">TANGGAL</th>
-                        <th className="p-3">NIS</th>
-                        <th className="p-3">NAMA SANTRI</th>
-                        <th className="p-3">KELAS</th>
-                        <th className="p-3">STATUS</th>
-                        <th className="p-3">KETERANGAN</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {absensiSantriList.slice(0, 50).map((s, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-mono text-emerald-300">{s.tanggal}</td>
-                          <td className="p-3 font-mono text-[#d4af37]">{s.idSantri}</td>
-                          <td className="p-3 font-bold text-white">{s.nama}</td>
-                          <td className="p-3 text-stone-300">{s.kelas}</td>
-                          <td className="p-3">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              s.status === 'Hadir' ? 'bg-emerald-950 text-emerald-300 border border-emerald-600' :
-                              s.status === 'Izin' ? 'bg-blue-950 text-blue-300 border border-blue-600' :
-                              s.status === 'Sakit' ? 'bg-amber-950 text-amber-300 border border-amber-600' :
-                              'bg-red-950 text-red-300 border border-red-600'
-                            }`}>
-                              {s.status}
-                            </span>
-                          </td>
-                          <td className="p-3 text-stone-300">{s.keterangan || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-
-                {sheetsPreviewTab === 'santri' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">NIS</th>
-                        <th className="p-3">NAMA SANTRI</th>
-                        <th className="p-3">KELAS</th>
-                        <th className="p-3">KAMAR</th>
-                        <th className="p-3">ALAMAT ASAL</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {santriList.slice(0, 50).map((s, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-mono text-[#d4af37]">{s.id}</td>
-                          <td className="p-3 font-bold text-white">{s.nama}</td>
-                          <td className="p-3 text-emerald-300">{s.kelas}</td>
-                          <td className="p-3 text-stone-300">{s.kamar}</td>
-                          <td className="p-3 text-stone-400">{s.alamat}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-
-                {sheetsPreviewTab === 'guru' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">ID</th>
-                        <th className="p-3">NAMA USTADZ / PENGANJAR</th>
-                        <th className="p-3">MATA PELAJARAN / KITAB</th>
-                        <th className="p-3">KELAS AMPU</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {guruList.map((g, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-mono text-[#d4af37]">{g.id}</td>
-                          <td className="p-3 font-bold text-white">{g.nama}</td>
-                          <td className="p-3 text-emerald-300">{g.mapel}</td>
-                          <td className="p-3 text-stone-300">{g.kelas}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-
-                {sheetsPreviewTab === 'jadwal' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">KELAS</th>
-                        <th className="p-3">HARI</th>
-                        <th className="p-3">JAM KE</th>
-                        <th className="p-3">WAKTU</th>
-                        <th className="p-3">MATA PELAJARAN</th>
-                        <th className="p-3">USTADZ PENGAJAR</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {jadwalList.slice(0, 50).map((j, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-bold text-[#d4af37]">{j.kelas}</td>
-                          <td className="p-3 text-emerald-300">{j.hari}</td>
-                          <td className="p-3 font-mono text-center">{j.jamKe}</td>
-                          <td className="p-3 text-stone-300">{j.waktu}</td>
-                          <td className="p-3 text-white font-semibold">{j.mapel}</td>
-                          <td className="p-3 text-stone-300">{j.nama}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-
-                {sheetsPreviewTab === 'nadzhom' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">NIS</th>
-                        <th className="p-3">NAMA SANTRI</th>
-                        <th className="p-3">KITAB</th>
-                        <th className="p-3 text-center">BAIT</th>
-                        <th className="p-3">TANGGAL</th>
-                        <th className="p-3">PREDIKAT</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {nadzhomList.slice(0, 50).map((n, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-mono text-[#d4af37]">{n.idSantri}</td>
-                          <td className="p-3 font-bold text-white">{n.nama}</td>
-                          <td className="p-3 text-emerald-300">{n.kitab}</td>
-                          <td className="p-3 font-mono text-center font-bold text-emerald-400">{n.bait}</td>
-                          <td className="p-3 font-mono text-stone-300">{n.tanggal}</td>
-                          <td className="p-3 text-amber-300">{n.nilai}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-
-                {sheetsPreviewTab === 'nilai' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">NIS</th>
-                        <th className="p-3">NAMA SANTRI</th>
-                        <th className="p-3">KELAS</th>
-                        <th className="p-3">MATA PELAJARAN</th>
-                        <th className="p-3 text-center">NILAI</th>
-                        <th className="p-3">SEMESTER</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {nilaiList.slice(0, 50).map((nl, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-mono text-[#d4af37]">{nl.idSantri}</td>
-                          <td className="p-3 font-bold text-white">{nl.nama}</td>
-                          <td className="p-3 text-emerald-300">{nl.kelas}</td>
-                          <td className="p-3 text-white">{nl.pelajaran}</td>
-                          <td className="p-3 font-mono text-center font-bold text-emerald-400">{nl.nilai}</td>
-                          <td className="p-3 text-stone-300">{nl.semester}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-
-                {sheetsPreviewTab === 'syahriyah' && (
-                  <table className="w-full text-left text-xs min-w-[650px]">
-                    <thead className="bg-[#02140b] text-[#d4af37] sticky top-0">
-                      <tr>
-                        <th className="p-3">ID TAGIHAN</th>
-                        <th className="p-3">NIS</th>
-                        <th className="p-3">NAMA SANTRI</th>
-                        <th className="p-3">BULAN</th>
-                        <th className="p-3">NOMINAL</th>
-                        <th className="p-3">STATUS</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#d4af37]/10 bg-[#041a0f]">
-                      {syahriyahList.slice(0, 50).map((s, i) => (
-                        <tr key={i} className="hover:bg-[#d4af37]/10">
-                          <td className="p-3 font-mono text-[#d4af37]">{s.id}</td>
-                          <td className="p-3 font-mono text-stone-300">{s.idSantri}</td>
-                          <td className="p-3 font-bold text-white">{s.namaSantri || (s as any).nama || 'Santri'}</td>
-                          <td className="p-3 text-emerald-300">{s.bulan}</td>
-                          <td className="p-3 font-mono text-stone-200">Rp {s.nominal.toLocaleString('id-ID')}</td>
-                          <td className="p-3">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              s.status === 'Lunas' ? 'bg-emerald-950 text-emerald-300 border border-emerald-600' : 'bg-red-950 text-red-300 border border-red-600'
-                            }`}>
-                              {s.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-
-            {/* MANDATORY USER CONFIRMATION DIALOG FOR WORKSPACE MUTATIONS */}
-            {sheetsConfirmModal.isOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-                <div className="w-full max-w-md bg-[#041a10] border-2 border-[#d4af37] rounded-2xl p-6 shadow-2xl space-y-4">
-                  <div className="flex items-center gap-3 text-[#f3e5ab]">
-                    <div className="w-10 h-10 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 shrink-0">
-                      <AlertTriangle className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-bold text-white">{sheetsConfirmModal.title}</h3>
-                      <span className="text-xs text-stone-400">Konfirmasi Sinkronisasi Google Sheets</span>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-stone-300 leading-relaxed bg-[#010a05] p-3 rounded-lg border border-stone-800">
-                    {sheetsConfirmModal.desc}
-                  </p>
-
-                  <div className="flex items-center justify-end gap-3 pt-2">
-                    <button
-                      onClick={() => setSheetsConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                      className="px-4 py-2 text-xs font-semibold text-stone-300 hover:text-white bg-stone-800 hover:bg-stone-700 rounded-lg transition"
-                    >
-                      Batal
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const act = sheetsConfirmModal.action;
-                        setSheetsConfirmModal(prev => ({ ...prev, isOpen: false }));
-                        setIsSheetsBusy(true);
-                        setSheetsStatusMsg(null);
-                        try {
-                          if (act === 'createSheet') {
-                            if (sheetsService) {
-                              const newSheet = await sheetsService.createNewSpreadsheet('SIM Pontren Salaf - Database Master');
-                              setSpreadsheetId(newSheet.id);
-                              setSheetsInputId(newSheet.id);
-                              await sheetsService.exportFullDatabaseToSheets({
-                                santriList,
-                                guruList,
-                                jadwalList,
-                                nadzhomList,
-                                nilaiList,
-                                absensiSantriList,
-                                absensiGuruList,
-                                syahriyahList,
-                                settings
-                              });
-                              setSheetsStatusMsg({
-                                type: 'success',
-                                text: `Spreadsheet baru "${newSheet.title}" berhasil dibuat di Google Drive Anda!`
-                              });
-                            } else {
-                              if (onOpenSheetsModal) onOpenSheetsModal();
-                            }
-                          } else if (act === 'exportAll') {
-                            if (sheetsService) {
-                              await sheetsService.exportFullDatabaseToSheets({
-                                santriList,
-                                guruList,
-                                jadwalList,
-                                nadzhomList,
-                                nilaiList,
-                                absensiSantriList,
-                                absensiGuruList,
-                                syahriyahList,
-                                settings
-                              });
-                              setSheetsStatusMsg({
-                                type: 'success',
-                                text: `Seluruh data (${santriList.length} Santri, ${guruList.length} Guru, Presensi, Nilai) berhasil disinkronkan ke Google Sheets!`
-                              });
-                            } else {
-                              onSyncWithSheets();
-                            }
-                          } else if (act === 'importAll') {
-                            if (sheetsService && onDataImported) {
-                              const [
-                                rSantri, rGuru, rJadwal, rNadzhom, rNilai,
-                                rAbsensiSantri, rAbsensiGuru, rSyahriyah, rSettings
-                              ] = await Promise.all([
-                                sheetsService.loadSantriFromSheet(),
-                                sheetsService.loadGuruFromSheet(),
-                                sheetsService.loadJadwalFromSheet(),
-                                sheetsService.loadNadzhomFromSheet(),
-                                sheetsService.loadNilaiFromSheet(),
-                                sheetsService.loadAbsensiSantriFromSheet(),
-                                sheetsService.loadAbsensiGuruFromSheet(),
-                                sheetsService.loadSyahriyahFromSheet(),
-                                sheetsService.loadSettingsFromSheet()
-                              ]);
-
-                              onDataImported({
-                                santriList: rSantri.length ? rSantri : undefined,
-                                guruList: rGuru.length ? rGuru : undefined,
-                                jadwalList: rJadwal.length ? rJadwal : undefined,
-                                nadzhomList: rNadzhom.length ? rNadzhom : undefined,
-                                nilaiList: rNilai.length ? rNilai : undefined,
-                                absensiSantriList: rAbsensiSantri.length ? rAbsensiSantri : undefined,
-                                absensiGuruList: rAbsensiGuru.length ? rAbsensiGuru : undefined,
-                                syahriyahList: rSyahriyah.length ? rSyahriyah : undefined,
-                                settings: Object.keys(rSettings).length ? rSettings : undefined
-                              });
-
-                              setSheetsStatusMsg({
-                                type: 'success',
-                                text: `Berhasil mengimpor data dari Google Sheets (${rSantri.length} Santri, ${rGuru.length} Guru termuat).`
-                              });
-                            } else {
-                              onSyncWithSheets();
-                            }
-                          } else if (act === 'exportTab') {
-                            if (sheetsService) {
-                              await sheetsService.initSpreadsheetSchema();
-                              const tab = sheetsConfirmModal.tabName;
-                              if (tab === 'absensi-guru') {
-                                const rows = combinedGuruLog.map(g => [g.tanggal, g.nama, g.mapel, g.kelas, g.status, g.catatan || '-', g.hari || '-', g.jamKe || '-', g.waktu || '-']);
-                                await sheetsService.overwriteSheet('Absensi_Guru', ['Tanggal', 'Nama Ustadz', 'Mata Pelajaran', 'Kelas', 'Status', 'Catatan', 'Hari', 'Jam Ke', 'Waktu'], rows);
-                              } else if (tab === 'absensi-santri') {
-                                const rows = absensiSantriList.map(a => [a.tanggal, a.idSantri, a.nama, a.kelas, a.status, a.keterangan || '-', a.waktu || '']);
-                                await sheetsService.overwriteSheet('Absensi_Santri', ['Tanggal', 'NIS', 'Nama Santri', 'Kelas', 'Status', 'Keterangan', 'Waktu'], rows);
-                              } else if (tab === 'santri') {
-                                const rows = santriList.map(s => [s.id, s.nama, s.kelas, s.kamar, s.alamat, s.foto || '']);
-                                await sheetsService.overwriteSheet('Santri', ['NIS / ID', 'Nama Santri', 'Kelas', 'Kamar', 'Alamat', 'Foto URL'], rows);
-                              }
-                              setSheetsStatusMsg({
-                                type: 'success',
-                                text: `Tab "${tab}" berhasil disinkronkan ke Google Sheets!`
-                              });
-                            }
-                          }
-                        } catch (e: any) {
-                          console.error(e);
-                          setSheetsStatusMsg({
-                            type: 'error',
-                            text: `Operasi gagal: ${e?.message || 'Pastikan izin Google Sheets aktif'}`
-                          });
-                        } finally {
-                          setIsSheetsBusy(false);
-                        }
-                      }}
-                      className="px-5 py-2 text-xs font-bold text-black bg-gradient-to-r from-[#d4af37] to-[#e6ca65] hover:brightness-110 rounded-lg shadow transition flex items-center gap-1.5"
-                    >
-                      <Check className="w-4 h-4" />
-                      <span>Ya, Lanjutkan</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 8.7: INTEGRASI GMAIL & PUSAT SURAT MENYURAT RESMI */}
-        {activeTab === 'gmail' && (
-          <TabGmail
-            settings={settings}
-            santriList={santriList}
-            guruList={guruList}
-            syahriyahList={syahriyahList}
-            absensiSantriList={absensiSantriList}
-            nilaiList={nilaiList}
-            isGoogleConnected={!!isGoogleConnected}
-            setIsGoogleConnected={setIsGoogleConnected || (() => {})}
-          />
-        )}
-
         {/* TAB 9: OPTION PANEL (PUSAT KONTROL SELURUH FITUR & VISUAL APLIKASI DENGAN PASSWORD KHUSUS) */}
         {activeTab === 'pengaturan' && (
-          <div className="card-3d rounded-3xl p-5 sm:p-7 backdrop-blur-md space-y-6">
+          <div className="card-3d rounded-3xl p-5 sm:p-7 space-y-6">
             {/* Header Option Panel */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-[#d4af37]/30">
               <div>
@@ -11325,7 +10075,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-9 gap-2 bg-[#052216]/90 p-2.5 rounded-2xl border border-[#d4af37]/35 shadow-inner">
                   {[
                     { id: 'kenaikan_kelas', label: 'Kenaikan Kelas', icon: GraduationCap },
-                    { id: 'firebase_central', label: 'Database Firebase', icon: Database },
                     { id: 'kelola_storage_5tb', label: 'Storage 5 TB & Cloud', icon: HardDrive },
                     { id: 'geofencing_absensi', label: 'Geofencing & Pengganti', icon: MapPin },
                     { id: 'simpan_absensi', label: 'Absensi Ustadz', icon: Save },
@@ -11341,7 +10090,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     { id: 'input_guru', label: 'Input Guru', icon: Award },
                     { id: 'input_jadwal', label: 'Input Jadwal', icon: Calendar },
                     { id: 'kontrol_tombol', label: 'Tombol & Teks', icon: Settings2 },
-                    { id: 'video_intro', label: 'Video Intro', icon: Film },
                     { id: 'sosial_media', label: 'Media Sosial & WA', icon: MessageCircle },
                     { id: 'visual_branding', label: 'Logo & Visual', icon: Palette },
                     { id: 'keamanan', label: 'Kata Sandi Admin', icon: Lock },
@@ -11456,292 +10204,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                         ))}
                       </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* SECTION: PUSAT KONTROL FIREBASE CENTRALIZED DATABASE & DISASTER RECOVERY */}
-                {activeControlSection === 'firebase_central' && (
-                  <div className="card-3d rounded-2xl p-5 sm:p-6 space-y-6">
-                    {/* Header Banner */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#d4af37]/20">
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#f5e298] via-[#d4af37] to-[#7a5410] flex items-center justify-center text-black shadow-lg shrink-0">
-                          <Database className="w-6 h-6 stroke-[2.2]" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-base sm:text-lg font-extrabold text-[#f5e298] text-gold-3d">
-                              Pusat Kontrol Database Terpusat (Firebase Firestore)
-                            </h3>
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                              Single Source of Truth Aktif
-                            </span>
-                          </div>
-                          <p className="text-xs text-emerald-200/90 mt-0.5">
-                            Semua domain (Vercel, Netlify, Custom Domain) dan platform (Web, PWA, Android, PC) membaca & menulis ke satu database produksi.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => window.location.reload()}
-                          className="px-3.5 py-2 rounded-xl bg-[#052216] border border-[#d4af37]/40 text-[#f5e298] hover:text-white hover:border-[#d4af37] text-xs font-bold flex items-center gap-1.5 transition"
-                          title="Muat ulang sinkronisasi Firestore"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                          <span>Cek Koneksi Realtime</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Metadata Card: Production Identifiers */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                      <div className="p-3.5 rounded-xl bg-[#052216] border border-[#d4af37]/30">
-                        <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider">Firebase Project ID</span>
-                        <span className="font-mono text-xs sm:text-sm font-extrabold text-amber-300 block mt-1 break-all">
-                          {safeFirebaseConfig.projectId || 'absensi-data-santri'}
-                        </span>
-                        <span className="text-[10px] text-emerald-300/70 block mt-0.5">Google Cloud Firestore Live</span>
-                      </div>
-
-                      <div className="p-3.5 rounded-xl bg-[#052216] border border-[#d4af37]/30">
-                        <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider">Firestore Database ID</span>
-                        <span className="font-mono text-xs sm:text-sm font-extrabold text-amber-300 block mt-1 break-all">
-                          {safeFirebaseConfig.firestoreDatabaseId || '(default)'}
-                        </span>
-                        <span className="text-[10px] text-emerald-300/70 block mt-0.5">Database terisolasi & terproteksi</span>
-                      </div>
-
-                      <div className="p-3.5 rounded-xl bg-[#052216] border border-[#d4af37]/30">
-                        <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider">Cloud Storage Bucket</span>
-                        <span className="font-mono text-xs sm:text-sm font-extrabold text-amber-300 block mt-1 break-all">
-                          {safeFirebaseConfig.storageBucket || 'absensi-data-santri.firebasestorage.app'}
-                        </span>
-                        <span className="text-[10px] text-emerald-300/70 block mt-0.5">Penyimpanan media & foto</span>
-                      </div>
-
-                      <div className="p-3.5 rounded-xl bg-[#052216] border border-[#d4af37]/30">
-                        <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider">Auth Domain</span>
-                        <span className="font-mono text-xs sm:text-sm font-extrabold text-amber-300 block mt-1 break-all">
-                          {safeFirebaseConfig.authDomain || 'absensi-data-santri.firebaseapp.com'}
-                        </span>
-                        <span className="text-[10px] text-emerald-300/70 block mt-0.5">Autentikasi akun & OAuth</span>
-                      </div>
-                    </div>
-
-                    {/* Live Synchronized Collections Grid */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-xs sm:text-sm font-extrabold text-[#f5e298] flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          <span>Status Koleksi Master Terpusat (Realtime Listener Aktif)</span>
-                        </h4>
-                        <span className="text-[11px] text-emerald-300/80">
-                          Auto-Sync via Firestore onSnapshot
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
-                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
-                          <span className="text-[10px] text-emerald-300 font-bold block">Santri</span>
-                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{santriList.length}</span>
-                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
-                          <span className="text-[10px] text-emerald-300 font-bold block">Guru / Ustadz</span>
-                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{guruList.length}</span>
-                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
-                          <span className="text-[10px] text-emerald-300 font-bold block">Jadwal</span>
-                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{jadwalList.length}</span>
-                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
-                          <span className="text-[10px] text-emerald-300 font-bold block">Presensi Santri</span>
-                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{absensiSantriList.length}</span>
-                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
-                          <span className="text-[10px] text-emerald-300 font-bold block">Presensi Guru</span>
-                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{absensiGuruList.length}</span>
-                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
-                          <span className="text-[10px] text-emerald-300 font-bold block">Nadzhom</span>
-                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{nadzhomList.length}</span>
-                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
-                          <span className="text-[10px] text-emerald-300 font-bold block">Izin Mengajar</span>
-                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{(izinList || []).length}</span>
-                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-[#041a10] border border-[#d4af37]/25 text-center">
-                          <span className="text-[10px] text-emerald-300 font-bold block">Pengurus</span>
-                          <span className="text-base font-extrabold text-[#f5e298] block mt-0.5">{pengurusList.length}</span>
-                          <span className="text-[9px] text-emerald-400/80 block">Tersinkron</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Disaster Recovery & Backup Panel */}
-                    <div className="p-5 rounded-2xl bg-[#052216]/95 border-2 border-[#d4af37]/40 shadow-xl space-y-4">
-                      <div className="flex items-center gap-3 pb-3 border-b border-[#d4af37]/20">
-                        <div className="w-10 h-10 rounded-xl bg-amber-400/20 text-amber-300 border border-amber-400/30 flex items-center justify-center shrink-0">
-                          <ShieldCheck className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-extrabold text-white text-gold-3d">
-                            Disaster Recovery: Backup & Pemulihan Database Produksi
-                          </h4>
-                          <p className="text-[11px] text-emerald-300/90">
-                            Unduh seluruh salinan data produksi langsung dari Firestore, atau pulihkan data dari berkas cadangan JSON sewaktu-waktu.
-                          </p>
-                        </div>
-                      </div>
-
-                      {backupExportStatus && (
-                        <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                          <span>{backupExportStatus}</span>
-                        </div>
-                      )}
-
-                      {restoreStatusMessage && (
-                        <div className="p-3 rounded-xl bg-amber-950/80 border border-amber-500/40 text-amber-200 text-xs flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
-                          <span>{restoreStatusMessage}</span>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Download Backup */}
-                        <div className="p-4 rounded-xl bg-[#041a10] border border-[#d4af37]/30 flex flex-col justify-between space-y-3">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Download className="w-4 h-4 text-[#d4af37]" />
-                              <span className="text-xs font-extrabold text-[#f5e298]">Unduh Cadangan JSON (Snapshot)</span>
-                            </div>
-                            <p className="text-[11px] text-emerald-200/80 mt-1">
-                              Menghasilkan berkas cadangan JSON komprehensif berisi semua santri, guru, jadwal, presensi, nadzhom, kurikulum, dan pengaturan sistem.
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleDownloadBackup}
-                            disabled={isExportingBackup}
-                            className="w-full py-2.5 px-4 rounded-xl btn-3d-gold text-black font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg hover:brightness-105 disabled:opacity-50"
-                          >
-                            <Download className="w-4 h-4" />
-                            <span>{isExportingBackup ? 'Memproses Ekspor Firestore...' : 'Unduh Backup Database (.json)'}</span>
-                          </button>
-                        </div>
-
-                        {/* Restore Backup */}
-                        <div className="p-4 rounded-xl bg-[#041a10] border border-[#d4af37]/30 flex flex-col justify-between space-y-3">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Upload className="w-4 h-4 text-amber-400" />
-                              <span className="text-xs font-extrabold text-[#f5e298]">Pulihkan Database dari JSON</span>
-                            </div>
-                            <p className="text-[11px] text-emerald-200/80 mt-1">
-                              Pilih berkas JSON cadangan yang pernah diunduh untuk memulihkan seluruh koleksi ke Firestore produksi dengan aman.
-                            </p>
-                          </div>
-                          <div>
-                            <input
-                              type="file"
-                              ref={restoreFileInputRef}
-                              accept=".json,application/json"
-                              onChange={handleFileSelectForRestore}
-                              className="hidden"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => restoreFileInputRef.current?.click()}
-                              disabled={isRestoringBackup}
-                              className="w-full py-2.5 px-4 rounded-xl bg-[#083321] border border-[#d4af37]/50 text-[#f5e298] font-bold text-xs flex items-center justify-center gap-2 hover:bg-[#0c472f] hover:text-white transition disabled:opacity-50"
-                            >
-                              <Upload className="w-4 h-4" />
-                              <span>Pilih Berkas Backup JSON...</span>
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Migrasi LocalStorage ke Firestore */}
-                        <div className="p-4 rounded-xl bg-[#041a10] border border-[#d4af37]/30 flex flex-col justify-between space-y-3 md:col-span-2">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <Database className="w-4 h-4 text-[#d4af37]" />
-                                <span className="text-xs font-extrabold text-[#f5e298]">Migrasi Arsip LocalStorage ke Firestore Terpusat</span>
-                              </div>
-                              <p className="text-[11px] text-emerald-200/80 mt-1">
-                                Pindahkan seluruh riwayat rekapan presensi lokal di browser perangkat ini ke Firestore Single Source of Truth agar seluruh perangkat (PC, Laptop, HP) menampilkan data yang sama persis tanpa perbedaan.
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setShowMigrationModal(true)}
-                              className="btn-3d-gold px-4 py-2 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 shrink-0 shadow whitespace-nowrap"
-                            >
-                              <Upload className="w-4 h-4 text-black" />
-                              <span>Buka Dialog Migrasi ({localMigrationInfo.santriLocalCount + localMigrationInfo.guruLocalCount} Data)</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Modal Konfirmasi Restore jika file dipilih */}
-                      {restoreConfirmData && (
-                        <div className="p-4 rounded-xl bg-amber-950/70 border-2 border-amber-400/60 space-y-3 animate-fadeIn">
-                          <div className="flex items-center gap-2 text-amber-300 font-extrabold text-xs">
-                            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                            <span>Konfirmasi Pemulihan Database Produksi</span>
-                          </div>
-                          <p className="text-[11px] text-amber-100">
-                            Berkas cadangan terdeteksi: <strong>{restoreConfirmData.appName || 'SIM Ponpes Salaf Al-Maliki'}</strong> (dibuat: {restoreConfirmData.exportedAt || 'Tidak diketahui'}).
-                          </p>
-                          <div className="text-[10px] text-amber-200/90 bg-black/40 p-2.5 rounded-lg font-mono">
-                            Modul data yang akan disinkronkan: {Object.keys(restoreConfirmData.collections || restoreConfirmData).join(', ')}
-                          </div>
-                          <div className="flex items-center gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={handleExecuteRestore}
-                              disabled={isRestoringBackup}
-                              className="px-4 py-2 rounded-lg bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1.5 hover:bg-amber-300 disabled:opacity-50"
-                            >
-                              <Check className="w-4 h-4" />
-                              <span>{isRestoringBackup ? 'Menulis ke Firestore...' : 'Ya, Terapkan Pemulihan Sekarang'}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setRestoreConfirmData(null)}
-                              disabled={isRestoringBackup}
-                              className="px-3.5 py-2 rounded-lg bg-black/50 text-stone-300 text-xs font-bold hover:text-white"
-                            >
-                              Batal
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Panduan Multi-Domain & Multi-Device */}
-                    <div className="p-4 rounded-xl bg-[#041a10] border border-[#d4af37]/20 text-[11px] text-emerald-200/80 space-y-1.5">
-                      <div className="font-bold text-[#f5e298] flex items-center gap-1.5">
-                        <Globe className="w-3.5 h-3.5 text-[#d4af37]" />
-                        <span>Arsitektur Multi-Domain & Cross-Platform Terpadu</span>
-                      </div>
-                      <p>
-                        Aplikasi telah dikonfigurasi dengan <strong>vercel.json</strong> dan <strong>netlify.toml</strong> untuk memastikan semua URL dan sub-halaman di-route secara sempurna ke <code>/index.html</code> (SPA standard). Tidak ada pemisahan database; seluruh perubahan data dari perangkat santri, pengurus, maupun pengajar langsung tercatat di Firestore produksi dan disinkronkan secara realtime ke seluruh pengguna.
-                      </p>
                     </div>
                   </div>
                 )}
@@ -15164,331 +13626,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </form>
                 )}
 
-                {/* SECTION: PUSAT MANAJEMEN VIDEO INTRO OPENING (EDITABLE & DAPAT DIGONTA-GANTI) */}
-                {activeControlSection === 'video_intro' && (
-                  <div className="card-3d rounded-2xl p-5 sm:p-6 space-y-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#d4af37]/20 pb-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-2xl bg-[#093d25] border border-[#d4af37] flex items-center justify-center text-[#d4af37] shadow">
-                          <Film className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h4 className="text-sm sm:text-base font-bold text-white text-gold-3d">
-                            Pusat Manajemen Video Intro Opening (Bisa Diganti Kapan Saja)
-                          </h4>
-                          <p className="text-[11px] text-emerald-300">
-                            Gonta-ganti video pembuka layar intro sesuka Anda. Video tersimpan permanen di memori browser.
-                          </p>
-                        </div>
-                      </div>
-
-                      {onTestIntro && (
-                        <button
-                          type="button"
-                          onClick={onTestIntro}
-                          className="btn-3d-gold px-4 py-2 rounded-xl text-black font-black text-xs flex items-center gap-1.5 self-start sm:self-auto shadow-lg"
-                        >
-                          <Play className="w-3.5 h-3.5 fill-current" />
-                          <span>Uji Putar Layar Intro</span>
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Status Alert Message */}
-                    {videoStatusMessage && (
-                      <div className="p-3 rounded-xl bg-emerald-950/90 border border-emerald-400 text-emerald-200 text-xs font-bold flex items-center gap-2 animate-fadeIn">
-                        <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <span>{videoStatusMessage}</span>
-                      </div>
-                    )}
-
-                    {/* Active Video Status Banner */}
-                    <div className="bg-[#03140c] p-4 rounded-2xl border border-[#d4af37]/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                      <div className="flex items-center gap-3.5 overflow-hidden">
-                        <div className="w-14 h-12 rounded-xl bg-black border border-[#d4af37]/50 flex items-center justify-center text-[#d4af37] shrink-0">
-                          <Film className="w-6 h-6" />
-                        </div>
-                        <div className="overflow-hidden">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
-                              Status: AKTIF DIGUNAKAN
-                            </span>
-                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
-                              adminVideoInfo.sourceType === 'indexeddb'
-                                ? 'bg-blue-950 text-blue-300 border border-blue-500/40'
-                                : adminVideoInfo.sourceType === 'url'
-                                ? 'bg-amber-950 text-amber-300 border border-amber-500/40'
-                                : 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
-                            }`}>
-                              {adminVideoInfo.sourceType === 'indexeddb' ? 'Berkas Lokal' : adminVideoInfo.sourceType === 'url' ? 'Tautan Web' : 'Bawaan Salaf'}
-                            </span>
-                          </div>
-                          <h5 className="text-sm font-extrabold text-white truncate max-w-[340px] sm:max-w-[480px]">
-                            {adminVideoInfo.name}
-                          </h5>
-                          <span className="text-[11px] text-[#d4af37] font-mono">
-                            {adminVideoInfo.size ? `${(adminVideoInfo.size / (1024 * 1024)).toFixed(1)} MB • ` : ''}
-                            {adminVideoInfo.uploadedAt ? `Diperbarui: ${new Date(adminVideoInfo.uploadedAt).toLocaleDateString('id-ID')}` : 'Video Resmi Pesantren'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            await resetVideoToDefault();
-                            const defUrl = '/assets/intro_salaf_almaliki.mp4';
-                            const defName = 'The Journey of Knowledge — Salaf Al-Maliki (Bawaan)';
-                            setAdminVideoInfo({
-                              src: defUrl,
-                              name: defName,
-                              isCustom: false,
-                              sourceType: 'default',
-                            });
-                            setVideoUrlInput('');
-                            const updated = {
-                              ...visualForm,
-                              intro_video_url: defUrl,
-                              intro_video_name: defName,
-                              intro_video_type: 'default' as const,
-                            };
-                            setVisualForm(updated);
-                            onSaveSettings(updated);
-                            setVideoStatusMessage('Video intro berhasil dikembalikan ke video bawaan resmi!');
-                            setTimeout(() => setVideoStatusMessage(''), 4000);
-                          }}
-                          className="px-3.5 py-2 rounded-xl bg-[#092b1a] hover:bg-[#0d4228] border border-[#d4af37]/40 text-[#f7e59f] text-xs font-bold flex items-center gap-1.5 transition"
-                          title="Kembalikan ke video bawaan"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5 text-[#d4af37]" />
-                          <span>Reset ke Bawaan</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Live Preview Box */}
-                    <div className="card-3d-deep p-4 rounded-2xl border border-[#d4af37]/30 space-y-2">
-                      <span className="text-xs font-bold text-[#d4af37] block uppercase tracking-wider">
-                        Pratinjau Video (Live Video Preview):
-                      </span>
-                      {adminVideoInfo.src && adminVideoInfo.src.trim() !== '' ? (
-                        <div className="relative aspect-video max-h-72 w-full rounded-xl overflow-hidden bg-black border border-[#d4af37]/40 shadow-inner">
-                          <video
-                            key={adminVideoInfo.src}
-                            src={adminVideoInfo.src}
-                            controls
-                            playsInline
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ) : (
-                        <div className="p-6 text-center text-xs text-zinc-400 bg-black/40 rounded-xl border border-[#d4af37]/20">
-                          Belum ada video dipilih
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Two Input Methods Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Method 1: Unggah Berkas Video */}
-                      <div className="bg-[#03140c] p-4 rounded-2xl border border-[#d4af37]/30 space-y-3 flex flex-col justify-between">
-                        <div>
-                          <div className="flex items-center gap-2 text-xs font-bold text-white mb-1">
-                            <Upload className="w-4 h-4 text-[#d4af37]" />
-                            <span>Metode 1: Unggah Berkas Video (MP4 / WebM)</span>
-                          </div>
-                          <p className="text-[11px] text-emerald-300 mb-3">
-                            Pilih video dari HP atau komputer Anda. Tersimpan di IndexedDB browser Anda tanpa batas kuota.
-                          </p>
-                          <div
-                            onClick={() => videoFileInputRef.current?.click()}
-                            className="border-2 border-dashed border-[#d4af37]/45 hover:border-[#faebaa] bg-[#052216]/60 hover:bg-[#07301c] rounded-xl p-5 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2 group"
-                          >
-                            <Upload className="w-8 h-8 text-[#d4af37] group-hover:scale-110 transition-transform" />
-                            <span className="text-xs font-bold text-white">
-                              Klik untuk Memilih File Video
-                            </span>
-                            <span className="text-[10px] text-emerald-300">
-                              Format: .MP4 atau .WebM
-                            </span>
-                          </div>
-                          <input
-                            ref={videoFileInputRef}
-                            type="file"
-                            accept="video/mp4,video/webm"
-                            className="hidden"
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                try {
-                                  const blobUrl = await saveVideoFile(file, file.name);
-                                  const newInfo: VideoInfo = {
-                                    src: blobUrl,
-                                    name: file.name,
-                                    size: file.size,
-                                    isCustom: true,
-                                    sourceType: 'indexeddb',
-                                    uploadedAt: new Date().toISOString()
-                                  };
-                                  setAdminVideoInfo(newInfo);
-                                  const updated = {
-                                    ...visualForm,
-                                    intro_video_url: blobUrl,
-                                    intro_video_name: file.name,
-                                    intro_video_type: 'file' as const
-                                  };
-                                  setVisualForm(updated);
-                                  onSaveSettings(updated);
-                                  setVideoStatusMessage(`Video "${file.name}" berhasil diunggah dan langsung aktif!`);
-                                  setTimeout(() => setVideoStatusMessage(''), 4000);
-                                } catch (err) {
-                                  alert('Gagal mengunggah video: ' + String(err));
-                                }
-                              }
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Method 2: Tautan URL Video Online */}
-                      <div className="bg-[#03140c] p-4 rounded-2xl border border-[#d4af37]/30 space-y-3 flex flex-col justify-between">
-                        <div>
-                          <div className="flex items-center gap-2 text-xs font-bold text-white mb-1">
-                            <Film className="w-4 h-4 text-[#d4af37]" />
-                            <span>Metode 2: Masukkan Link / URL Video Online</span>
-                          </div>
-                          <p className="text-[11px] text-emerald-300 mb-3">
-                            Gunakan link video streaming dari Google Drive, Cloudinary, AWS S3, atau CDN hosting Anda.
-                          </p>
-                          <div className="space-y-2">
-                            <input
-                              type="url"
-                              value={videoUrlInput}
-                              onChange={(e) => setVideoUrlInput(e.target.value)}
-                              placeholder="https://domain.com/video_intro.mp4"
-                              className="w-full px-3.5 py-2.5 rounded-xl bg-[#02180e] border border-[#d4af37]/45 text-white text-xs focus:outline-none focus:border-[#faebaa]"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!videoUrlInput.trim()) {
-                                  alert('Masukkan link URL video yang valid.');
-                                  return;
-                                }
-                                const cleanUrl = videoUrlInput.trim();
-                                const urlName = cleanUrl.split('/').pop() || 'Video Online Salaf';
-                                saveVideoUrl(cleanUrl, urlName);
-                                const newInfo: VideoInfo = {
-                                  src: cleanUrl,
-                                  name: urlName,
-                                  isCustom: true,
-                                  sourceType: 'url',
-                                  uploadedAt: new Date().toISOString()
-                                };
-                                setAdminVideoInfo(newInfo);
-                                const updated = {
-                                  ...visualForm,
-                                  intro_video_url: cleanUrl,
-                                  intro_video_name: urlName,
-                                  intro_video_type: 'url' as const
-                                };
-                                setVisualForm(updated);
-                                onSaveSettings(updated);
-                                setVideoStatusMessage('Link URL video berhasil disimpan dan diterapkan!');
-                                setTimeout(() => setVideoStatusMessage(''), 4000);
-                              }}
-                              className="w-full btn-3d-gold py-2 rounded-xl text-black font-black text-xs shadow flex items-center justify-center gap-1.5"
-                            >
-                              <Save className="w-3.5 h-3.5 text-black" />
-                              <span>Terapkan Link URL Video</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Presets Koleksi Bawaan */}
-                    <div className="bg-[#03140c] p-4 rounded-2xl border border-[#d4af37]/30 space-y-3">
-                      <span className="text-xs font-bold text-[#d4af37] block">
-                        Koleksi Video Bawaan Resmi Madrasah:
-                      </span>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div
-                          onClick={async () => {
-                            await resetVideoToDefault();
-                            const defUrl = '/assets/intro_salaf_almaliki.mp4';
-                            const defName = 'The Journey of Knowledge — Salaf Al-Maliki (Bawaan)';
-                            setAdminVideoInfo({
-                              src: defUrl,
-                              name: defName,
-                              isCustom: false,
-                              sourceType: 'default',
-                            });
-                            setVideoUrlInput('');
-                            const updated = {
-                              ...visualForm,
-                              intro_video_url: defUrl,
-                              intro_video_name: defName,
-                              intro_video_type: 'default' as const,
-                            };
-                            setVisualForm(updated);
-                            onSaveSettings(updated);
-                            setVideoStatusMessage('Video bawaan utama berhasil dipilih!');
-                            setTimeout(() => setVideoStatusMessage(''), 4000);
-                          }}
-                          className="p-3 rounded-xl bg-[#052216] hover:bg-[#083623] border border-[#d4af37]/40 flex items-center justify-between cursor-pointer transition"
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-black border border-[#d4af37]/40 flex items-center justify-center text-[#d4af37]">
-                              <Film className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <span className="text-xs font-bold text-white block">
-                                The Journey of Knowledge (Salaf Al-Maliki)
-                              </span>
-                              <span className="text-[10px] text-emerald-300">
-                                Video Sinematik Pustaka Klasik & Ulama
-                              </span>
-                            </div>
-                          </div>
-                          <span className="px-2.5 py-1 rounded-lg btn-3d-gold text-black font-extrabold text-[10px]">
-                            Pilih
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Tombol Simpan Video Resmi & Info Akses Khusus */}
-                    <div className="pt-4 border-t border-[#d4af37]/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 text-xs text-emerald-300">
-                        <ShieldCheck className="w-4 h-4 text-[#d4af37] shrink-0" />
-                        <span>Area Akses Khusus Aktif: Seluruh perubahan video intro disimpan langsung ke database lokal dan server.</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const updated = {
-                            ...visualForm,
-                            intro_video_url: adminVideoInfo.src,
-                            intro_video_name: adminVideoInfo.name,
-                            intro_video_type: adminVideoInfo.sourceType
-                          };
-                          setVisualForm(updated);
-                          onSaveSettings(updated);
-                          setVideoStatusMessage(`Video "${adminVideoInfo.name}" berhasil disimpan secara resmi ke database Option Panel!`);
-                          setTimeout(() => setVideoStatusMessage(''), 5000);
-                        }}
-                        className="btn-3d-gold px-6 py-2.5 text-black font-black text-xs rounded-xl shadow-xl flex items-center gap-2 self-stretch sm:self-auto justify-center"
-                        data-testid="admin-save-video-btn"
-                      >
-                        <Save className="w-4 h-4 text-black" />
-                        <span>SIMPAN VIDEO KE OPTION PANEL</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-
                 {/* SECTION: PUSAT KONTROL MEDIA SOSIAL & WHATSAPP */}
                 {activeControlSection === 'sosial_media' && (
                   <form onSubmit={handleSaveVisualAndSecurity} className="card-3d rounded-2xl p-5 space-y-5">
@@ -15646,21 +13783,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </p>
                       </div>
 
-                      {/* 5. Email Resmi Pesantren (Gmail Workspace) */}
+                      {/* 5. Email Resmi Pesantren */}
                       <div className="card-3d-deep p-4 rounded-xl space-y-2 border border-amber-500/40 bg-[#031d13]">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 text-xs font-bold text-[#fde047]">
                             <Mail className="w-4 h-4 text-[#fde047]" />
-                            <span>5. Email Resmi Pesantren (Gmail & Google Workspace)</span>
+                            <span>5. Email Resmi Pesantren</span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setActiveTab('gmail')}
-                            className="px-2.5 py-0.5 rounded-lg bg-[#d4af37]/20 text-[#fef08a] hover:bg-[#d4af37] hover:text-black text-[10px] font-bold flex items-center gap-1 transition border border-[#d4af37]/40"
-                          >
-                            <span>Buka Tab Gmail</span>
-                            <ArrowRight className="w-3 h-3" />
-                          </button>
                         </div>
                         <input
                           type="email"
@@ -16710,30 +14839,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 )}
 
-                {/* SINKRONISASI GOOGLE SHEETS SPREADSHEET ID */}
-                <div className="card-3d rounded-2xl p-4 space-y-3">
-                  <label className="block text-xs font-bold text-[#d4af37] text-gold-3d">
-                    Google Sheets Master Spreadsheet ID
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={spreadsheetId}
-                      onChange={(e) => setSpreadsheetId(e.target.value)}
-                      className="flex-1 bg-[#0a301f] border border-[#d4af37]/40 rounded-xl p-2.5 text-xs text-white font-mono shadow-inner"
-                      placeholder="ID Spreadsheet Google Sheets"
-                    />
-                    <button
-                      onClick={onSyncWithSheets}
-                      className="px-5 py-2.5 btn-3d-gold text-black font-extrabold text-xs rounded-xl"
-                    >
-                      Sinkronkan Sekarang
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-emerald-300/90">
-                    Seluruh mutasi data yang diinputkan dari Option Panel disinkronkan ke master Google Spreadsheet ini.
-                  </p>
-                </div>
               </div>
             )}
           </div>

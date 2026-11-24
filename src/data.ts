@@ -38,11 +38,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
     'NADZHOM HIDAYATUS SHIBYAN'
   ],
   semester_aktif: 'Semester Ganjil',
-  intro_video_url: '/assets/intro_salaf_almaliki.mp4',
-  intro_video_name: 'The Journey of Knowledge — Salaf Al-Maliki (Bawaan)',
-  intro_video_type: 'default',
-  intro_duration_seconds: 10,
-  intro_ambient_audio: true,
 
   // Pengaturan Teks Website Menyeluruh (Dapat Diatur Bebas di Option Panel)
   header_title: 'SIM Pondok Pesantren Salaf Al-Maliki',

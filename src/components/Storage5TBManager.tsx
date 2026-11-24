@@ -23,7 +23,7 @@ import {
   TOTAL_CAPACITY_5TB
 } from '../lib/scalableStorage';
 import { backgroundTaskManager } from '../lib/backgroundTaskWorker';
-import { safeFirebaseConfig } from '../firebase';
+import { SUPABASE_STORAGE_BUCKET } from '../services/supabase';
 
 interface Storage5TBManagerProps {
   allDatabaseData?: Record<string, any>;
@@ -375,7 +375,7 @@ export const Storage5TBManager: React.FC<Storage5TBManagerProps> = ({
             </div>
           </div>
           <div className="text-[10px] text-zinc-300 bg-black/30 p-2 rounded-lg truncate">
-            <span>Bucket: {safeFirebaseConfig.storageBucket || 'absensi-data-santri.app'}</span>
+            <span>Bucket: Supabase Storage ({SUPABASE_STORAGE_BUCKET})</span>
           </div>
         </div>
       </div>

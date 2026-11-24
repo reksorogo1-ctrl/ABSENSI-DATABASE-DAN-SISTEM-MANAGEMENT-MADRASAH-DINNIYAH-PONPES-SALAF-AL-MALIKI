@@ -13,6 +13,7 @@ import {
 import { BrandLogos } from './BrandLogos';
 import { PWAInstallButton } from './PWAInstallButton';
 import { getOrCreateSantriHistory } from '../lib/kenaikanKelasService';
+import { Kpi3DCard } from './Analytics3DSuite';
 
 interface WaliSantriPortalProps {
   santri: Santri;
@@ -93,19 +94,19 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
 
   return (
     <div 
-      className="min-h-screen bg-[#03140c] text-[#f3e5ab] font-sans pb-16 bg-cover bg-center"
-      style={settings?.background_url ? { backgroundImage: `linear-gradient(rgba(3, 20, 12, 0.94), rgba(3, 20, 12, 0.98)), url(${settings.background_url})` } : undefined}
+      className="min-h-screen bg-[#041A13] bg-cyber-emerald-grid text-[#D1FAE5] font-sans pb-16 bg-cover bg-center"
+      style={settings?.background_url ? { backgroundImage: `linear-gradient(rgba(4, 26, 19, 0.92), rgba(4, 26, 19, 0.96)), url(${settings.background_url})` } : undefined}
     >
       {/* Top Banner / Navigation for Guardian */}
-      <header className="build-header bg-[#052216]/95 border-b border-[#d4af37]/30 backdrop-blur sticky top-0 z-30 px-4 py-3 sm:px-6 shadow-xl">
+      <header className="build-header bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-emerald-400/30 border-b-2 border-black/60 sticky top-0 z-30 px-4 py-3 sm:px-6 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5),0_4px_10px_-2px_rgba(16,185,129,0.08)]">
         <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
             <BrandLogos settings={settings} size="xs" gap="gap-1.5" idPrefix="wali-header" />
             <div>
-              <h1 className="font-bold text-sm sm:text-base text-[#d4af37] tracking-wide font-serif">
+              <h1 className="font-bold text-sm sm:text-base text-white tracking-wide font-serif">
                 {settings?.portal_title || 'PORTAL WALI SANTRI AL-MALIKI'}
               </h1>
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-emerald-300">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#D1FAE5]">
                 <span className="flex items-center gap-1 text-emerald-400 font-semibold">
                   <ShieldCheck className="w-3.5 h-3.5" /> Portal Terproteksi
                 </span>
@@ -134,7 +135,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
 
         {/* NOTIFIKASI KETERLAMBATAN SYAHRIYAH (JIKA ADA TUNGGAKAN) */}
         {hasTunggakan && (
-          <div className="rounded-2xl p-4 sm:p-5 bg-gradient-to-r from-red-950/90 via-[#450a0a]/90 to-red-950/90 border-2 border-red-500/60 text-white shadow-2xl animate-pulse">
+          <div className="rounded-2xl p-4 sm:p-5 bg-red-950/95 border border-red-500/60 text-white shadow-md">
             <div className="flex items-start space-x-3.5">
               <div className="p-2.5 rounded-xl bg-red-600/30 border border-red-500/50 text-red-300 shrink-0 mt-0.5 shadow">
                 <AlertTriangle className="w-6 h-6 text-red-400" />
@@ -167,9 +168,9 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
         )}
 
         {/* Santri Profile Card + Informasi Orang Tua, Wali Kelas, No WA, Saldo Terkini */}
-        <div className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-6">
+        <div className="card-3d rounded-3xl p-5 sm:p-6 space-y-6">
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6 text-center md:text-left">
-            <div className="w-28 h-36 sm:w-32 sm:h-40 rounded-2xl bg-[#052216] border-2 border-[#d4af37] overflow-hidden shadow-2xl shrink-0">
+            <div className="w-28 h-36 sm:w-32 sm:h-40 rounded-2xl bg-emerald-950 border-2 border-[#d4af37] overflow-hidden shadow-md shrink-0">
               <img
                 src={(santri.foto && santri.foto.trim()) || 'https://via.placeholder.com/300x380?text=Foto+Santri'}
                 alt={santri.nama}
@@ -265,36 +266,40 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
             </div>
           </div>
 
-          {/* Quick Metrics */}
-          <div className="grid grid-cols-3 gap-3 pt-6 border-t border-[#d4af37]/20">
-            <div className="card-3d-deep rounded-2xl p-3 sm:p-4 text-center">
-              <span className="text-[11px] text-emerald-300 uppercase block font-semibold">Rata-rata Ujian</span>
-              <span className="text-lg sm:text-2xl font-extrabold text-[#d4af37] mt-1 block font-mono">
-                {avgNilai}
-              </span>
-              <span className="text-[10px] text-emerald-200/60 mt-0.5 block">{myNilai.length} Mata Pelajaran</span>
-            </div>
+          {/* Quick Metrics - 3D Counter Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 border-t border-emerald-500/20">
+            <Kpi3DCard
+              index={0}
+              label="RATA-RATA UJIAN"
+              value={Number(avgNilai) || 0}
+              subtitle={`${myNilai.length} Mata Pelajaran`}
+              theme="gold"
+              icon={<Award className="w-5 h-5" />}
+            />
 
-            <div className="card-3d-deep rounded-2xl p-3 sm:p-4 text-center">
-              <span className="text-[11px] text-emerald-300 uppercase block font-semibold">Total Bait Nadzhom</span>
-              <span className="text-lg sm:text-2xl font-extrabold text-emerald-400 mt-1 block font-mono">
-                {totalBait}
-              </span>
-              <span className="text-[10px] text-emerald-200/60 mt-0.5 block">{myNadzhom.length} Setoran</span>
-            </div>
+            <Kpi3DCard
+              index={1}
+              label="TOTAL BAIT NADZHOM"
+              value={Number(totalBait) || 0}
+              subtitle={`${myNadzhom.length} Setoran Hafalan`}
+              theme="emerald"
+              icon={<BookOpen className="w-5 h-5" />}
+            />
 
-            <div className="card-3d-deep rounded-2xl p-3 sm:p-4 text-center">
-              <span className="text-[11px] text-emerald-300 uppercase block font-semibold">Kehadiran Diniyah</span>
-              <span className="text-lg sm:text-2xl font-extrabold text-amber-300 mt-1 block font-mono">
-                {absensiRate}%
-              </span>
-              <span className="text-[10px] text-emerald-200/60 mt-0.5 block">{hadirCount} Hari Hadir</span>
-            </div>
+            <Kpi3DCard
+              index={2}
+              label="KEHADIRAN DINIYAH"
+              value={Number(absensiRate) || 0}
+              suffix="%"
+              subtitle={`${hadirCount} Hari Hadir`}
+              theme="cyan"
+              icon={<UserCheck className="w-5 h-5" />}
+            />
           </div>
         </div>
 
         {/* KOLOM PENILAIAN UJIAN TERKONEKSI: KOREKSIAN KITAB, MUHAFADZOH, & BACA KITAB (PERSIS DI BAWAH PROFIL ANAK) */}
-        <section className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-5 border-2 border-[#d4af37]/40 shadow-2xl bg-gradient-to-br from-[#062819] via-[#041d13] to-[#02180e]">
+        <section className="card-3d rounded-3xl p-5 sm:p-6 space-y-5 border border-[#d4af37]/35 shadow-md bg-emerald-950/90">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-[#d4af37]/25 gap-2">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#d4af37] via-[#f3e5ab] to-[#aa8010] p-0.5 shadow-lg flex items-center justify-center shrink-0">
@@ -453,7 +458,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
         </section>
 
         {/* TABEL SYAHRIYAH (IURAN BULANAN) */}
-        <section className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
+        <section className="card-3d rounded-3xl p-5 sm:p-6 space-y-4">
           <div className="flex flex-wrap items-center justify-between pb-3 border-b border-[#d4af37]/20 gap-2">
             <div className="flex items-center space-x-2.5">
               <div className="p-2 rounded-xl bg-[#d4af37]/10 border border-[#d4af37]/30 text-[#d4af37]">
@@ -526,7 +531,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
         </section>
 
         {/* TABEL UANG SAKU (MUTASI & SALDO) */}
-        <section className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
+        <section className="card-3d rounded-3xl p-5 sm:p-6 space-y-4">
           <div className="flex flex-wrap items-center justify-between pb-3 border-b border-[#d4af37]/20 gap-2">
             <div className="flex items-center space-x-2.5">
               <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-400/30 text-amber-300">
@@ -604,7 +609,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
         </section>
 
         {/* Section: Setoran Nadzhom */}
-        <section className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
+        <section className="card-3d rounded-3xl p-5 sm:p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-[#d4af37]/20 gap-2">
             <div className="flex items-center space-x-2.5">
               <BookOpen className="w-5 h-5 text-[#d4af37]" />
@@ -612,7 +617,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
                 <h3 className="font-bold text-base text-white text-gold-3d flex items-center gap-2">
                   Riwayat Setoran Nadzhom & Hafalan
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-sans font-bold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                     Live Sync Madrasah
                   </span>
                 </h3>
@@ -665,7 +670,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
         </section>
 
         {/* Section: Nilai Ujian */}
-        <section className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
+        <section className="card-3d rounded-3xl p-5 sm:p-6 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/20">
             <div className="flex items-center space-x-2.5">
               <Award className="w-5 h-5 text-[#d4af37]" />
@@ -718,7 +723,7 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
         </section>
 
         {/* Section: Log Absensi Santri */}
-        <section className="card-3d rounded-3xl p-5 sm:p-6 backdrop-blur space-y-4">
+        <section className="card-3d rounded-3xl p-5 sm:p-6 space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-[#d4af37]/20">
             <div className="flex items-center space-x-2.5">
               <UserCheck className="w-5 h-5 text-[#d4af37]" />

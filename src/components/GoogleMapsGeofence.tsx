@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { APIProvider, Map, Marker, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
 import { MapPin, Navigation, Compass, Crosshair, Shield, CheckCircle2, AlertTriangle, Layers, Lock, Unlock } from 'lucide-react';
 import { GOOGLE_MAPS_API_KEY, DEFAULT_GEOFENCE_ZONE } from '../lib/geofencing';
+import { ScannerLaserOverlay } from './Analytics3DSuite';
 
 interface GoogleMapsGeofenceProps {
   zoneLat?: number;
@@ -170,9 +171,9 @@ export const GoogleMapsGeofence: React.FC<GoogleMapsGeofenceProps> = ({
   };
 
   return (
-    <div className="relative rounded-2xl overflow-hidden border border-[#d4af37]/40 shadow-xl bg-[#041a10]">
+    <div className="relative rounded-2xl overflow-hidden border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5),0_4px_10px_-2px_rgba(16,185,129,0.08)] bg-[#041A13]">
       {/* Top Header info bar */}
-      <div className="bg-[#02130b]/90 backdrop-blur-md px-3.5 py-2 border-b border-[#d4af37]/30 flex flex-wrap items-center justify-between gap-2 z-10 text-xs">
+      <div className="bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] px-3.5 py-2 border-b border-black/60 flex flex-wrap items-center justify-between gap-2 z-10 text-xs">
         <div className="flex items-center gap-2">
           <Shield className="w-4 h-4 text-[#d4af37]" />
           <span className="font-bold text-white truncate max-w-[220px] sm:max-w-xs">{zoneName}</span>
@@ -246,9 +247,12 @@ export const GoogleMapsGeofence: React.FC<GoogleMapsGeofenceProps> = ({
           </Map>
         </APIProvider>
 
+        {/* Animated Green Cyber Laser Scanner Beam */}
+        <ScannerLaserOverlay active={!isInsideZone || !userPos} />
+
         {/* Legend / Status Overlay at Bottom */}
-        <div className="absolute bottom-2 left-2 right-2 flex flex-wrap items-center justify-between gap-1.5 pointer-events-none">
-          <div className="bg-[#02130b]/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#d4af37]/30 text-[10px] text-white flex items-center gap-2 shadow-lg pointer-events-auto font-mono">
+        <div className="absolute bottom-2 left-2 right-2 flex flex-wrap items-center justify-between gap-1.5 pointer-events-none z-30">
+          <div className="bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] px-3 py-1.5 rounded-xl border-t border-l border-emerald-400/30 border-b-2 border-r border-black/60 text-[10px] text-white flex items-center gap-2 shadow-[0_10px_20px_-5px_rgba(0,0,0,0.65)] pointer-events-auto font-mono">
             <span className="flex items-center gap-1 text-emerald-300">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
               Pusat Zona: {zoneCenter.lat.toFixed(5)}, {zoneCenter.lng.toFixed(5)}

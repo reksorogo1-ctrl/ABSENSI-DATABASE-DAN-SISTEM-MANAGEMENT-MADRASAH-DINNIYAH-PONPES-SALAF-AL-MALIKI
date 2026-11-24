@@ -3,30 +3,18 @@
  * SIM Pondok Pesantren Salaf Al-Maliki
  * 
  * Prinsip:
- * 1. Data terstruktur disimpan di database Firestore/IndexedDB.
- * 2. File besar (Foto, Video, PDF, Dokumen, Backup) dialirkan ke Object Storage.
+ * 1. Data terstruktur disimpan di database Supabase Realtime / IndexedDB.
+ * 2. File besar (Foto, Video, PDF, Dokumen, Backup) dialirkan ke Supabase Storage.
  * 3. File besar TIDAK PERNAH disimpan sebagai raw string di database record.
  * 4. Thumbnail ringan (~10 KB) digunakan untuk list/tabel di browser agar RAM HP tetap dingin & lancar.
  * 5. Browser hanya memuat data/file yang sedang dibutuhkan (Lazy & On-Demand).
  */
 
 import { StorageObjectMetadata, StorageMetrics, PaginatedResult } from '../types';
-import { safeFirebaseConfig } from '../firebase';
-import { initializeApp, getApps } from 'firebase/app';
-import { 
-  getStorage, 
-  ref, 
-  uploadBytesResumable, 
-  getDownloadURL, 
-  deleteObject 
-} from 'firebase/storage';
-
-// Inisialisasi Firebase Storage jika tersedia
-const app = getApps().length === 0 ? initializeApp(safeFirebaseConfig) : getApps()[0];
-export const firebaseStorage = getStorage(
-  app, 
-  safeFirebaseConfig.storageBucket ? `gs://${safeFirebaseConfig.storageBucket}` : undefined
-);
+import {
+  uploadFileToSupabaseStorage,
+  deleteFileFromSupabaseStorage,
+} from '../services/supabase';
 
 // Kapasitas 5 TB (5 * 1024 * 1024 * 1024 * 1024 bytes = 5,497,558,138,880 bytes)
 export const TOTAL_CAPACITY_5TB = 5 * 1024 * 1024 * 1024 * 1024;
@@ -171,52 +159,23 @@ export async function uploadToScalableStorage(
   let downloadUrl = '';
   let isCloud = false;
 
-  // 2. Coba upload langsung ke Firebase Cloud Storage
+  // 2. Upload langsung ke Supabase Cloud Storage
   try {
-    const storageRef = ref(firebaseStorage, storagePath);
-    const uploadTask = uploadBytesResumable(storageRef, file, {
-      contentType: mimeType,
-      customMetadata: {
-        category,
-        originalName: fileName,
-        uploadedAt: new Date().toISOString()
-      }
-    });
-
-    let startTime = Date.now();
-    let prevBytes = 0;
-
-    await new Promise<void>((resolve, reject) => {
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-          const elapsedSec = (Date.now() - startTime) / 1000;
-          const speedKBps = elapsedSec > 0 ? Math.round((snapshot.bytesTransferred / 1024) / elapsedSec) : 0;
-          
-          if (onProgress) {
-            onProgress(percent, {
-              bytesTransferred: snapshot.bytesTransferred,
-              totalBytes: snapshot.totalBytes,
-              speedKBps
-            });
-          }
-        },
-        (error) => {
-          console.warn('Firebase Cloud Storage error, fallback ke Local Object Store:', error);
-          reject(error);
-        },
-        async () => {
-          try {
-            downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-            isCloud = true;
-            resolve();
-          } catch (err) {
-            reject(err);
-          }
-        }
-      );
-    });
+    const startTime = Date.now();
+    if (onProgress) {
+      onProgress(25, { bytesTransferred: Math.round(sizeBytes * 0.25), totalBytes: sizeBytes, speedKBps: 1024 });
+    }
+    const uploaded = await uploadFileToSupabaseStorage(storagePath, file, mimeType);
+    if (!uploaded || !uploaded.publicUrl) {
+      throw new Error('Supabase Storage bucket belum tersedia atau gagal upload');
+    }
+    downloadUrl = uploaded.publicUrl;
+    isCloud = true;
+    const elapsedSec = Math.max(0.1, (Date.now() - startTime) / 1000);
+    const speedKBps = Math.round((sizeBytes / 1024) / elapsedSec);
+    if (onProgress) {
+      onProgress(100, { bytesTransferred: sizeBytes, totalBytes: sizeBytes, speedKBps });
+    }
   } catch (error) {
     console.info('Mengalihkan ke Object Storage IndexedDB biner lokal (High-speed)...');
     // Simpan blob biner di IndexedDB
@@ -254,7 +213,7 @@ export async function uploadToScalableStorage(
     uploadedAt: new Date().toISOString(),
     isCloudSynced: isCloud,
     metadata: {
-      source: isCloud ? 'Firebase Cloud Storage' : 'Local IndexedDB Object Store'
+      source: isCloud ? 'Supabase Cloud Storage' : 'Local IndexedDB Object Store'
     }
   };
 
@@ -424,10 +383,9 @@ export async function deleteStorageObject(id: string): Promise<boolean> {
 
     if (item?.isCloudSynced && item.storagePath) {
       try {
-        const storageRef = ref(firebaseStorage, item.storagePath);
-        await deleteObject(storageRef);
+        await deleteFileFromSupabaseStorage(item.storagePath);
       } catch (cloudErr) {
-        console.warn('Gagal menghapus dari cloud storage:', cloudErr);
+        console.warn('Gagal menghapus dari Supabase Storage:', cloudErr);
       }
     }
 
@@ -549,18 +507,6 @@ export async function seedInitialStorageAssetsIfEmpty(): Promise<void> {
     if (existing.totalCount > 0) return;
 
     const initialSeeds: StorageObjectMetadata[] = [
-      {
-        id: 'seed_intro_video',
-        name: 'The Journey of Knowledge — Salaf Al-Maliki (4K HDR).mp4',
-        storagePath: 'videos/intro/intro_salaf_almaliki.mp4',
-        downloadUrl: '/assets/intro_salaf_almaliki.mp4',
-        sizeBytes: 134217728, // 128 MB
-        mimeType: 'video/mp4',
-        category: 'video',
-        uploadedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-        isCloudSynced: true,
-        metadata: { resolution: '3840x2160', duration: '10s' }
-      },
       {
         id: 'seed_rapor_kitab',
         name: 'Buku Pedoman & Silabus Kitab Salafiyah 1447H.pdf',
