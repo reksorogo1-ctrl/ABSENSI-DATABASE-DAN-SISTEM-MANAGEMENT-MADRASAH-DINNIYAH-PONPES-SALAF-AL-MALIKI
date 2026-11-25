@@ -202,57 +202,63 @@ export default function App() {
   const [rememberMe, setRememberMe] = useState<boolean>(true);
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState<boolean>(false);
 
+  const safeReadArray = <T,>(storageKey: string, fallback: T[]): T[] => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (!saved) return fallback;
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed)) return fallback;
+      return parsed.filter((item): item is T => item !== null && item !== undefined && typeof item === 'object');
+    } catch {
+      return fallback;
+    }
+  };
+
   // App Data (Supabase Realtime + Cache Lokal)
   const [settings, setSettings] = useState<AppSettings>(() => {
-    const saved = localStorage.getItem('sim_settings');
-    return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+    try {
+      const saved = localStorage.getItem('sim_settings');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return parsed && typeof parsed === 'object' ? parsed : DEFAULT_SETTINGS;
+    } catch {
+      return DEFAULT_SETTINGS;
+    }
   });
   const [santriList, setSantriList] = useState<Santri[]>(() => {
-    const saved = localStorage.getItem('sim_santri');
-    return deduplicateSantriList(saved ? JSON.parse(saved) : INITIAL_SANTRI_LIST);
+    return deduplicateSantriList(safeReadArray<Santri>('sim_santri', INITIAL_SANTRI_LIST));
   });
   const [guruList, setGuruList] = useState<GuruPengajar[]>(() => {
-    const saved = localStorage.getItem('sim_guru');
-    return deduplicateGuruList(saved ? JSON.parse(saved) : INITIAL_GURU_LIST);
+    return deduplicateGuruList(safeReadArray<GuruPengajar>('sim_guru', INITIAL_GURU_LIST));
   });
   const [jadwalList, setJadwalList] = useState<JadwalPelajaran[]>(() => {
-    const saved = localStorage.getItem('sim_jadwal');
-    return saved ? JSON.parse(saved) : INITIAL_JADWAL_LIST;
+    return safeReadArray<JadwalPelajaran>('sim_jadwal', INITIAL_JADWAL_LIST);
   });
   const [nadzhomList, setNadzhomList] = useState<NadzhomRecord[]>(() => {
-    const saved = localStorage.getItem('sim_nadzhom');
-    return saved ? JSON.parse(saved) : INITIAL_NADZHOM_LIST;
+    return safeReadArray<NadzhomRecord>('sim_nadzhom', INITIAL_NADZHOM_LIST);
   });
   const [nilaiList, setNilaiList] = useState<NilaiUjianRecord[]>(() => {
-    const saved = localStorage.getItem('sim_nilai');
-    return saved ? JSON.parse(saved) : INITIAL_NILAI_LIST;
+    return safeReadArray<NilaiUjianRecord>('sim_nilai', INITIAL_NILAI_LIST);
   });
   const [absensiSantriList, setAbsensiSantriList] = useState<AbsensiSantriRecord[]>(() => {
-    const saved = localStorage.getItem('sim_absensi_santri');
-    return saved ? JSON.parse(saved) : [];
+    return safeReadArray<AbsensiSantriRecord>('sim_absensi_santri', []);
   });
   const [absensiGuruList, setAbsensiGuruList] = useState<AbsensiGuruRecord[]>(() => {
-    const saved = localStorage.getItem('sim_absensi_guru');
-    return saved ? JSON.parse(saved) : [];
+    return safeReadArray<AbsensiGuruRecord>('sim_absensi_guru', []);
   });
   const [rekapSantriHistoryList, setRekapSantriHistoryList] = useState<AbsensiSantriRecord[]>(() => {
-    const saved = localStorage.getItem('sim_rekap_santri_harian_history');
-    return saved ? JSON.parse(saved) : [];
+    return safeReadArray<AbsensiSantriRecord>('sim_rekap_santri_harian_history', []);
   });
   const [rekapGuruHistoryList, setRekapGuruHistoryList] = useState<AbsensiGuruRecord[]>(() => {
-    const saved = localStorage.getItem('sim_rekap_guru_harian_history');
-    return saved ? JSON.parse(saved) : [];
+    return safeReadArray<AbsensiGuruRecord>('sim_rekap_guru_harian_history', []);
   });
 
 
   // New features data states (Syahriyah, Uang Saku, Kurikulum)
   const [syahriyahList, setSyahriyahList] = useState<SyahriyahRecord[]>(() => {
-    const saved = localStorage.getItem('sim_syahriyah');
-    return saved ? JSON.parse(saved) : INITIAL_SYAHRIYAH_LIST;
+    return safeReadArray<SyahriyahRecord>('sim_syahriyah', INITIAL_SYAHRIYAH_LIST);
   });
   const [uangSakuList, setUangSakuList] = useState<UangSakuRecord[]>(() => {
-    const saved = localStorage.getItem('sim_uang_saku');
-    return saved ? JSON.parse(saved) : INITIAL_UANG_SAKU_LIST;
+    return safeReadArray<UangSakuRecord>('sim_uang_saku', INITIAL_UANG_SAKU_LIST);
   });
   const [kurikulumList, setKurikulumList] = useState<KurikulumKitabRecord[]>(() => {
     const saved = localStorage.getItem('sim_kurikulum');
@@ -318,12 +324,10 @@ export default function App() {
     return INITIAL_KALENDER_AKADEMIK;
   });
   const [ujianList, setUjianList] = useState<UjianSantriRecord[]>(() => {
-    const saved = localStorage.getItem('sim_ujian_kitab');
-    return saved ? JSON.parse(saved) : INITIAL_UJIAN_SANTRI_LIST;
+    return safeReadArray<UjianSantriRecord>('sim_ujian_kitab', INITIAL_UJIAN_SANTRI_LIST);
   });
   const [izinMengajarList, setIzinMengajarList] = useState<IzinMengajarRequest[]>(() => {
-    const saved = localStorage.getItem('sim_izin_mengajar');
-    return saved ? JSON.parse(saved) : INITIAL_IZIN_MENGAJAR_LIST;
+    return safeReadArray<IzinMengajarRequest>('sim_izin_mengajar', INITIAL_IZIN_MENGAJAR_LIST);
   });
 
   // Otomatis simpan rekap saat berganti hari / bulan dan pemeliharaan arsip harian
@@ -672,23 +676,27 @@ export default function App() {
 
   // Compute Dashboard Stats dynamically
   const stats: DashboardStats = React.useMemo(() => {
-    const totalSantri = santriList.length;
+    const validGuruList = (guruList || []).filter((g): g is GuruPengajar => Boolean(g && typeof g === 'object'));
+    const validAbsSantri = (absensiSantriList || []).filter((a): a is AbsensiSantriRecord => Boolean(a && typeof a === 'object'));
+    const validAbsGuru = (absensiGuruList || []).filter((a): a is AbsensiGuruRecord => Boolean(a && typeof a === 'object'));
+
+    const totalSantri = (santriList || []).filter(Boolean).length;
     // Kolom data ustadz: menghitung ketika ada nama yang sama dihitung satu orang!
-    const uniqueGuruNames = new Set(guruList.map(g => g.nama.trim().toLowerCase()));
+    const uniqueGuruNames = new Set(validGuruList.map(g => (g.nama || '').trim().toLowerCase()).filter(Boolean));
     const totalGuru = uniqueGuruNames.size;
 
-    const hadirSantri = absensiSantriList.filter(a => a.status === 'Hadir').length;
-    const izinSantri = absensiSantriList.filter(a => a.status === 'Izin').length;
-    const sakitSantri = absensiSantriList.filter(a => a.status === 'Sakit').length;
-    const alphaSantri = absensiSantriList.filter(a => a.status === 'Alpha').length;
+    const hadirSantri = validAbsSantri.filter(a => a.status === 'Hadir').length;
+    const izinSantri = validAbsSantri.filter(a => a.status === 'Izin').length;
+    const sakitSantri = validAbsSantri.filter(a => a.status === 'Sakit').length;
+    const alphaSantri = validAbsSantri.filter(a => a.status === 'Alpha').length;
 
-    const hadirGuru = absensiGuruList.filter(a => a.status === 'Hadir').length;
-    const terlambatGuru = absensiGuruList.filter(a => a.status === 'Terlambat').length;
-    const izinGuru = absensiGuruList.filter(a => a.status === 'Izin').length;
-    const alphaGuru = absensiGuruList.filter(a => a.status === 'Alpha').length;
+    const hadirGuru = validAbsGuru.filter(a => a.status === 'Hadir').length;
+    const terlambatGuru = validAbsGuru.filter(a => a.status === 'Terlambat').length;
+    const izinGuru = validAbsGuru.filter(a => a.status === 'Izin').length;
+    const alphaGuru = validAbsGuru.filter(a => a.status === 'Alpha').length;
 
-    const totalAbsensiSantri = absensiSantriList.length;
-    const totalAbsensiGuru = absensiGuruList.length;
+    const totalAbsensiSantri = validAbsSantri.length;
+    const totalAbsensiGuru = validAbsGuru.length;
 
     const percentSantri = totalAbsensiSantri ? Math.round((hadirSantri / totalAbsensiSantri) * 100) : 0;
     const guruScoreSummary = calculateGuruAttendanceScore(hadirGuru, terlambatGuru, izinGuru, alphaGuru, 50);

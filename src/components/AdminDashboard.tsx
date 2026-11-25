@@ -266,19 +266,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Rekapan Absensi Guru & Santri (Firestore Single Source of Truth, dengan fallback local)
   const [rekapGuruLog, setRekapGuruLog] = useState<AbsensiGuruRecord[]>(() => {
-    if (rekapGuruHistoryList && rekapGuruHistoryList.length > 0) return rekapGuruHistoryList;
+    const cleanArr = (arr: any[]) => (Array.isArray(arr) ? arr.filter((x): x is AbsensiGuruRecord => Boolean(x && typeof x === 'object')) : []);
+    if (rekapGuruHistoryList && rekapGuruHistoryList.length > 0) return cleanArr(rekapGuruHistoryList);
     try {
       const saved = localStorage.getItem('sim_rekap_guru_harian_history');
-      return saved ? JSON.parse(saved) : [];
+      return saved ? cleanArr(JSON.parse(saved)) : [];
     } catch {
       return [];
     }
   });
   const [rekapSantriLog, setRekapSantriLog] = useState<AbsensiSantriRecord[]>(() => {
-    if (rekapSantriHistoryList && rekapSantriHistoryList.length > 0) return rekapSantriHistoryList;
+    const cleanArr = (arr: any[]) => (Array.isArray(arr) ? arr.filter((x): x is AbsensiSantriRecord => Boolean(x && typeof x === 'object')) : []);
+    if (rekapSantriHistoryList && rekapSantriHistoryList.length > 0) return cleanArr(rekapSantriHistoryList);
     try {
       const saved = localStorage.getItem('sim_rekap_santri_harian_history');
-      return saved ? JSON.parse(saved) : [];
+      return saved ? cleanArr(JSON.parse(saved)) : [];
     } catch {
       return [];
     }
@@ -287,13 +289,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Sinkronisasi realtime saat rekapSantriHistoryList atau rekapGuruHistoryList dari Firestore diupdate
   useEffect(() => {
     if (rekapGuruHistoryList && rekapGuruHistoryList.length > 0) {
-      setRekapGuruLog(rekapGuruHistoryList);
+      setRekapGuruLog(rekapGuruHistoryList.filter((x): x is AbsensiGuruRecord => Boolean(x && typeof x === 'object')));
     }
   }, [rekapGuruHistoryList]);
 
   useEffect(() => {
     if (rekapSantriHistoryList && rekapSantriHistoryList.length > 0) {
-      setRekapSantriLog(rekapSantriHistoryList);
+      setRekapSantriLog(rekapSantriHistoryList.filter((x): x is AbsensiSantriRecord => Boolean(x && typeof x === 'object')));
     }
   }, [rekapSantriHistoryList]);
 
@@ -303,11 +305,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       try {
         const savedG = localStorage.getItem('sim_rekap_guru_harian_history');
         if (savedG && (!rekapGuruHistoryList || rekapGuruHistoryList.length === 0)) {
-          setRekapGuruLog(JSON.parse(savedG));
+          const parsedG = JSON.parse(savedG);
+          if (Array.isArray(parsedG)) {
+            setRekapGuruLog(parsedG.filter((x): x is AbsensiGuruRecord => Boolean(x && typeof x === 'object')));
+          }
         }
         const savedS = localStorage.getItem('sim_rekap_santri_harian_history');
         if (savedS && (!rekapSantriHistoryList || rekapSantriHistoryList.length === 0)) {
-          setRekapSantriLog(JSON.parse(savedS));
+          const parsedS = JSON.parse(savedS);
+          if (Array.isArray(parsedS)) {
+            setRekapSantriLog(parsedS.filter((x): x is AbsensiSantriRecord => Boolean(x && typeof x === 'object')));
+          }
         }
       } catch {}
     };
@@ -339,20 +347,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const combinedGuruLog = useMemo(() => {
     const map = new Map<string, AbsensiGuruRecord>();
     // Tambahkan absensiGuruList live real-time
-    (absensiGuruList || []).forEach(item => {
-      const key = `${item.tanggal}_${item.nama}_${item.kelas}_${item.jamKe}`;
+    (Array.isArray(absensiGuruList) ? absensiGuruList : []).forEach(item => {
+      if (!item || typeof item !== 'object') return;
+      const key = `${item.tanggal || ''}_${item.nama || ''}_${item.kelas || ''}_${item.jamKe ?? ''}`;
       map.set(key, item);
     });
     // Tambahkan riwayat arsip (prioritaskan rekapGuruHistoryList dari Firestore)
-    const historyList = (rekapGuruHistoryList && rekapGuruHistoryList.length > 0) ? rekapGuruHistoryList : rekapGuruLog;
-    historyList.forEach(item => {
-      const key = `${item.tanggal}_${item.nama}_${item.kelas}_${item.jamKe}`;
+    const rawHistory = (rekapGuruHistoryList && rekapGuruHistoryList.length > 0) ? rekapGuruHistoryList : rekapGuruLog;
+    (Array.isArray(rawHistory) ? rawHistory : []).forEach(item => {
+      if (!item || typeof item !== 'object') return;
+      const key = `${item.tanggal || ''}_${item.nama || ''}_${item.kelas || ''}_${item.jamKe ?? ''}`;
       if (!map.has(key)) {
         map.set(key, item);
       }
     });
     return Array.from(map.values()).sort((a, b) => {
-      return (b.tanggal || '').localeCompare(a.tanggal || '');
+      return String(b?.tanggal || '').localeCompare(String(a?.tanggal || ''));
     });
   }, [absensiGuruList, rekapGuruHistoryList, rekapGuruLog]);
 
@@ -360,20 +370,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const combinedSantriLog = useMemo(() => {
     const map = new Map<string, AbsensiSantriRecord>();
     // Tambahkan absensiSantriList live real-time
-    (absensiSantriList || []).forEach(item => {
-      const key = `${item.tanggal}_${item.idSantri || item.nama}`;
+    (Array.isArray(absensiSantriList) ? absensiSantriList : []).forEach(item => {
+      if (!item || typeof item !== 'object') return;
+      const key = `${item.tanggal || ''}_${item.idSantri || item.nama || ''}`;
       map.set(key, item);
     });
     // Tambahkan riwayat arsip (prioritaskan rekapSantriHistoryList dari Firestore)
-    const historyList = (rekapSantriHistoryList && rekapSantriHistoryList.length > 0) ? rekapSantriHistoryList : rekapSantriLog;
-    historyList.forEach(item => {
-      const key = `${item.tanggal}_${item.idSantri || item.nama}`;
+    const rawHistory = (rekapSantriHistoryList && rekapSantriHistoryList.length > 0) ? rekapSantriHistoryList : rekapSantriLog;
+    (Array.isArray(rawHistory) ? rawHistory : []).forEach(item => {
+      if (!item || typeof item !== 'object') return;
+      const key = `${item.tanggal || ''}_${item.idSantri || item.nama || ''}`;
       if (!map.has(key)) {
         map.set(key, item);
       }
     });
     return Array.from(map.values()).sort((a, b) => {
-      return (b.tanggal || '').localeCompare(a.tanggal || '');
+      return String(b?.tanggal || '').localeCompare(String(a?.tanggal || ''));
     });
   }, [absensiSantriList, rekapSantriHistoryList, rekapSantriLog]);
 
@@ -591,16 +603,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       // Deduplikasi Santri
       const existingSantriMap = new Map<string, AbsensiSantriRecord>();
       (rekapSantriHistoryList || []).forEach(item => {
-        existingSantriMap.set(`${item.tanggal}_${item.idSantri || item.nama}`, item);
+        if (!item || typeof item !== 'object') return;
+        existingSantriMap.set(`${item.tanggal || ''}_${item.idSantri || item.nama || ''}`, item);
       });
 
       let santriAdded = 0;
-      localSantri.forEach((item, idx) => {
-        const key = `${item.tanggal}_${item.idSantri || item.nama}`;
+      (Array.isArray(localSantri) ? localSantri : []).forEach((item, idx) => {
+        if (!item || typeof item !== 'object') return;
+        const key = `${item.tanggal || ''}_${item.idSantri || item.nama || ''}`;
         if (!existingSantriMap.has(key)) {
           existingSantriMap.set(key, {
             ...item,
-            recordId: item.recordId || `MIG-S-${item.tanggal}-${idx + 1}`,
+            recordId: item.recordId || `MIG-S-${item.tanggal || 'NA'}-${idx + 1}`,
             waktuPencatatan: item.waktuPencatatan || nowIso,
             sumber: item.sumber || 'Migrasi LocalStorage ke Firestore Single Source of Truth'
           });
@@ -611,16 +625,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       // Deduplikasi Guru
       const existingGuruMap = new Map<string, AbsensiGuruRecord>();
       (rekapGuruHistoryList || []).forEach(item => {
-        existingGuruMap.set(`${item.tanggal}_${item.nama}_${item.kelas}_${item.jamKe}`, item);
+        if (!item || typeof item !== 'object') return;
+        existingGuruMap.set(`${item.tanggal || ''}_${item.nama || ''}_${item.kelas || ''}_${item.jamKe ?? ''}`, item);
       });
 
       let guruAdded = 0;
-      localGuru.forEach((item, idx) => {
-        const key = `${item.tanggal}_${item.nama}_${item.kelas}_${item.jamKe}`;
+      (Array.isArray(localGuru) ? localGuru : []).forEach((item, idx) => {
+        if (!item || typeof item !== 'object') return;
+        const key = `${item.tanggal || ''}_${item.nama || ''}_${item.kelas || ''}_${item.jamKe ?? ''}`;
         if (!existingGuruMap.has(key)) {
           existingGuruMap.set(key, {
             ...item,
-            id: item.id || `MIG-G-${item.tanggal}-${idx + 1}`,
+            id: item.id || `MIG-G-${item.tanggal || 'NA'}-${idx + 1}`,
             waktuPencatatan: item.waktuPencatatan || nowIso,
             sumber: item.sumber || 'Migrasi LocalStorage ke Firestore Single Source of Truth'
           });
@@ -1101,11 +1117,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Kalkulasi Rekapan Bulanan Santri berdasarkan Bulan + Tahun terpilih (Otomatis dari 0 untuk bulan baru)
   const rekapBulananSantri = useMemo(() => {
     // Saring data absensi santri yang hanya sesuai dengan Bulan + Tahun yang dipilih
-    const monthFilteredRecords = combinedSantriLog.filter(a => isDateInSelectedMonth(a.tanggal, selectedBulanSantri));
+    const monthFilteredRecords = combinedSantriLog.filter(a => a && isDateInSelectedMonth(a.tanggal, selectedBulanSantri));
 
-    return santriList.map((santri) => {
+    return (santriList || []).filter(Boolean).map((santri) => {
       // Hitung dari rekaman absensi santri yang cocok HANYA pada bulan terpilih
-      const records = monthFilteredRecords.filter(a => a.idSantri === santri.id || a.nama.trim().toLowerCase() === santri.nama.trim().toLowerCase());
+      const records = monthFilteredRecords.filter(a => a.idSantri === santri.id || (a.nama || '').trim().toLowerCase() === (santri.nama || '').trim().toLowerCase());
       const actualHadir = records.filter(r => r.status === 'Hadir').length;
       const actualIzin = records.filter(r => r.status === 'Izin').length;
       const actualSakit = records.filter(r => r.status === 'Sakit').length;
@@ -1139,11 +1155,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Ketentuan: Guru yang Telat tetap dihitung Hadir, namun Telat memengaruhi persentase penilaian.
   const rekapBulananGuru = useMemo(() => {
     // Saring log absensi guru yang hanya sesuai dengan Bulan + Tahun yang dipilih
-    const monthFilteredLogs = combinedGuruLog.filter(l => isDateInSelectedMonth(l.tanggal, selectedBulanGuru));
+    const monthFilteredLogs = combinedGuruLog.filter(l => l && isDateInSelectedMonth(l.tanggal, selectedBulanGuru));
 
-    return guruList.map((guru) => {
+    return (guruList || []).filter(Boolean).map((guru) => {
       // Cari rekap guru dari log yang cocok HANYA pada bulan terpilih
-      const logs = monthFilteredLogs.filter(l => l.nama.trim().toLowerCase() === guru.nama.trim().toLowerCase());
+      const logs = monthFilteredLogs.filter(l => (l.nama || '').trim().toLowerCase() === (guru.nama || '').trim().toLowerCase());
       const actualHadir = logs.filter(l => l.status === 'Hadir').length;
       const actualTerlambat = logs.filter(l => l.status === 'Terlambat').length;
       const actualIzin = logs.filter(l => l.status === 'Izin').length;
@@ -1280,18 +1296,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Gabungkan izin dari izinList dengan semua data guru yang berstatus Izin di absensi guru
   const allGuruIzinList = useMemo(() => {
     const map = new Map<string, IzinMengajarRequest>();
-    (localIzinList || []).forEach(item => {
-      const key = `${(item.namaUstadz || '').trim().toLowerCase()}_${item.tanggal}_${item.jamKe || 1}`;
+    (Array.isArray(localIzinList) ? localIzinList : []).forEach(item => {
+      if (!item || typeof item !== 'object') return;
+      const key = `${(item.namaUstadz || '').trim().toLowerCase()}_${item.tanggal || ''}_${item.jamKe || 1}`;
       map.set(key, item);
     });
 
     // Masukkan data guru yang berstatus Izin di combinedGuruLog
     combinedGuruLog.forEach(g => {
+      if (!g || typeof g !== 'object') return;
       if (g.status === 'Izin') {
-        const key = `${(g.nama || '').trim().toLowerCase()}_${g.tanggal}_${g.jamKe || 1}`;
+        const key = `${(g.nama || '').trim().toLowerCase()}_${g.tanggal || ''}_${g.jamKe || 1}`;
         if (!map.has(key)) {
           map.set(key, {
-            id: `IZN-ABS-${g.tanggal}-${(g.nama || '').replace(/\s+/g, '')}-${g.jamKe || 1}`,
+            id: `IZN-ABS-${g.tanggal || ''}-${(g.nama || '').replace(/\s+/g, '')}-${g.jamKe || 1}`,
             idPengurus: 'GURU',
             namaUstadz: g.nama,
             tanggal: g.tanggal,
@@ -1308,7 +1326,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
     });
 
-    return Array.from(map.values()).sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
+    return Array.from(map.values()).sort((a, b) => String(b?.tanggal || '').localeCompare(String(a?.tanggal || '')));
   }, [localIzinList, combinedGuruLog]);
 
   // State untuk Ujian Muhafadzoh
@@ -2990,13 +3008,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const dateSet = new Set<string>();
 
     combinedSantriLog.forEach(s => {
-      if (s.tanggal && isDateInSelectedMonth(s.tanggal, trendMonth)) {
+      if (s?.tanggal && isDateInSelectedMonth(s.tanggal, trendMonth)) {
         dateSet.add(s.tanggal);
       }
     });
 
     combinedGuruLog.forEach(g => {
-      if (g.tanggal && isDateInSelectedMonth(g.tanggal, trendMonth)) {
+      if (g?.tanggal && isDateInSelectedMonth(g.tanggal, trendMonth)) {
         dateSet.add(g.tanggal);
       }
     });

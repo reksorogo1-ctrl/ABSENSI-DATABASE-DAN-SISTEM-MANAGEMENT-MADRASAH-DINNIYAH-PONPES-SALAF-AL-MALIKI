@@ -293,7 +293,7 @@ function sanitizePayloadForJsonb(value: any, seen = new WeakSet<object>()): any 
   if (Array.isArray(value)) {
     return value
       .map((item) => sanitizePayloadForJsonb(item, seen))
-      .filter((item) => item !== undefined);
+      .filter((item) => item !== undefined && item !== null);
   }
 
   if (value instanceof Set) {
@@ -414,6 +414,9 @@ export async function loadMasterDataFromSupabase<T = any>(collectionKey: string)
       return null;
     }
     if (data && data.payload !== undefined && data.payload !== null) {
+      if (Array.isArray(data.payload)) {
+        return data.payload.filter((item: any) => item !== null && item !== undefined) as unknown as T;
+      }
       return data.payload as T;
     }
   } catch (err) {
@@ -466,9 +469,13 @@ function ensureTableChannel(table: MadinSupabaseTable) {
           nextPayload = await loadMasterDataFromSupabase(rowId);
         }
 
+        const safePayload = Array.isArray(nextPayload)
+          ? nextPayload.filter((item: any) => item !== null && item !== undefined)
+          : nextPayload;
+
         listeners.forEach((cb) => {
           try {
-            cb(nextPayload);
+            cb(safePayload);
           } catch (err) {
             console.warn(`[Supabase Realtime] Callback error (${rowId}):`, err);
           }

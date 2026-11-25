@@ -174,8 +174,10 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
 
   // Filter personal attendance for this pengurus (real-time dari absensiGuruList & riwayat rekapan Firestore)
   const personalAbsensi = useMemo(() => {
-    const list: AbsensiGuruRecord[] = [...(absensiGuruList || [])];
-    const historySource: AbsensiGuruRecord[] = (rekapGuruHistoryList && rekapGuruHistoryList.length > 0)
+    const list: AbsensiGuruRecord[] = (Array.isArray(absensiGuruList) ? absensiGuruList : []).filter(
+      (item): item is AbsensiGuruRecord => Boolean(item && typeof item === 'object')
+    );
+    const rawHistory: AbsensiGuruRecord[] = (rekapGuruHistoryList && rekapGuruHistoryList.length > 0)
       ? rekapGuruHistoryList
       : (() => {
           try {
@@ -186,18 +188,20 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
           }
         })();
 
-    historySource.forEach((h: AbsensiGuruRecord) => {
-      if (!list.some(l => l.tanggal === h.tanggal && l.nama === h.nama && l.kelas === h.kelas && l.jamKe === h.jamKe)) {
+    (Array.isArray(rawHistory) ? rawHistory : []).forEach((h: AbsensiGuruRecord) => {
+      if (!h || typeof h !== 'object') return;
+      if (!list.some(l => l && l.tanggal === h.tanggal && l.nama === h.nama && l.kelas === h.kelas && l.jamKe === h.jamKe)) {
         list.push(h);
       }
     });
 
     const cleanName = (pengurus.nama || '').toLowerCase().trim();
     return list.filter(a => {
+      if (!a) return false;
       const aName = (a.nama || '').toLowerCase().trim();
       const aPengganti = (a.ustadzPengganti || '').toLowerCase().trim();
       return aName === cleanName || aPengganti === cleanName || (cleanName && aName.includes(cleanName));
-    }).sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
+    }).sort((a, b) => String(b?.tanggal || '').localeCompare(String(a?.tanggal || '')));
   }, [absensiGuruList, rekapGuruHistoryList, pengurus.nama]);
 
   const personalHadirTepat = personalAbsensi.filter(a => a.status === 'Hadir').length;
