@@ -1243,7 +1243,7 @@ html, body, #root {
 }
 
 .modal-backdrop,
-.fixed.inset-0 {
+.fixed.inset-0:not(.bottom-sheet-backdrop) {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1253,7 +1253,7 @@ html, body, #root {
 }
 
 .modal-dialog,
-.fixed.inset-0 > div {
+.fixed.inset-0:not(.bottom-sheet-backdrop) > div {
   max-width: min(94vw, 780px);
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
@@ -1261,13 +1261,13 @@ html, body, #root {
 }
 
 /* Floating Physical 3D Modals (Gold/Emerald Top Bevel + Lightweight Shadow, Zero Heavy Blur) */
-.fixed.inset-0[class*="bg-black"] {
+.fixed.inset-0[class*="bg-black"]:not(.bottom-sheet-backdrop) {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   background-color: rgba(2, 12, 8, 0.82) !important;
 }
 
-.fixed.inset-0[class*="bg-black"] > div {
+.fixed.inset-0[class*="bg-black"]:not(.bottom-sheet-backdrop) > div {
   background:
     radial-gradient(circle at 0% 0%, rgba(251, 191, 36, 0.1) 0%, transparent 42%),
     linear-gradient(135deg, #093325 0%, #052017 52%, #03140E 100%) !important;
@@ -1671,6 +1671,15 @@ button:not(:disabled):active,
 .gsi-material-button .gsi-material-button-contents {
   flex-grow: 1;
   font-weight: 700;
+}
+
+/* Hilangkan garis scrollbar secara total pada daftar menu sidebar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 

@@ -10,7 +10,7 @@ import {
   ExternalLink, Plus, FolderOpen, ArrowDownToLine, ArrowUpFromLine, MapPin, Compass, Crosshair, Shield, Navigation,
   Instagram, Youtube, Music2, Globe, Unlock, Menu, Mail,
   Folder, FolderPlus, FolderCheck, CheckSquare, Square, Layers, FileUp, Camera,
-  HardDrive, Search, ChevronLeft, History
+  HardDrive, Search, ChevronLeft, History, Cloud, CloudOff
 } from 'lucide-react';
 import { compressImageFile, parseFileNameForSantri } from '../lib/imageCompression';
 import { Storage5TBManager } from './Storage5TBManager';
@@ -184,7 +184,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteIzinMengajar,
   onDeleteSantri
 }) => {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+  const [showMoreMenuSheet, setShowMoreMenuSheet] = useState<boolean>(false);
+  const [isCloudOnline, setIsCloudOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
+  useEffect(() => {
+    const handleOnline = () => setIsCloudOnline(true);
+    const handleOffline = () => setIsCloudOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
   const classList = ['1 TSANAWIYAH', '2 TSANAWIYAH', '3 TSANAWIYAH', '1 ALIYAH', '2 ALIYAH', '3 ALIYAH'];
 
   // State filter untuk Absensi Guru
@@ -3103,124 +3114,230 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   }, [trendMonth, combinedSantriLog, combinedGuruLog, santriList, guruList, stats]);
 
+  const adminNavTabs = [
+    { id: 'dashboard', label: 'Dashboard Utama', shortLabel: 'Utama', icon: Users },
+    { id: 'kalender', label: 'Kalender Akademik', shortLabel: 'Kalender', icon: Calendar, badge: 'Agenda' },
+    { id: 'ujian-muhafadzoh', label: '1. Tab Muhafadzoh', shortLabel: 'Muhafadzoh', icon: Award, badge: 'Ujian' },
+    { id: 'ujian-baca-kitab', label: '2. Tab Baca Kitab', shortLabel: 'Baca Kitab', icon: BookOpen, badge: 'Ujian' },
+    { id: 'ujian-koreksian-kitab', label: '3. Tab Koreksian Kitab', shortLabel: 'Koreksian', icon: CheckSquare, badge: 'Ujian' },
+    { id: 'absensi-santri', label: settings.text_absensi_santri_title || 'Absensi Santri', shortLabel: 'Abs. Santri', icon: UserCheck },
+    { id: 'pelanggaran-santri', label: 'Indikator Kehadiran', shortLabel: 'Takziran', icon: ShieldAlert, badge: 'Takziran & SP' },
+    { id: 'absensi-guru', label: settings.text_absensi_guru_title || 'Absensi Ustadz / Guru', shortLabel: 'Abs. Ustadz', icon: Clock },
+    { id: 'jadwal', label: settings.text_jadwal_title || 'Jadwal Pelajaran', shortLabel: 'Jadwal', icon: Calendar },
+    { id: 'guru', label: settings.text_guru_title || 'Data Guru Pengajar', shortLabel: 'Ustadz', icon: Award },
+    { id: 'santri', label: settings.text_santri_title || 'Data Santri & Foto', shortLabel: 'Santri', icon: Users },
+    { id: 'nadzhom', label: 'Setoran Nadzhom', shortLabel: 'Nadzhom', icon: BookOpen },
+    { id: 'nilai', label: 'Nilai Ujian', shortLabel: 'Nilai', icon: Award },
+    { id: 'pengaturan', label: 'Option Panel (Pusat Kontrol)', shortLabel: 'Pengaturan', icon: Sliders, badge: 'Password' }
+  ];
+
+  const adminMainNavTabs = adminNavTabs.filter(t => t.id !== 'pengaturan');
+  const primaryMobileTabIds = ['dashboard', 'absensi-santri', 'absensi-guru', 'santri'];
+  const primaryMobileTabs = primaryMobileTabIds
+    .map(id => adminNavTabs.find(t => t.id === id)!)
+    .filter(Boolean);
+  const moreMobileTabs = adminNavTabs.filter(t => !primaryMobileTabIds.includes(t.id));
+  const isMoreTabActive = moreMobileTabs.some(
+    t => activeTab === t.id || (t.id === 'ujian-muhafadzoh' && activeTab === 'ujian-kitab')
+  );
+  const activeTabInfo = adminNavTabs.find(
+    t => activeTab === t.id || (t.id === 'ujian-muhafadzoh' && activeTab === 'ujian-kitab')
+  );
+
   return (
     <div 
-      className="min-h-screen bg-[#041A13] bg-cyber-emerald-grid bg-cover bg-center text-[#D1FAE5] flex flex-col md:flex-row w-full overflow-x-hidden"
+      className="min-h-screen bg-[#041A13] bg-cyber-emerald-grid bg-cover bg-center text-[#D1FAE5] flex flex-col w-full overflow-x-clip"
       style={settings.background_url ? { backgroundImage: `linear-gradient(rgba(4, 26, 19, 0.92), rgba(4, 26, 19, 0.96)), url(${settings.background_url})` } : undefined}
     >
-      {/* MOBILE TOP BAR (Phone & Small Screens) */}
-      <div className="md:hidden flex items-center justify-between p-3.5 bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-b-2 border-black/60 sticky top-0 z-40 w-full shadow-md">
-        <div className="flex items-center gap-2.5 overflow-hidden">
-          <BrandLogos settings={settings} size="xs" idPrefix="admin-mob-header" />
-          <div className="overflow-hidden">
-            <h2 className="font-bold text-xs text-white truncate uppercase font-serif">
-              {settings.nama_pondok}
-            </h2>
-            <p className="text-[10px] text-[#D1FAE5] truncate">
-              Panel Admin • {activeTab.replace('-', ' ').toUpperCase()}
+      {/* CARD HEADER MELENGKUNG BESAR & GAGAH (bersebelahan dengan Kapsul Rail di desktop) */}
+      <header className="sticky top-3 sm:top-4 z-30 shrink-0 mx-3 mt-3 sm:mx-5 sm:mt-4 md:ml-[6.5rem] md:mr-5 px-5 py-4 sm:px-7 sm:py-5 rounded-3xl bg-gradient-to-r from-[#06241B] via-[#041A13] to-[#06241B] border-t border-l border-emerald-400/25 border-b-2 border-r border-black/60 shadow-md flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+          <img
+            src={resolveLogos(settings).pondok || resolveLogos(settings).madrasah}
+            alt="Logo Pondok Pesantren Salaf Al Maliki"
+            className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-contain shrink-0 border-2 border-amber-400/50 p-1 bg-emerald-950"
+          />
+          <div className="min-w-0 flex-1">
+            <h1 className="!text-xs sm:!text-sm md:!text-base font-bold leading-snug text-white uppercase tracking-wide font-serif whitespace-normal line-clamp-2">
+              {settings.nama_madrasah || 'Madrasah Diniyah'} {settings.nama_pondok || 'Ponpes Salaf Al Maliki'}
+            </h1>
+            <p className="text-[10px] sm:text-xs text-emerald-300/90 leading-snug flex items-center gap-1.5 mt-0.5 whitespace-normal line-clamp-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block shrink-0" />
+              <span>
+                Admin • {activeTabInfo?.label || activeTab.replace('-', ' ').toUpperCase()}
+              </span>
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <PWAInstallButton />
+
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div
+            className={`inline-flex min-h-[32px] sm:min-h-[36px] px-2 sm:px-2.5 py-1 rounded-full border text-[10px] sm:text-[11px] font-bold items-center gap-1.5 select-none whitespace-nowrap ${
+              isCloudOnline
+                ? 'bg-emerald-950/90 border-emerald-400/30 text-emerald-200'
+                : 'bg-amber-950/90 border-amber-500/40 text-amber-200'
+            }`}
+            title={isCloudOnline ? 'Cloud Sync Supabase Aktif & Terhubung' : 'Mode Offline (Menunggu Jaringan)'}
+          >
+            {isCloudOnline ? (
+              <Cloud className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            ) : (
+              <CloudOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            )}
+            <span className="hidden lg:inline">{isCloudOnline ? 'Cloud Sync' : 'Offline'}</span>
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isCloudOnline ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+          </div>
+          <PWAInstallButton className="!px-2.5 !py-1 !text-[10px] sm:!text-[11px] min-h-[32px] !rounded-full" />
           <button
             type="button"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-gradient-to-b from-emerald-500/20 to-emerald-950/70 border-t border-l border-emerald-400/25 border-b-2 border-r border-black/60 text-[#D4AF37] md:hover:text-white active:scale-95 transition-transform duration-75 select-none touch-manipulation shadow-inner"
-            aria-label="Toggle Menu Navigasi"
+            onClick={() => setShowResetConfirmModal(true)}
+            className="hidden sm:inline-flex min-h-[36px] px-3 py-1 rounded-full bg-red-950/90 border border-red-500/50 text-red-200 md:hover:text-white md:hover:bg-red-900 font-bold text-[11px] items-center gap-1.5 select-none touch-manipulation active:scale-95 transition-transform duration-75 shadow-sm whitespace-nowrap"
+            title="Reset seluruh rekapan dan kembalikan angka ke nol (0)"
           >
-            {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            <RotateCcw className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+            <span className="hidden lg:inline">Reset (0)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('pengaturan')}
+            className="min-h-[36px] px-2.5 sm:px-3 py-1 rounded-full bg-gradient-to-b from-[#fef08a] via-[#facc15] to-[#eab308] border border-amber-700/60 text-black font-extrabold text-[11px] flex items-center gap-1.5 select-none touch-manipulation active:scale-95 transition-transform duration-75 shadow-sm whitespace-nowrap"
+            title="Buka Option Panel"
+          >
+            <Sliders className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">Option Panel</span>
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* SIDEBAR */}
-      <aside className={`build-sidebar w-full md:w-72 bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-r border-black/60 border-t border-emerald-400/25 p-4 sm:p-5 flex flex-col justify-between shrink-0 shadow-md ${isMobileMenuOpen ? 'flex' : 'hidden md:flex'}`}>
-        <div className="space-y-6">
-          {/* Logo & Header */}
-          <div className="flex items-center gap-3 pb-4 border-b border-[#d4af37]/20">
-            <BrandLogos settings={settings} size="sm" idPrefix="admin-header" />
-            <div className="overflow-hidden">
-              <h2 className="font-bold text-sm text-[#d4af37] truncate uppercase tracking-wider font-serif">
-                {settings.nama_pondok}
-              </h2>
-              <p className="text-[10px] text-emerald-300 truncate">
-                {settings.nama_madrasah}
-              </p>
-            </div>
+      {/* ICON RAIL SIDEBAR KAPSUL PIL MELAYANG (PC, Laptop & Tablet: hidden md:flex, rounded-full w-[72px] -> hover:w-64 hover:rounded-[2.25rem]) */}
+      <aside className="hidden md:flex fixed top-0 bottom-0 left-0 z-40 my-4 ml-3 w-[72px] hover:w-64 focus-within:w-64 group group-hover:w-64 rounded-full hover:rounded-[2.25rem] focus-within:rounded-[2.25rem] transition-[width,border-radius] duration-200 ease-out overflow-hidden bg-gradient-to-b from-[#072B20] to-[#03150F] border border-emerald-400/25 shadow-lg flex-col">
+        {/* PUNCAK ATAS: LOGO LINGKARAN + PENANDA EXPAND (>) */}
+        <div className="pt-3 pb-2.5 px-2 border-b border-emerald-400/15 flex items-center shrink-0 overflow-hidden">
+          <div className="w-[54px] shrink-0 flex items-center justify-center relative">
+            <BrandLogos settings={settings} size="sm" idPrefix="admin-rail-logo" />
+            <span
+              className="absolute -top-0.5 -right-0.5 w-5 h-5 rounded-full bg-[#072B20] border border-amber-400/60 text-[#D4AF37] flex items-center justify-center shadow-sm transition-transform duration-200 group-hover:rotate-180"
+              aria-hidden="true"
+            >
+              <ChevronRight className="w-3 h-3" />
+            </span>
           </div>
-
-          {/* Nav Tabs */}
-          <nav className="space-y-1">
-            {[
-              { id: 'dashboard', label: 'Dashboard Utama', icon: Users },
-              { id: 'kalender', label: 'Kalender Akademik', icon: Calendar, badge: 'Agenda' },
-              { id: 'ujian-muhafadzoh', label: '1. Tab Muhafadzoh', icon: Award, badge: 'Ujian' },
-              { id: 'ujian-baca-kitab', label: '2. Tab Baca Kitab', icon: BookOpen, badge: 'Ujian' },
-              { id: 'ujian-koreksian-kitab', label: '3. Tab Koreksian Kitab', icon: CheckSquare, badge: 'Ujian' },
-              { id: 'absensi-santri', label: settings.text_absensi_santri_title || 'Absensi Santri', icon: UserCheck },
-              { id: 'pelanggaran-santri', label: 'Indikator Kehadiran', icon: ShieldAlert, badge: 'Takziran & SP' },
-              { id: 'absensi-guru', label: settings.text_absensi_guru_title || 'Absensi Ustadz / Guru', icon: Clock },
-              { id: 'jadwal', label: settings.text_jadwal_title || 'Jadwal Pelajaran', icon: Calendar },
-              { id: 'guru', label: settings.text_guru_title || 'Data Guru Pengajar', icon: Award },
-              { id: 'santri', label: settings.text_santri_title || 'Data Santri & Foto', icon: Users },
-              { id: 'nadzhom', label: 'Setoran Nadzhom', icon: BookOpen },
-              { id: 'nilai', label: 'Nilai Ujian', icon: Award },
-              { id: 'pengaturan', label: 'Option Panel (Pusat Kontrol)', icon: Sliders, badge: 'Password' }
-            ].map(tab => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id || (tab.id === 'ujian-muhafadzoh' && activeTab === 'ujian-kitab');
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    setActiveTab(tab.id);
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className={`w-full text-left px-3.5 py-2.5 rounded-xl font-semibold text-xs flex items-center justify-between transition ${
-                    isActive 
-                      ? 'bg-[#d4af37]/20 text-white border-l-4 border-[#d4af37] shadow-md' 
-                      : 'text-[#f3e5ab]/80 hover:bg-[#d4af37]/10 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-[#d4af37]' : 'text-emerald-400'}`} />
-                    <span className="truncate">{tab.label}</span>
-                  </div>
-                  {tab.badge && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#0b422a] border border-[#d4af37]/40 text-[#d4af37] font-mono">
-                      {tab.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+          <div className="min-w-0 pr-3 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 whitespace-nowrap">
+            <p className="text-xs font-extrabold text-white tracking-wide font-serif leading-tight">
+              Madrasah Diniyah Al Maliki
+            </p>
+            <p className="text-[10px] text-[#D4AF37] font-semibold leading-tight mt-0.5">
+              Ponpes Salaf Al Maliki
+            </p>
+          </div>
         </div>
 
-        {/* Logout */}
-        <div className="pt-4 border-t border-[#d4af37]/20 space-y-3">
+        {/* KELOMPOK IKON MENU + PEMISAH HORIZONTAL PENDEK + SOROTAN LINGKARAN AKTIF */}
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-2 space-y-1 no-scrollbar" aria-label="Navigasi Sidebar Admin">
+          {adminMainNavTabs.map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id || (tab.id === 'ujian-muhafadzoh' && activeTab === 'ujian-kitab');
+            const showDividerAfter = tab.id === 'kalender' || tab.id === 'ujian-koreksian-kitab' || tab.id === 'jadwal';
+            return (
+              <React.Fragment key={tab.id}>
+                <button
+                  type="button"
+                  title={tab.label}
+                  aria-label={tab.label}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative w-full h-11 flex items-center rounded-full whitespace-nowrap overflow-hidden select-none touch-manipulation transition-colors duration-150 ${
+                    isActive
+                      ? 'bg-emerald-900/40 text-white font-bold'
+                      : 'text-[#D1FAE5]/80 md:hover:bg-emerald-500/12 md:hover:text-white font-semibold'
+                  }`}
+                >
+                  <div className="w-[54px] h-11 shrink-0 flex items-center justify-center relative">
+                    <span
+                      className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors duration-150 ${
+                        isActive
+                          ? 'bg-gradient-to-br from-[#D4AF37]/30 via-emerald-500/25 to-emerald-900/50 border border-[#D4AF37]/60 shadow-[0_0_12px_rgba(212,175,55,0.42)]'
+                          : ''
+                      }`}
+                    >
+                      <Icon className={`w-[18px] h-[18px] transition-transform duration-150 ${isActive ? 'text-[#D4AF37] scale-105' : 'text-emerald-400'}`} />
+                    </span>
+                  </div>
+                  <div className="flex-1 flex items-center justify-between gap-2 pr-3 min-w-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 whitespace-nowrap">
+                    <span className="text-xs truncate whitespace-nowrap">{tab.label}</span>
+                    {tab.badge && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#0b422a] border border-[#d4af37]/40 text-[#d4af37] font-mono shrink-0">
+                        {tab.badge}
+                      </span>
+                    )}
+                  </div>
+                </button>
+                {showDividerAfter && (
+                  <div className="w-6 h-[1px] bg-emerald-400/20 mx-auto my-2 group-hover:w-full transition-[width] duration-200" />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </nav>
+
+        {/* DASAR BAWAH: OPTION PANEL & KELUAR */}
+        <div className="mt-auto pt-2 pb-3 px-2 border-t border-emerald-400/15 space-y-1.5 shrink-0">
           <button
-            onClick={onLogout}
-            className="w-full py-2.5 px-3 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs font-bold flex items-center justify-center space-x-2 hover:bg-red-900 transition shadow"
+            type="button"
+            title="Option Panel / Pengaturan"
+            aria-label="Option Panel / Pengaturan"
+            onClick={() => setActiveTab('pengaturan')}
+            className={`relative w-full h-11 flex items-center rounded-full whitespace-nowrap overflow-hidden select-none touch-manipulation transition-colors duration-150 ${
+              activeTab === 'pengaturan'
+                ? 'bg-emerald-900/40 text-white font-bold'
+                : 'text-[#f3e5ab] md:hover:bg-emerald-500/15 md:hover:text-white font-semibold'
+            }`}
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Keluar Admin</span>
+            <div className="w-[54px] h-11 shrink-0 flex items-center justify-center">
+              <span
+                className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                  activeTab === 'pengaturan'
+                    ? 'bg-gradient-to-br from-[#D4AF37]/30 via-emerald-500/25 to-emerald-900/50 border border-[#D4AF37]/60 shadow-[0_0_12px_rgba(212,175,55,0.42)]'
+                    : 'bg-emerald-950/80 border border-[#D4AF37]/30'
+                }`}
+              >
+                <Sliders className={`w-[18px] h-[18px] shrink-0 ${activeTab === 'pengaturan' ? 'text-[#D4AF37]' : 'text-amber-300'}`} />
+              </span>
+            </div>
+            <span className="text-xs font-bold pr-3 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 whitespace-nowrap">
+              Option Panel
+            </span>
+          </button>
+
+          <button
+            type="button"
+            title="Keluar Admin"
+            aria-label="Keluar Admin"
+            onClick={onLogout}
+            className="w-full h-11 flex items-center rounded-full whitespace-nowrap overflow-hidden text-red-200 md:hover:bg-red-900/50 md:hover:text-white select-none touch-manipulation active:scale-95 transition-colors duration-150"
+          >
+            <div className="w-[54px] h-11 shrink-0 flex items-center justify-center">
+              <span className="w-10 h-10 rounded-full bg-red-950/80 border border-red-500/45 flex items-center justify-center">
+                <LogOut className="w-[17px] h-[17px] shrink-0" />
+              </span>
+            </div>
+            <span className="text-xs font-bold pr-3 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 whitespace-nowrap">
+              Keluar
+            </span>
           </button>
         </div>
       </aside>
 
-      {/* MAIN CONTENT AREA */}
-      <main className="flex-1 p-4 md:p-6 overflow-y-auto space-y-6">
+      {/* MAIN CONTENT AREA (md:ml-[6.25rem] memberi ruang kapsul 72px+margin, pb-24 di HP agar bebas dari Bottom Tab Bar) */}
+      <main className="flex-1 min-w-0 md:ml-[6.25rem] px-3.5 py-4 sm:p-5 md:p-6 pb-24 md:pb-6 space-y-6">
         {/* BANNER NOTIFIKASI PRESENSI REAL-TIME DARI PENGURUS */}
         {realtimeAlert && (
-          <div className="card-3d-glass rounded-2xl p-4 border-2 border-emerald-400 bg-gradient-to-r from-emerald-950/95 via-[#062417] to-emerald-950/95 shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-pulse">
+          <div className="card-3d-glass rounded-2xl p-4 border-2 border-emerald-400 bg-gradient-to-r from-emerald-950/95 via-[#062417] to-emerald-950/95 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500 text-black flex items-center justify-center font-black shadow-lg shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500 text-black flex items-center justify-center font-black shadow shrink-0">
                 <Sparkles className="w-5 h-5 text-black" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-black text-emerald-300 uppercase tracking-wider">
                     {realtimeAlert.title}
                   </span>
@@ -3238,6 +3355,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
             <div className="flex items-center gap-2 self-end sm:self-center">
               <button
+                type="button"
                 onClick={() => {
                   setActiveTab(realtimeAlert.type === 'guru' ? 'absensi-guru' : 'absensi-santri');
                   setRealtimeAlert(null);
@@ -3247,8 +3365,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Buka Fitur {realtimeAlert.type === 'guru' ? 'Absensi Ustadz' : 'Absensi Santri'}
               </button>
               <button
+                type="button"
                 onClick={() => setRealtimeAlert(null)}
-                className="p-1.5 rounded-xl hover:bg-emerald-900 text-slate-300 hover:text-white transition"
+                className="p-1.5 rounded-xl md:hover:bg-emerald-900 text-slate-300 md:hover:text-white transition-colors duration-150"
                 title="Tutup Notifikasi"
               >
                 <X className="w-4 h-4" />
@@ -3256,39 +3375,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
         )}
-
-        {/* Top Header - 3D Luxury Beveled Banner (Semua Teks Bisa Diatur via Option Panel) */}
-        <header className="build-header header-3d-banner rounded-2xl p-5 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold font-serif text-[#d4af37] text-gold-3d tracking-wide">
-              {settings.header_title || settings.judul_aplikasi || 'SIM Pondok Pesantren Salaf Al-Maliki'}
-            </h1>
-            <p className="text-xs text-emerald-200/90 mt-1 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
-              <span>{settings.header_subtitle || settings.login_subtitle || 'Sistem Informasi & Manajemen Santri Madrasah Diniyah Salafiyah'}</span>
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5 text-right justify-end">
-            <PWAInstallButton variant="button" />
-            <button
-              onClick={() => setActiveTab('pengaturan')}
-              className="btn-3d-gold px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center gap-2"
-            >
-              <Sliders className="w-3.5 h-3.5 text-black" />
-              <span>Buka Option Panel</span>
-            </button>
-
-            <button
-              onClick={() => setShowResetConfirmModal(true)}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-950/90 via-rose-950/90 to-amber-950/90 border border-red-500/70 hover:border-red-400 text-red-200 hover:text-white font-extrabold text-xs flex items-center gap-1.5 shadow-lg transition hover:scale-[1.02] active:scale-[0.98]"
-              title="Reset seluruh rekapan dan kembalikan angka ke nol (0)"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-amber-300" />
-              <span>Reset Rekapan (0)</span>
-            </button>
-          </div>
-        </header>
 
         {/* TAB 1: DASHBOARD UTAMA DENGAN RECHARTS & BERITA TERKINI */}
         {activeTab === 'dashboard' && (
@@ -15205,6 +15291,158 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             });
           }}
         />
+      )}
+      {/* MOBILE BOTTOM TAB BAR (iPhone & Android: fixed bottom-0 inset-x-0 z-40 flex md:hidden) */}
+      <nav
+        className="fixed bottom-0 inset-x-0 z-40 flex md:hidden items-stretch justify-around bg-[#041A13] border-t border-emerald-400/25 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_18px_rgba(0,0,0,0.65)]"
+        aria-label="Navigasi Bawah Admin"
+      >
+        {primaryMobileTabs.map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setActiveTab(tab.id);
+                setShowMoreMenuSheet(false);
+              }}
+              style={{ touchAction: 'manipulation' }}
+              className={`relative flex-1 min-h-[56px] flex flex-col items-center justify-center gap-1 py-1.5 px-1 select-none active:scale-95 transition-transform duration-75 ${
+                isActive ? 'text-[#D4AF37]' : 'text-[#D1FAE5]/75'
+              }`}
+            >
+              {isActive && (
+                <span className="absolute top-0 inset-x-3 h-[2.5px] rounded-b-full bg-[#D4AF37]" />
+              )}
+              <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-[#D4AF37]' : 'text-emerald-400/90'}`} />
+              <span className={`text-[10px] leading-tight truncate max-w-full ${isActive ? 'font-extrabold text-white' : 'font-semibold'}`}>
+                {tab.shortLabel}
+              </span>
+            </button>
+          );
+        })}
+
+        {/* Tombol ke-5: Lainnya */}
+        <button
+          type="button"
+          onClick={() => setShowMoreMenuSheet(prev => !prev)}
+          style={{ touchAction: 'manipulation' }}
+          className={`relative flex-1 min-h-[56px] flex flex-col items-center justify-center gap-1 py-1.5 px-1 select-none active:scale-95 transition-transform duration-75 ${
+            showMoreMenuSheet || isMoreTabActive ? 'text-[#D4AF37]' : 'text-[#D1FAE5]/75'
+          }`}
+          aria-expanded={showMoreMenuSheet}
+          aria-label="Lainnya"
+        >
+          {(showMoreMenuSheet || isMoreTabActive) && (
+            <span className="absolute top-0 inset-x-3 h-[2.5px] rounded-b-full bg-[#D4AF37]" />
+          )}
+          <div className="relative">
+            {showMoreMenuSheet ? (
+              <X className="w-5 h-5 text-[#D4AF37]" />
+            ) : (
+              <Menu className={`w-5 h-5 ${isMoreTabActive ? 'text-[#D4AF37]' : 'text-emerald-400/90'}`} />
+            )}
+            {isMoreTabActive && !showMoreMenuSheet && (
+              <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-[#D4AF37]" />
+            )}
+          </div>
+          <span className={`text-[10px] leading-tight truncate max-w-full ${(showMoreMenuSheet || isMoreTabActive) ? 'font-extrabold text-white' : 'font-semibold'}`}>
+            Lainnya
+          </span>
+        </button>
+      </nav>
+
+      {/* BOTTOM SHEET LACI MENU LAINNYA (HP Android & iOS) */}
+      {showMoreMenuSheet && (
+        <div
+          className="fixed inset-0 z-50 md:hidden bottom-sheet-backdrop bg-black/75 flex flex-col justify-end"
+          onClick={() => setShowMoreMenuSheet(false)}
+        >
+          <div
+            className="w-full bg-gradient-to-b from-[#06241B] to-[#03150F] border-t-2 border-[#D4AF37]/45 rounded-t-3xl px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))] max-h-[82vh] overflow-y-auto shadow-[0_-12px_32px_rgba(0,0,0,0.8)] space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-5 rounded-full bg-[#D4AF37]" />
+                <div>
+                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-white">
+                    Menu Lainnya Admin
+                  </h3>
+                  <p className="text-[10px] text-emerald-300/80">
+                    Pilih modul manajemen & pengaturan madrasah
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMoreMenuSheet(false)}
+                style={{ touchAction: 'manipulation' }}
+                className="min-w-[38px] min-h-[38px] rounded-xl bg-[#041A13] border border-emerald-400/25 text-emerald-200 flex items-center justify-center active:scale-95 transition-transform duration-75"
+                aria-label="Tutup Menu Lainnya"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {moreMobileTabs.map(tab => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id || (tab.id === 'ujian-muhafadzoh' && activeTab === 'ujian-kitab');
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      setShowMoreMenuSheet(false);
+                    }}
+                    style={{ touchAction: 'manipulation' }}
+                    className={`min-h-[52px] px-3 py-2.5 rounded-2xl border text-left flex items-center justify-between gap-2 select-none active:scale-95 transition-transform duration-75 ${
+                      isActive
+                        ? 'bg-gradient-to-r from-[#D4AF37]/25 to-emerald-900/50 border-[#D4AF37] text-white font-bold shadow-sm'
+                        : 'bg-[#041A13] border-emerald-500/20 text-[#D1FAE5] font-semibold'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#D4AF37]' : 'text-emerald-400'}`} />
+                      <span className="text-[11px] leading-tight line-clamp-2">{tab.label}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-500/20">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMoreMenuSheet(false);
+                  setShowResetConfirmModal(true);
+                }}
+                style={{ touchAction: 'manipulation' }}
+                className="min-h-[46px] rounded-xl bg-amber-950/70 border border-amber-500/40 text-amber-200 text-xs font-bold flex items-center justify-center gap-1.5 select-none active:scale-95 transition-transform duration-75"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-amber-300" />
+                <span>Reset Rekapan (0)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMoreMenuSheet(false);
+                  onLogout();
+                }}
+                style={{ touchAction: 'manipulation' }}
+                className="min-h-[46px] rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs font-bold flex items-center justify-center gap-1.5 select-none active:scale-95 transition-transform duration-75"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Keluar Admin</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

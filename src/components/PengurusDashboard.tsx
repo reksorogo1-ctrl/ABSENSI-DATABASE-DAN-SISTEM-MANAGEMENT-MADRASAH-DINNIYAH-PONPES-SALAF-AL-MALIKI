@@ -11,9 +11,10 @@ import {
   Users, Newspaper, ShieldAlert, Sparkles, Sliders, CheckCheck,
   Send, FileText, UserX, ChevronRight, Check, X, Shield, PlusCircle, Plus,
   BookmarkCheck, CheckSquare, RefreshCw, GraduationCap, MapPin, Compass, Crosshair, Navigation, Menu,
-  Search, Edit3, ChevronDown, ChevronUp, Bell
+  Search, Edit3, ChevronDown, ChevronUp, Bell, Cloud, CloudOff
 } from 'lucide-react';
 import { BrandLogos } from './BrandLogos';
+import { resolveLogos } from '../brand';
 import { PWAInstallButton } from './PWAInstallButton';
 import { GoogleMapsGeofence } from './GoogleMapsGeofence';
 import { validateGeofence, DEFAULT_GEOFENCE_ZONE } from '../lib/geofencing';
@@ -92,6 +93,17 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [showIzinModal, setShowIzinModal] = useState<boolean>(false);
   const [showMobileMenu, setShowMobileMenu] = useState<boolean>(false);
+  const [isCloudOnline, setIsCloudOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
+  useEffect(() => {
+    const handleOnline = () => setIsCloudOnline(true);
+    const handleOffline = () => setIsCloudOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
   const [showAllUrgentNotifs, setShowAllUrgentNotifs] = useState<boolean>(false);
   const [showAllSilabusNotifs, setShowAllSilabusNotifs] = useState<boolean>(false);
   const [editedPengurus, setEditedPengurus] = useState<Pengurus>({ ...pengurus });
@@ -1413,311 +1425,231 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
     }
   };
 
+  const pengurusNavTabs = [
+    { id: 'dashboard', label: 'Dasbor Utama', shortLabel: 'Dasbor', icon: Sparkles },
+    { id: 'izin-mengajar', label: 'Izin Mengajar', shortLabel: 'Izin', icon: FileText, badge: myIzinList.filter(i => i.status === 'Menunggu').length || undefined, badgeTone: 'gold' },
+    { id: 'wali-kelas', label: 'Wali Kelas', shortLabel: 'Wali Kelas', icon: GraduationCap, badge: waliKelasKelas, badgeTone: 'emerald' },
+    { id: 'kalender', label: 'Kalender & Agenda', shortLabel: 'Kalender', icon: Calendar, badge: urgentEvents.length || undefined, badgeTone: 'red' },
+    { id: 'absensi-santri', label: 'Presensi Santri', shortLabel: 'Presensi', icon: UserCheck },
+    { id: 'jadwal', label: 'Jadwal & Kitab', shortLabel: 'Jadwal', icon: BookOpen, badge: unreadSilabusUpdates.length ? `${unreadSilabusUpdates.length} Update` : undefined, badgeTone: 'amber' },
+    { id: 'nadzhom', label: 'Setoran Nadzhom', shortLabel: 'Nadzhom', icon: BookOpen, badge: liveNadzhomList.length || undefined, badgeTone: 'emerald' },
+    { id: 'ujian-kitab', label: 'Nilai Ujian', shortLabel: 'Nilai', icon: Award },
+    { id: 'profil-saya', label: 'Biodata & Profil', shortLabel: 'Profil', icon: Users },
+  ];
+
+  const pengurusMainNavTabs = pengurusNavTabs.filter(t => t.id !== 'profil-saya');
+  const primaryPengurusMobileIds = ['dashboard', 'absensi-santri', 'jadwal', 'wali-kelas'];
+  const primaryPengurusMobileTabs = primaryPengurusMobileIds
+    .map(id => pengurusNavTabs.find(t => t.id === id)!)
+    .filter(Boolean);
+  const morePengurusMobileTabs = pengurusNavTabs.filter(t => !primaryPengurusMobileIds.includes(t.id));
+  const isPengurusMoreActive = morePengurusMobileTabs.some(t => activeTab === t.id);
+  const activePengurusTabInfo = pengurusNavTabs.find(t => activeTab === t.id);
+
   return (
     <div 
-      className="min-h-screen bg-[#041A13] bg-cyber-emerald-grid bg-cover bg-center text-[#D1FAE5] flex flex-col md:flex-row w-full overflow-x-clip font-sans selection:bg-[#D4AF37] selection:text-black"
+      className="min-h-screen bg-[#041A13] bg-cyber-emerald-grid bg-cover bg-center text-[#D1FAE5] flex flex-col w-full overflow-x-clip font-sans selection:bg-[#D4AF37] selection:text-black"
       style={settings.background_url ? { backgroundImage: `linear-gradient(rgba(4, 26, 19, 0.92), rgba(4, 26, 19, 0.96)), url(${settings.background_url})` } : undefined}
     >
-      {/* MOBILE TOP BAR (Phone & Small Screens: iOS & Android) - Compact Sticky Header dengan Tombol Garis 3 */}
-      <div className="md:hidden flex items-center justify-between px-3.5 py-2.5 min-h-[56px] bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-b-2 border-black/60 sticky top-0 z-50 w-full shadow-md">
-        <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
-          <BrandLogos settings={settings} size="xs" idPrefix="pengurus-mob-header" />
+      {/* CARD HEADER MELENGKUNG BESAR & GAGAH (bersebelahan dengan Kapsul Rail di desktop) */}
+      <header className="sticky top-3 sm:top-4 z-30 shrink-0 mx-3 mt-3 sm:mx-5 sm:mt-4 md:ml-[6.5rem] md:mr-5 px-5 py-4 sm:px-7 sm:py-5 rounded-3xl bg-gradient-to-r from-[#06241B] via-[#041A13] to-[#06241B] border-t border-l border-emerald-400/25 border-b-2 border-r border-black/60 shadow-md flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+          <img
+            src={resolveLogos(settings).pondok || resolveLogos(settings).madrasah}
+            alt="Logo Pondok Pesantren Salaf Al Maliki"
+            className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-contain shrink-0 border-2 border-amber-400/50 p-1 bg-emerald-950"
+          />
           <div className="min-w-0 flex-1">
-            <h2 className="font-bold text-xs text-white truncate uppercase font-serif leading-tight">
-              {settings.portal_title || settings.nama_pesantren || 'SIM Pondok Pesantren'}
-            </h2>
-            <p className="text-[10px] text-[#D1FAE5] truncate leading-tight mt-0.5">
-              {pengurus.nama} • {
-                activeTab === 'dashboard' ? 'Dasbor Utama' :
-                activeTab === 'izin-mengajar' ? 'Izin Mengajar' :
-                activeTab === 'wali-kelas' ? `Wali Kelas (${waliKelasKelas})` :
-                activeTab === 'kalender' ? 'Kalender & Agenda' :
-                activeTab === 'absensi-santri' ? 'Presensi Santri' :
-                activeTab === 'jadwal' ? 'Jadwal & Kitab' :
-                activeTab === 'nadzhom' ? 'Setoran Nadzhom' :
-                activeTab === 'ujian-kitab' ? 'Nilai Ujian' :
-                'Biodata & Profil'
-              }
+            <h1 className="!text-xs sm:!text-sm md:!text-base font-bold leading-snug text-white uppercase tracking-wide font-serif whitespace-normal line-clamp-2">
+              {settings.nama_madrasah || 'Madrasah Diniyah'} {settings.nama_pondok || 'Ponpes Salaf Al Maliki'}
+            </h1>
+            <p className="text-[10px] sm:text-xs text-emerald-300/90 leading-snug flex items-center gap-1.5 mt-0.5 whitespace-normal line-clamp-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block shrink-0" />
+              <span>
+                {pengurus.nama} • {activePengurusTabInfo?.label || 'Dasbor Utama'}
+              </span>
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <PWAInstallButton />
+
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div
+            className={`inline-flex min-h-[32px] sm:min-h-[36px] px-2 sm:px-2.5 py-1 rounded-full border text-[10px] sm:text-[11px] font-bold items-center gap-1.5 select-none whitespace-nowrap ${
+              isCloudOnline
+                ? 'bg-emerald-950/90 border-emerald-400/30 text-emerald-200'
+                : 'bg-amber-950/90 border-amber-500/40 text-amber-200'
+            }`}
+            title={isCloudOnline ? 'Cloud Sync Supabase Aktif & Terhubung' : 'Mode Offline (Menunggu Jaringan)'}
+          >
+            {isCloudOnline ? (
+              <Cloud className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            ) : (
+              <CloudOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            )}
+            <span className="hidden lg:inline">{isCloudOnline ? 'Cloud Sync' : 'Offline'}</span>
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isCloudOnline ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+          </div>
+          <PWAInstallButton className="!px-2.5 !py-1 !text-[10px] sm:!text-[11px] min-h-[32px] !rounded-full" />
           <button
             type="button"
-            onClick={() => setShowMobileMenu(!showMobileMenu)}
-            className="relative min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-[#03140c] border border-[#d4af37]/50 text-[#d4af37] hover:text-white active:scale-95 transition shadow"
-            aria-label="Toggle Menu Navigasi"
-            aria-expanded={showMobileMenu}
+            onClick={() => setShowEditModal(true)}
+            className="hidden sm:inline-flex min-h-[36px] px-2.5 py-1 rounded-full bg-[#052017] border border-[#d4af37]/40 text-xs font-bold text-[#f3e5ab] items-center gap-1.5 select-none touch-manipulation active:scale-95 transition-transform duration-75"
+            title="Edit Biodata & Profil"
           >
-            {showMobileMenu ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            {!showMobileMenu && (urgentEvents.length + unreadSilabusUpdates.length) > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-[#03140c]" />
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* MOBILE MENU DRAWER OVERLAY (Tampil rapi tepat di bawah tombol garis 3 di posisi scroll manapun) */}
-      {showMobileMenu && (
-        <div
-          className="md:hidden fixed inset-x-0 top-[56px] bottom-0 z-40 bg-black/80 flex flex-col"
-          onClick={() => setShowMobileMenu(false)}
-        >
-          <div
-            className="bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-amber-400/35 border-b-2 border-black/65 p-4 space-y-3.5 shadow-[0_18px_36px_-8px_rgba(0,0,0,0.78)] max-h-[82vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-2 pb-3 border-b border-[#d4af37]/20">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-9 h-9 rounded-full overflow-hidden bg-[#0b3824] border border-[#d4af37]/50 shrink-0">
-                  <img
-                    src={pengurus.foto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'}
-                    alt={pengurus.nama}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-xs font-bold text-white block truncate">{pengurus.nama}</span>
-                  <span className="text-[10px] text-[#d4af37] block truncate">{pengurus.jabatan}</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => { setShowEditModal(true); setShowMobileMenu(false); }}
-                className="px-3 min-h-[36px] rounded-lg bg-[#03140c] border border-[#d4af37]/40 text-[11px] font-bold text-[#d4af37] shrink-0"
-              >
-                Edit Profil
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { id: 'dashboard', label: 'Dasbor Utama', icon: Sparkles },
-                { id: 'izin-mengajar', label: 'Izin Mengajar', icon: FileText, badge: myIzinList.filter(i => i.status === 'Menunggu').length || undefined },
-                { id: 'nadzhom', label: 'Setoran Nadzhom', icon: BookOpen, badge: liveNadzhomList.length || undefined },
-                { id: 'wali-kelas', label: `Wali Kelas (${waliKelasKelas})`, icon: GraduationCap },
-                { id: 'kalender', label: 'Kalender & Agenda', icon: Calendar, badge: urgentEvents.length || undefined },
-                { id: 'absensi-santri', label: 'Presensi Santri', icon: UserCheck },
-                { id: 'jadwal', label: 'Jadwal & Kitab', icon: BookOpen, badge: unreadSilabusUpdates.length ? 'Update' : undefined },
-                { id: 'ujian-kitab', label: 'Nilai Ujian', icon: Award },
-                { id: 'profil-saya', label: 'Biodata & Profil', icon: Users },
-              ].map(tab => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => { setActiveTab(tab.id); setShowMobileMenu(false); }}
-                    className={`min-h-[44px] px-3 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between gap-1.5 transition ${
-                      isActive ? 'btn-3d-gold text-black shadow-md' : 'bg-[#03140c] border border-[#d4af37]/25 text-[#f3e5ab]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <Icon className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">{tab.label}</span>
-                    </div>
-                    {tab.badge && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-600 text-white font-mono shrink-0">
-                        {tab.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#d4af37]/20">
-              <button
-                type="button"
-                onClick={() => { setShowIzinModal(true); setShowMobileMenu(false); }}
-                className="min-h-[42px] py-2 rounded-xl btn-3d-yellow text-black font-bold text-xs flex items-center justify-center gap-1.5 shadow"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>Ajukan Izin</span>
-              </button>
-              <button
-                type="button"
-                onClick={onLogout}
-                className="min-h-[42px] py-2 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-red-900 transition shadow"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Keluar</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* DESKTOP & LAPTOP SIDEBAR (Mode PC, Laptop & Tablet - Penuh Sampai Bawah Halaman) */}
-      <aside className="hidden md:flex build-sidebar w-64 lg:w-72 bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-r border-black/60 border-t border-emerald-400/25 p-4 lg:p-5 flex-col shrink-0 self-stretch min-h-screen shadow-md z-30">
-        <div className="flex flex-col justify-between md:sticky md:top-4 lg:top-5 md:min-h-[calc(100vh-2.5rem)] md:max-h-[calc(100vh-2.5rem)] md:overflow-y-auto no-scrollbar">
-        <div className="space-y-5">
-          {/* Logo & Identitas Pesantren di Sidebar */}
-          <div className="flex items-center gap-3 pb-4 border-b border-[#d4af37]/25">
-            <BrandLogos settings={settings} size="sm" idPrefix="pengurus-sidebar-logo" />
-            <div className="min-w-0">
-              <h2 className="font-bold text-sm text-[#d4af37] truncate uppercase tracking-wider font-serif">
-                {settings.nama_pondok || settings.portal_title || 'Ponpes Al-Maliki'}
-              </h2>
-              <p className="text-[11px] text-emerald-300 truncate">
-                {settings.nama_madrasah || 'Panel Pengurus & Asatidz'}
-              </p>
-            </div>
-          </div>
-
-          {/* Kartu Singkat Profil Pengurus Login */}
-          <div className="bg-[#03140c]/90 border border-[#d4af37]/30 rounded-2xl p-3 flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl overflow-hidden bg-[#0b3824] border border-[#d4af37]/60 shrink-0">
+            <div className="w-5 h-5 rounded-full overflow-hidden bg-[#0b3824] border border-[#d4af37]/50 shrink-0">
               <img
                 src={pengurus.foto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'}
                 alt={pengurus.nama}
                 className="w-full h-full object-cover"
               />
             </div>
-            <div className="min-w-0 flex-1">
-              <span className="text-xs font-extrabold text-white block truncate">{pengurus.nama}</span>
-              <span className="text-[10px] text-[#d4af37] font-semibold block truncate">{pengurus.jabatan}</span>
-            </div>
-          </div>
-
-          {/* Menu Navigasi Sidebar */}
-          <nav className="space-y-1.5" aria-label="Navigasi Sidebar Pengurus">
-            {[
-              { id: 'dashboard', label: 'Dasbor Utama', icon: Sparkles },
-              { id: 'izin-mengajar', label: 'Izin Mengajar', icon: FileText, badge: myIzinList.filter(i => i.status === 'Menunggu').length || undefined, badgeTone: 'gold' },
-              { id: 'wali-kelas', label: 'Wali Kelas', icon: GraduationCap, badge: waliKelasKelas, badgeTone: 'emerald' },
-              { id: 'kalender', label: 'Kalender & Agenda', icon: Calendar, badge: urgentEvents.length || undefined, badgeTone: 'red' },
-              { id: 'absensi-santri', label: 'Presensi Santri', icon: UserCheck },
-              { id: 'jadwal', label: 'Jadwal & Kitab', icon: BookOpen, badge: unreadSilabusUpdates.length ? `${unreadSilabusUpdates.length} Update` : undefined, badgeTone: 'amber' },
-              { id: 'nadzhom', label: 'Setoran Nadzhom', icon: BookOpen, badge: liveNadzhomList.length || undefined, badgeTone: 'emerald' },
-              { id: 'ujian-kitab', label: 'Nilai Ujian', icon: Award },
-              { id: 'profil-saya', label: 'Biodata & Profil', icon: Users },
-            ].map(tab => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`w-full min-h-[44px] text-left px-3.5 py-2.5 rounded-xl font-semibold text-xs flex items-center justify-between gap-2 transition ${
-                    isActive
-                      ? 'sidebar-menu-active'
-                      : 'sidebar-menu-inactive'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#d4af37]' : 'text-emerald-400'}`} />
-                    <span className="truncate">{tab.label}</span>
-                  </div>
-                  {tab.badge !== undefined && (
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold shrink-0 ${
-                      tab.badgeTone === 'red'
-                        ? 'bg-red-600 text-white'
-                        : tab.badgeTone === 'amber'
-                        ? 'bg-amber-500 text-black'
-                        : 'bg-[#0b422a] border border-[#d4af37]/40 text-[#d4af37]'
-                    }`}>
-                      {tab.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* Tombol Cepat Bawah Sidebar */}
-        <div className="pt-4 mt-4 border-t border-[#d4af37]/20 space-y-2.5">
+            <span className="truncate max-w-[100px] hidden lg:inline">{pengurus.nama}</span>
+          </button>
           <button
             type="button"
             onClick={() => setShowIzinModal(true)}
-            className="w-full min-h-[44px] py-2.5 px-3 rounded-xl btn-3d-yellow text-black text-xs font-extrabold flex items-center justify-center gap-2 shadow"
+            className="min-h-[36px] px-2.5 sm:px-3 py-1 rounded-full bg-gradient-to-b from-[#fef08a] via-[#facc15] to-[#eab308] border border-amber-700/60 text-black font-extrabold text-[11px] flex items-center gap-1.5 select-none touch-manipulation active:scale-95 transition-transform duration-75 shadow-sm whitespace-nowrap"
+            title="Ajukan Izin Tidak Mengajar"
           >
             <Send className="w-3.5 h-3.5 text-black shrink-0" />
-            <span>Ajukan Izin Mengajar</span>
+            <span className="hidden sm:inline">Ajukan Izin</span>
           </button>
+        </div>
+      </header>
 
+      {/* ICON RAIL SIDEBAR KAPSUL PIL MELAYANG (PC, Laptop & Tablet: hidden md:flex, rounded-full w-[72px] -> hover:w-64 hover:rounded-[2.25rem]) */}
+      <aside className="hidden md:flex fixed top-0 bottom-0 left-0 z-40 my-4 ml-3 w-[72px] hover:w-64 focus-within:w-64 group group-hover:w-64 rounded-full hover:rounded-[2.25rem] focus-within:rounded-[2.25rem] transition-[width,border-radius] duration-200 ease-out overflow-hidden bg-gradient-to-b from-[#072B20] to-[#03150F] border border-emerald-400/25 shadow-lg flex-col">
+        {/* PUNCAK ATAS: LOGO LINGKARAN + PENANDA EXPAND (>) */}
+        <div className="pt-3 pb-2.5 px-2 border-b border-emerald-400/15 flex items-center shrink-0 overflow-hidden">
+          <div className="w-[54px] shrink-0 flex items-center justify-center relative">
+            <BrandLogos settings={settings} size="sm" idPrefix="pengurus-rail-logo" />
+            <span
+              className="absolute -top-0.5 -right-0.5 w-5 h-5 rounded-full bg-[#072B20] border border-amber-400/60 text-[#D4AF37] flex items-center justify-center shadow-sm transition-transform duration-200 group-hover:rotate-180"
+              aria-hidden="true"
+            >
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          </div>
+          <div className="min-w-0 pr-3 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 whitespace-nowrap">
+            <p className="text-xs font-extrabold text-white tracking-wide font-serif leading-tight">
+              Madrasah Diniyah Al Maliki
+            </p>
+            <p className="text-[10px] text-[#D4AF37] font-semibold leading-tight mt-0.5 truncate">
+              {pengurus.nama}
+            </p>
+          </div>
+        </div>
+
+        {/* KELOMPOK IKON MENU + PEMISAH HORIZONTAL PENDEK + SOROTAN LINGKARAN AKTIF */}
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-2 space-y-1 no-scrollbar" aria-label="Navigasi Sidebar Pengurus">
+          {pengurusMainNavTabs.map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            const showDividerAfter = tab.id === 'kalender';
+            return (
+              <React.Fragment key={tab.id}>
+                <button
+                  type="button"
+                  title={tab.label}
+                  aria-label={tab.label}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative w-full h-11 flex items-center rounded-full whitespace-nowrap overflow-hidden select-none touch-manipulation transition-colors duration-150 ${
+                    isActive
+                      ? 'bg-emerald-900/40 text-white font-bold'
+                      : 'text-[#D1FAE5]/80 md:hover:bg-emerald-500/12 md:hover:text-white font-semibold'
+                  }`}
+                >
+                  <div className="w-[54px] h-11 shrink-0 flex items-center justify-center relative">
+                    <span
+                      className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors duration-150 ${
+                        isActive
+                          ? 'bg-gradient-to-br from-[#D4AF37]/30 via-emerald-500/25 to-emerald-900/50 border border-[#D4AF37]/60 shadow-[0_0_12px_rgba(212,175,55,0.42)]'
+                          : ''
+                      }`}
+                    >
+                      <Icon className={`w-[18px] h-[18px] transition-transform duration-150 ${isActive ? 'text-[#D4AF37] scale-105' : 'text-emerald-400'}`} />
+                    </span>
+                    {tab.badge !== undefined && (
+                      <span className="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-[#D4AF37] group-hover:hidden" />
+                    )}
+                  </div>
+                  <div className="flex-1 flex items-center justify-between gap-2 pr-3 min-w-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 whitespace-nowrap">
+                    <span className="text-xs truncate whitespace-nowrap">{tab.label}</span>
+                    {tab.badge !== undefined && (
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-mono font-bold shrink-0 ${
+                        tab.badgeTone === 'red'
+                          ? 'bg-red-600 text-white'
+                          : tab.badgeTone === 'amber'
+                          ? 'bg-amber-500 text-black'
+                          : 'bg-[#0b422a] border border-[#d4af37]/40 text-[#d4af37]'
+                      }`}>
+                        {tab.badge}
+                      </span>
+                    )}
+                  </div>
+                </button>
+                {showDividerAfter && (
+                  <div className="w-6 h-[1px] bg-emerald-400/20 mx-auto my-2 group-hover:w-full transition-[width] duration-200" />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </nav>
+
+        {/* DASAR BAWAH: PROFIL/PENGATURAN & KELUAR */}
+        <div className="mt-auto pt-2 pb-3 px-2 border-t border-emerald-400/15 space-y-1.5 shrink-0">
           <button
             type="button"
-            onClick={onLogout}
-            className="w-full min-h-[44px] py-2.5 px-3 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs font-bold flex items-center justify-center gap-2 hover:bg-red-900 transition shadow"
+            title="Biodata & Pengaturan Profil"
+            aria-label="Biodata & Pengaturan Profil"
+            onClick={() => setActiveTab('profil-saya')}
+            className={`relative w-full h-11 flex items-center rounded-full whitespace-nowrap overflow-hidden select-none touch-manipulation transition-colors duration-150 ${
+              activeTab === 'profil-saya'
+                ? 'bg-emerald-900/40 text-white font-bold'
+                : 'text-[#f3e5ab] md:hover:bg-emerald-500/15 md:hover:text-white font-semibold'
+            }`}
           >
-            <LogOut className="w-3.5 h-3.5 shrink-0" />
-            <span>Keluar Panel</span>
-          </button>
-        </div>
-        </div>
-      </aside>
-
-      {/* MAIN CONTENT AREA - Responsive Grid & Ergonomis di Semua Perangkat (iOS, Android, Tablet, Laptop, PC) */}
-      <main className={`${building ? 'build-sequence' : ''} flex-1 min-w-0 px-3 py-3.5 sm:p-5 lg:p-6 space-y-4 sm:space-y-5 w-full max-w-[1600px] mx-auto pb-10`}>
-        {/* Top Header - Logo Madrasah Diperbesar + Ucapan Selamat Datang Guru/Pengurus + Tombol Rapi */}
-        <header className="build-header header-3d-banner rounded-2xl p-3.5 sm:p-5 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-3.5 sm:gap-4 w-full shadow-md">
-          <div className="flex items-center gap-3.5 sm:gap-4 min-w-0 w-full xl:w-auto">
-            <BrandLogos settings={settings} size="md" idPrefix="pengurus-main-header" />
-            <div className="min-w-0 flex-1 space-y-1">
-              <h1 className="text-base sm:text-xl lg:text-2xl font-bold font-serif text-[#d4af37] text-gold-3d tracking-wide leading-tight">
-                {settings.header_title || settings.portal_title || settings.nama_pesantren || 'SIM Pondok Pesantren Salaf Al-Maliki'}
-              </h1>
-              <p className="text-xs sm:text-sm text-emerald-100 mt-1 flex items-center gap-2 flex-wrap leading-snug">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block shrink-0" />
-                <span className="font-semibold text-white">
-                  Selamat Datang, <span className="text-[#fde047] font-extrabold">{pengurus.nama}</span>
-                </span>
-                <span className="text-emerald-400/50 hidden sm:inline">•</span>
-                <span className="text-emerald-200/90 text-[11px] sm:text-xs">
-                  {pengurus.jabatan} — {settings.header_subtitle || 'Portal Khusus Pengurus & Asatidz Madrasah Diniyah'}
-                </span>
-              </p>
-            </div>
-          </div>
-
-          {/* Action Buttons: Tertata Rapi & Touch-Friendly */}
-          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 sm:gap-2.5 w-full xl:w-auto justify-start xl:justify-end shrink-0">
-            <div className="hidden md:inline-flex">
-              <PWAInstallButton variant="button" />
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowEditModal(true)}
-              className="min-h-[44px] px-3 sm:px-3.5 py-2 rounded-xl bg-[#031c10] border border-[#d4af37]/60 text-xs font-bold text-[#f3e5ab] flex items-center justify-center sm:justify-start gap-2 hover:bg-[#062c1b] transition shadow min-w-0"
-              title="Edit Biodata & Profil"
-            >
-              <div className="w-5 h-5 rounded-full overflow-hidden bg-[#0b3824] border border-[#d4af37]/50 shrink-0">
+            <div className="w-[54px] h-11 shrink-0 flex items-center justify-center">
+              <div
+                className={`w-10 h-10 rounded-full overflow-hidden flex items-center justify-center border-2 ${
+                  activeTab === 'profil-saya'
+                    ? 'border-[#D4AF37] shadow-[0_0_12px_rgba(212,175,55,0.45)]'
+                    : 'border-[#D4AF37]/45'
+                }`}
+              >
                 <img
                   src={pengurus.foto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'}
                   alt={pengurus.nama}
                   className="w-full h-full object-cover"
                 />
               </div>
-              <span className="truncate max-w-[115px] sm:max-w-[140px]">{pengurus.nama}</span>
-            </button>
+            </div>
+            <span className="text-xs font-bold pr-3 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 whitespace-nowrap">
+              Profil & Pengaturan
+            </span>
+          </button>
 
-            <button
-              type="button"
-              onClick={() => setShowIzinModal(true)}
-              className="btn-3d-yellow min-h-[44px] px-3.5 sm:px-4 py-2 rounded-xl text-black font-extrabold text-xs flex items-center justify-center gap-2 shadow"
-              title="Ajukan Izin Tidak Mengajar"
-            >
-              <Send className="w-3.5 h-3.5 text-black shrink-0" />
-              <span>Ajukan Izin</span>
-            </button>
+          <button
+            type="button"
+            title="Keluar Panel"
+            aria-label="Keluar Panel"
+            onClick={onLogout}
+            className="w-full h-11 flex items-center rounded-full whitespace-nowrap overflow-hidden text-red-200 md:hover:bg-red-900/50 md:hover:text-white select-none touch-manipulation active:scale-95 transition-colors duration-150"
+          >
+            <div className="w-[54px] h-11 shrink-0 flex items-center justify-center">
+              <span className="w-10 h-10 rounded-full bg-red-950/80 border border-red-500/45 flex items-center justify-center">
+                <LogOut className="w-[17px] h-[17px] shrink-0" />
+              </span>
+            </div>
+            <span className="text-xs font-bold pr-3 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 whitespace-nowrap">
+              Keluar
+            </span>
+          </button>
+        </div>
+      </aside>
 
-            <button
-              type="button"
-              onClick={onLogout}
-              className="hidden md:flex min-h-[44px] px-3.5 sm:px-4 py-2 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs font-bold items-center justify-center gap-2 hover:bg-red-900 transition shadow"
-              title="Keluar dari Portal Pengurus"
-            >
-              <LogOut className="w-3.5 h-3.5 shrink-0" />
-              <span>Keluar</span>
-            </button>
-          </div>
-        </header>
+      {/* MAIN CONTENT AREA (md:ml-[6.25rem] memberi ruang kapsul 72px+margin, pb-24 di HP agar bebas dari Bottom Tab Bar) */}
+      <main className={`${building ? 'build-sequence' : ''} flex-1 min-w-0 md:ml-[6.25rem] px-3.5 py-4 sm:p-5 md:p-6 pb-24 md:pb-6 space-y-4 sm:space-y-5`}>
 
         {/* ===================== NOTIFIKASI REAL-TIME UPDATE MATERI SILABUS GURU (RINGKAS & JELAS) ===================== */}
         {unreadSilabusUpdates.length > 0 && (
@@ -4921,6 +4853,174 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
                 className="btn-3d-hadir-yellow w-full max-w-xs text-center font-black"
               >
                 <span>[ SAYA MENGERTI / TUTUP ]</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MOBILE BOTTOM TAB BAR (iPhone & Android: fixed bottom-0 inset-x-0 z-40 flex md:hidden) */}
+      <nav
+        className="fixed bottom-0 inset-x-0 z-40 flex md:hidden items-stretch justify-around bg-[#041A13] border-t border-emerald-400/25 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_18px_rgba(0,0,0,0.65)]"
+        aria-label="Navigasi Bawah Pengurus"
+      >
+        {primaryPengurusMobileTabs.map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setActiveTab(tab.id);
+                setShowMobileMenu(false);
+              }}
+              style={{ touchAction: 'manipulation' }}
+              className={`relative flex-1 min-h-[56px] flex flex-col items-center justify-center gap-1 py-1.5 px-1 select-none active:scale-95 transition-transform duration-75 ${
+                isActive ? 'text-[#D4AF37]' : 'text-[#D1FAE5]/75'
+              }`}
+            >
+              {isActive && (
+                <span className="absolute top-0 inset-x-3 h-[2.5px] rounded-b-full bg-[#D4AF37]" />
+              )}
+              <div className="relative">
+                <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-[#D4AF37]' : 'text-emerald-400/90'}`} />
+                {tab.badge !== undefined && (
+                  <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-[#D4AF37]" />
+                )}
+              </div>
+              <span className={`text-[10px] leading-tight truncate max-w-full ${isActive ? 'font-extrabold text-white' : 'font-semibold'}`}>
+                {tab.shortLabel}
+              </span>
+            </button>
+          );
+        })}
+
+        {/* Tombol ke-5: Lainnya */}
+        <button
+          type="button"
+          onClick={() => setShowMobileMenu(prev => !prev)}
+          style={{ touchAction: 'manipulation' }}
+          className={`relative flex-1 min-h-[56px] flex flex-col items-center justify-center gap-1 py-1.5 px-1 select-none active:scale-95 transition-transform duration-75 ${
+            showMobileMenu || isPengurusMoreActive ? 'text-[#D4AF37]' : 'text-[#D1FAE5]/75'
+          }`}
+          aria-expanded={showMobileMenu}
+          aria-label="Lainnya"
+        >
+          {(showMobileMenu || isPengurusMoreActive) && (
+            <span className="absolute top-0 inset-x-3 h-[2.5px] rounded-b-full bg-[#D4AF37]" />
+          )}
+          <div className="relative">
+            {showMobileMenu ? (
+              <X className="w-5 h-5 text-[#D4AF37]" />
+            ) : (
+              <Menu className={`w-5 h-5 ${isPengurusMoreActive ? 'text-[#D4AF37]' : 'text-emerald-400/90'}`} />
+            )}
+            {(isPengurusMoreActive || urgentEvents.length > 0) && !showMobileMenu && (
+              <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-red-500" />
+            )}
+          </div>
+          <span className={`text-[10px] leading-tight truncate max-w-full ${(showMobileMenu || isPengurusMoreActive) ? 'font-extrabold text-white' : 'font-semibold'}`}>
+            Lainnya
+          </span>
+        </button>
+      </nav>
+
+      {/* BOTTOM SHEET LACI MENU LAINNYA (HP Android & iOS) */}
+      {showMobileMenu && (
+        <div
+          className="fixed inset-0 z-50 md:hidden bottom-sheet-backdrop bg-black/75 flex flex-col justify-end"
+          onClick={() => setShowMobileMenu(false)}
+        >
+          <div
+            className="w-full bg-gradient-to-b from-[#06241B] to-[#03150F] border-t-2 border-[#D4AF37]/45 rounded-t-3xl px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))] max-h-[82vh] overflow-y-auto shadow-[0_-12px_32px_rgba(0,0,0,0.8)] space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-emerald-500/20">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-full overflow-hidden bg-[#0b3824] border border-[#d4af37]/50 shrink-0">
+                  <img
+                    src={pengurus.foto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'}
+                    alt={pengurus.nama}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-xs font-bold text-white block truncate">{pengurus.nama}</span>
+                  <span className="text-[10px] text-[#d4af37] block truncate">{pengurus.jabatan}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setShowEditModal(true); setShowMobileMenu(false); }}
+                  style={{ touchAction: 'manipulation' }}
+                  className="px-3 min-h-[36px] rounded-xl bg-[#041A13] border border-[#d4af37]/40 text-[11px] font-bold text-[#d4af37] active:scale-95 transition-transform duration-75"
+                >
+                  Edit Profil
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowMobileMenu(false)}
+                  style={{ touchAction: 'manipulation' }}
+                  className="min-w-[36px] min-h-[36px] rounded-xl bg-[#041A13] border border-emerald-400/25 text-emerald-200 flex items-center justify-center active:scale-95 transition-transform duration-75"
+                  aria-label="Tutup Menu Lainnya"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {morePengurusMobileTabs.map(tab => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      setShowMobileMenu(false);
+                    }}
+                    style={{ touchAction: 'manipulation' }}
+                    className={`min-h-[52px] px-3 py-2.5 rounded-2xl border text-left flex items-center justify-between gap-2 select-none active:scale-95 transition-transform duration-75 ${
+                      isActive
+                        ? 'bg-gradient-to-r from-[#D4AF37]/25 to-emerald-900/50 border-[#D4AF37] text-white font-bold shadow-sm'
+                        : 'bg-[#041A13] border-emerald-500/20 text-[#D1FAE5] font-semibold'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#D4AF37]' : 'text-emerald-400'}`} />
+                      <span className="text-[11px] leading-tight line-clamp-2">{tab.label}</span>
+                    </div>
+                    {tab.badge !== undefined && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-600 text-white font-mono shrink-0">
+                        {tab.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-500/20">
+              <button
+                type="button"
+                onClick={() => { setShowIzinModal(true); setShowMobileMenu(false); }}
+                style={{ touchAction: 'manipulation' }}
+                className="min-h-[46px] py-2 rounded-xl bg-gradient-to-b from-[#fef08a] via-[#facc15] to-[#eab308] border border-amber-700/60 text-black font-bold text-xs flex items-center justify-center gap-1.5 select-none active:scale-95 transition-transform duration-75"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Ajukan Izin</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowMobileMenu(false); onLogout(); }}
+                style={{ touchAction: 'manipulation' }}
+                className="min-h-[46px] py-2 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs font-bold flex items-center justify-center gap-1.5 select-none active:scale-95 transition-transform duration-75"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Keluar Panel</span>
               </button>
             </div>
           </div>
