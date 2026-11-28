@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
   Pengurus, KalenderAkademikEvent, AppSettings, Santri, GuruPengajar, JadwalPelajaran, 
   NadzhomRecord, NilaiUjianRecord, AbsensiSantriRecord, AbsensiGuruRecord, 
@@ -93,6 +93,9 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [showIzinModal, setShowIzinModal] = useState<boolean>(false);
   const [showMobileMenu, setShowMobileMenu] = useState<boolean>(false);
+  const [showRadialMenu, setShowRadialMenu] = useState<boolean>(false);
+  const [isMobileBarVisible, setIsMobileBarVisible] = useState<boolean>(true);
+  const hideBarTimerRef = useRef<number | null>(null);
   const [isCloudOnline, setIsCloudOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
   useEffect(() => {
     const handleOnline = () => setIsCloudOnline(true);
@@ -104,6 +107,50 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  useEffect(() => {
+    const scheduleHide = () => {
+      if (hideBarTimerRef.current !== null) {
+        window.clearTimeout(hideBarTimerRef.current);
+      }
+      hideBarTimerRef.current = window.setTimeout(() => {
+        setIsMobileBarVisible(false);
+      }, 1500);
+    };
+
+    const handleScrollActivity = () => {
+      setIsMobileBarVisible(true);
+      scheduleHide();
+    };
+
+    scheduleHide();
+    window.addEventListener('scroll', handleScrollActivity, { passive: true });
+    window.addEventListener('touchmove', handleScrollActivity, { passive: true });
+
+    return () => {
+      if (hideBarTimerRef.current !== null) {
+        window.clearTimeout(hideBarTimerRef.current);
+      }
+      window.removeEventListener('scroll', handleScrollActivity);
+      window.removeEventListener('touchmove', handleScrollActivity);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showRadialMenu && !showMobileMenu) {
+      if (hideBarTimerRef.current !== null) {
+        window.clearTimeout(hideBarTimerRef.current);
+      }
+      hideBarTimerRef.current = window.setTimeout(() => {
+        setIsMobileBarVisible(false);
+      }, 1500);
+    } else {
+      setIsMobileBarVisible(true);
+      if (hideBarTimerRef.current !== null) {
+        window.clearTimeout(hideBarTimerRef.current);
+      }
+    }
+  }, [showRadialMenu, showMobileMenu]);
   const [showAllUrgentNotifs, setShowAllUrgentNotifs] = useState<boolean>(false);
   const [showAllSilabusNotifs, setShowAllSilabusNotifs] = useState<boolean>(false);
   const [editedPengurus, setEditedPengurus] = useState<Pengurus>({ ...pengurus });
@@ -1438,8 +1485,13 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
   ];
 
   const pengurusMainNavTabs = pengurusNavTabs.filter(t => t.id !== 'profil-saya');
-  const primaryPengurusMobileIds = ['dashboard', 'absensi-santri', 'jadwal', 'wali-kelas'];
-  const primaryPengurusMobileTabs = primaryPengurusMobileIds
+  const leftPengurusMobileIds = ['dashboard', 'absensi-santri'];
+  const rightPengurusMobileIds = ['jadwal', 'wali-kelas'];
+  const primaryPengurusMobileIds = [...leftPengurusMobileIds, ...rightPengurusMobileIds];
+  const leftPengurusMobileTabs = leftPengurusMobileIds
+    .map(id => pengurusNavTabs.find(t => t.id === id)!)
+    .filter(Boolean);
+  const rightPengurusMobileTabs = rightPengurusMobileIds
     .map(id => pengurusNavTabs.find(t => t.id === id)!)
     .filter(Boolean);
   const morePengurusMobileTabs = pengurusNavTabs.filter(t => !primaryPengurusMobileIds.includes(t.id));
@@ -4858,12 +4910,25 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
           </div>
         </div>
       )}
-      {/* MOBILE BOTTOM TAB BAR (iPhone & Android: fixed bottom-0 inset-x-0 z-40 flex md:hidden) */}
+      {/* BACKDROP TUTUP RADIAL MENU SAAT TAP DI LUAR */}
+      {showRadialMenu && (
+        <div
+          className="fixed inset-0 z-40 md:hidden bg-black/45"
+          onClick={() => setShowRadialMenu(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* MOBILE BOTTOM TAB BAR KAPSUL 5 TOMBOL + RADIAL MENU 'LAINNYA' + AUTO HIDE ON IDLE SCROLL */}
       <nav
-        className="fixed bottom-0 inset-x-0 z-40 flex md:hidden items-stretch justify-around bg-[#041A13] border-t border-emerald-400/25 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_18px_rgba(0,0,0,0.65)]"
+        className={`fixed bottom-3 inset-x-3 z-50 grid md:hidden grid-cols-5 items-center rounded-full bg-gradient-to-r from-[#072B20] via-[#041A13] to-[#072B20] border border-emerald-400/30 shadow-xl mb-[env(safe-area-inset-bottom)] px-1.5 py-1 transition-[transform,opacity] duration-250 ease-out ${
+          (isMobileBarVisible || showRadialMenu || showMobileMenu)
+            ? 'translate-y-0 opacity-100'
+            : 'translate-y-24 opacity-0 pointer-events-none'
+        }`}
         aria-label="Navigasi Bawah Pengurus"
       >
-        {primaryPengurusMobileTabs.map(tab => {
+        {leftPengurusMobileTabs.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
@@ -4872,18 +4937,19 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
               type="button"
               onClick={() => {
                 setActiveTab(tab.id);
+                setShowRadialMenu(false);
                 setShowMobileMenu(false);
               }}
               style={{ touchAction: 'manipulation' }}
-              className={`relative flex-1 min-h-[56px] flex flex-col items-center justify-center gap-1 py-1.5 px-1 select-none active:scale-95 transition-transform duration-75 ${
-                isActive ? 'text-[#D4AF37]' : 'text-[#D1FAE5]/75'
+              className={`relative min-h-[50px] flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-full select-none active:scale-95 transition-transform duration-100 ${
+                isActive ? 'text-[#D4AF37]' : 'text-[#D1FAE5]/80'
               }`}
             >
               {isActive && (
-                <span className="absolute top-0 inset-x-3 h-[2.5px] rounded-b-full bg-[#D4AF37]" />
+                <span className="w-4 h-[2.5px] rounded-full bg-[#D4AF37] mb-0.5" />
               )}
               <div className="relative">
-                <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-[#D4AF37]' : 'text-emerald-400/90'}`} />
+                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#D4AF37]' : 'text-emerald-400/90'}`} />
                 {tab.badge !== undefined && (
                   <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-[#D4AF37]" />
                 )}
@@ -4895,34 +4961,167 @@ export const PengurusDashboard: React.FC<PengurusDashboardProps> = ({
           );
         })}
 
-        {/* Tombol ke-5: Lainnya */}
-        <button
-          type="button"
-          onClick={() => setShowMobileMenu(prev => !prev)}
-          style={{ touchAction: 'manipulation' }}
-          className={`relative flex-1 min-h-[56px] flex flex-col items-center justify-center gap-1 py-1.5 px-1 select-none active:scale-95 transition-transform duration-75 ${
-            showMobileMenu || isPengurusMoreActive ? 'text-[#D4AF37]' : 'text-[#D1FAE5]/75'
-          }`}
-          aria-expanded={showMobileMenu}
-          aria-label="Lainnya"
+        {/* POSISI 3 (TENGAH): TOMBOL MENONJOL 'LAINNYA' + RADIAL MENU MELINGKAR */}
+        <div
+          className="relative flex flex-col items-center justify-end pb-0.5"
+          onPointerEnter={(e) => {
+            if (e.pointerType === 'mouse') setShowRadialMenu(true);
+          }}
+          onPointerLeave={(e) => {
+            if (e.pointerType === 'mouse') setShowRadialMenu(false);
+          }}
         >
-          {(showMobileMenu || isPengurusMoreActive) && (
-            <span className="absolute top-0 inset-x-3 h-[2.5px] rounded-b-full bg-[#D4AF37]" />
-          )}
-          <div className="relative">
-            {showMobileMenu ? (
-              <X className="w-5 h-5 text-[#D4AF37]" />
-            ) : (
-              <Menu className={`w-5 h-5 ${isPengurusMoreActive ? 'text-[#D4AF37]' : 'text-emerald-400/90'}`} />
-            )}
-            {(isPengurusMoreActive || urgentEvents.length > 0) && !showMobileMenu && (
-              <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-red-500" />
-            )}
+          {/* RADIAL MENU MELINGKAR DI ATAS TOMBOL TENGAH */}
+          <div
+            className={`absolute bottom-11 left-1/2 -translate-x-1/2 w-0 h-0 ${
+              showRadialMenu ? 'pointer-events-auto' : 'pointer-events-none'
+            }`}
+            aria-hidden={!showRadialMenu}
+          >
+            {[
+              {
+                key: 'izin',
+                label: 'Izin',
+                icon: FileText,
+                x: -108,
+                y: -18,
+                circleClass: 'bg-gradient-to-tr from-emerald-800 to-emerald-500 border-emerald-300/70 text-white shadow-[0_0_14px_rgba(16,185,129,0.55)]',
+                onClick: () => {
+                  setActiveTab('izin-mengajar');
+                  setShowRadialMenu(false);
+                  setShowMobileMenu(false);
+                },
+              },
+              {
+                key: 'kalender',
+                label: 'Kalender',
+                icon: Calendar,
+                x: -62,
+                y: -68,
+                circleClass: 'bg-gradient-to-tr from-teal-800 to-cyan-500 border-cyan-200/70 text-white shadow-[0_0_14px_rgba(34,211,238,0.5)]',
+                onClick: () => {
+                  setActiveTab('kalender');
+                  setShowRadialMenu(false);
+                  setShowMobileMenu(false);
+                },
+              },
+              {
+                key: 'profil',
+                label: 'Profil',
+                icon: Users,
+                x: 0,
+                y: -90,
+                circleClass: 'bg-gradient-to-tr from-amber-600 to-amber-300 border-amber-100/80 text-emerald-950 shadow-[0_0_16px_rgba(251,191,36,0.6)]',
+                onClick: () => {
+                  setActiveTab('profil-saya');
+                  setShowRadialMenu(false);
+                  setShowMobileMenu(false);
+                },
+              },
+              {
+                key: 'semua-menu',
+                label: 'Semua Menu',
+                icon: Menu,
+                x: 62,
+                y: -68,
+                circleClass: 'bg-gradient-to-tr from-emerald-700 to-lime-500 border-lime-200/70 text-white shadow-[0_0_14px_rgba(132,204,22,0.5)]',
+                onClick: () => {
+                  setShowRadialMenu(false);
+                  setShowMobileMenu(true);
+                },
+              },
+              {
+                key: 'keluar',
+                label: 'Keluar',
+                icon: LogOut,
+                x: 108,
+                y: -18,
+                circleClass: 'bg-gradient-to-tr from-red-800 to-rose-500 border-rose-200/70 text-white shadow-[0_0_14px_rgba(244,63,94,0.55)]',
+                onClick: () => {
+                  setShowRadialMenu(false);
+                  onLogout();
+                },
+              },
+            ].map((item) => {
+              const RIcon = item.icon;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={item.onClick}
+                  style={{
+                    touchAction: 'manipulation',
+                    transform: showRadialMenu
+                      ? `translate(calc(-50% + ${item.x}px), calc(-50% + ${item.y}px)) scale(1)`
+                      : 'translate(-50%, -50%) scale(0)',
+                  }}
+                  className={`absolute left-0 top-0 flex flex-col items-center gap-1 transition-[transform,opacity] duration-200 ease-out active:scale-90 ${
+                    showRadialMenu ? 'opacity-100' : 'opacity-0'
+                  }`}
+                  aria-label={item.label}
+                >
+                  <span className={`w-11 h-11 rounded-full border flex items-center justify-center ${item.circleClass}`}>
+                    <RIcon className="w-5 h-5" />
+                  </span>
+                  <span className="text-[9px] font-bold text-white bg-[#03150F] border border-emerald-400/35 px-1.5 py-0.5 rounded-md whitespace-nowrap shadow">
+                    {item.label}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-          <span className={`text-[10px] leading-tight truncate max-w-full ${(showMobileMenu || isPengurusMoreActive) ? 'font-extrabold text-white' : 'font-semibold'}`}>
+
+          <button
+            type="button"
+            onClick={() => setShowRadialMenu(prev => !prev)}
+            style={{ touchAction: 'manipulation' }}
+            className="w-13 h-13 -mt-5 rounded-full bg-gradient-to-tr from-emerald-500 to-amber-400 border-2 border-amber-200/70 shadow-[0_0_18px_rgba(251,191,36,0.45)] flex items-center justify-center text-emerald-950 select-none active:scale-95 transition-transform duration-150"
+            aria-expanded={showRadialMenu}
+            aria-label="Lainnya"
+          >
+            {showRadialMenu ? (
+              <X className="w-6 h-6 stroke-[2.75]" />
+            ) : (
+              <Sliders className="w-5 h-5 stroke-[2.5]" />
+            )}
+          </button>
+          <span className={`text-[10px] leading-tight mt-0.5 ${showRadialMenu || isPengurusMoreActive ? 'font-extrabold text-amber-300' : 'font-bold text-emerald-100'}`}>
             Lainnya
           </span>
-        </button>
+        </div>
+
+        {rightPengurusMobileTabs.map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setActiveTab(tab.id);
+                setShowRadialMenu(false);
+                setShowMobileMenu(false);
+              }}
+              style={{ touchAction: 'manipulation' }}
+              className={`relative min-h-[50px] flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-full select-none active:scale-95 transition-transform duration-100 ${
+                isActive ? 'text-[#D4AF37]' : 'text-[#D1FAE5]/80'
+              }`}
+            >
+              {isActive && (
+                <span className="w-4 h-[2.5px] rounded-full bg-[#D4AF37] mb-0.5" />
+              )}
+              <div className="relative">
+                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#D4AF37]' : 'text-emerald-400/90'}`} />
+                {tab.badge !== undefined && (
+                  <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-[#D4AF37]" />
+                )}
+              </div>
+              <span className={`text-[10px] leading-tight truncate max-w-full ${isActive ? 'font-extrabold text-white' : 'font-semibold'}`}>
+                {tab.shortLabel}
+              </span>
+            </button>
+          );
+        })}
       </nav>
 
       {/* BOTTOM SHEET LACI MENU LAINNYA (HP Android & iOS) */}

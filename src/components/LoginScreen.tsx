@@ -97,10 +97,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = (p) => {
 
   return (
     <div
-      className="login-screen min-h-screen w-full relative text-[#D1FAE5] font-sans overflow-x-hidden uppercase bg-[#041A13]"
+      className="login-screen min-h-[100dvh] w-full relative text-[#D1FAE5] font-sans overflow-x-hidden uppercase bg-[#03150F]"
       data-testid="login-screen"
       style={{
-        backgroundImage: `linear-gradient(rgba(4,26,19,0.68), rgba(4,26,19,0.82)), url('/assets/islamic_library_login_bg.jpg')`,
+        backgroundImage: `linear-gradient(rgba(3,21,15,0.68), rgba(3,21,15,0.82)), url('/assets/islamic_library_login_bg.jpg')`,
         backgroundSize: 'cover', backgroundPosition: 'center',
       }}
     >

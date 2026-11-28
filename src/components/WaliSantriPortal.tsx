@@ -94,8 +94,8 @@ export const WaliSantriPortal: React.FC<WaliSantriPortalProps> = ({
 
   return (
     <div 
-      className="min-h-screen bg-[#041A13] bg-cyber-emerald-grid text-[#D1FAE5] font-sans pb-16 bg-cover bg-center"
-      style={settings?.background_url ? { backgroundImage: `linear-gradient(rgba(4, 26, 19, 0.92), rgba(4, 26, 19, 0.96)), url(${settings.background_url})` } : undefined}
+      className="min-h-[100dvh] bg-[#03150F] text-[#D1FAE5] font-sans pb-16"
+      style={settings?.background_url ? { backgroundImage: `linear-gradient(rgba(3, 21, 15, 0.92), rgba(3, 21, 15, 0.96)), url(${settings.background_url})` } : undefined}
     >
       {/* Top Banner / Navigation for Guardian */}
       <header className="build-header bg-gradient-to-br from-[#082E22] via-[#052017] to-[#03140E] border-t border-emerald-400/25 border-b-2 border-black/60 sticky top-0 z-30 px-4 py-3 sm:px-6 shadow-md">
